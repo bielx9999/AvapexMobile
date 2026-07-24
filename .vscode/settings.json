@@ -1,0 +1,10 @@
+{
+  "dart.flutterSdkPath": "C:\\Users\\operacional.GRUPOSEDAY\\SDK\\flutter",
+  "dart.projectSearchDepth": 4,
+  "dart.showTodos": true,
+  "dart.lineLength": 80,
+  "terminal.integrated.env.windows": {
+    "Path": "C:\\Users\\operacional.GRUPOSEDAY\\SDK\\flutter\\bin;C:\\Users\\operacional.GRUPOSEDAY\\AppData\\Local\\Pub\\Cache\\bin;${env:Path}"
+  },
+  "java.compile.nullAnalysis.mode": "automatic"
+}

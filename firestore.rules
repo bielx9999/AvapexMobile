@@ -1,0 +1,84 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function ownsDriverData() {
+      return signedIn()
+        && request.resource.data.driverId == request.auth.uid;
+    }
+
+    function ownedExistingDriverData() {
+      return signedIn()
+        && resource.data.driverId == request.auth.uid;
+    }
+
+    match /users/{uid} {
+      allow read: if isAdmin() || (signedIn() && uid == request.auth.uid);
+      allow update: if isAdmin() || (
+        signedIn()
+        && uid == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'phone'])
+      );
+      allow create, delete: if isAdmin();
+    }
+
+    match /vehicles/{vehicleId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    match /trips/{tripId} {
+      allow read: if isAdmin() || ownedExistingDriverData();
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() || (
+        ownedExistingDriverData()
+        && request.resource.data.driverId == resource.data.driverId
+        && request.resource.data.vehicleId == resource.data.vehicleId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status',
+          'startedAt',
+          'completedAt',
+          'deliveryDocs'
+        ])
+      );
+    }
+
+    match /checklists/{checklistId} {
+      allow read: if isAdmin() || ownedExistingDriverData();
+      allow create: if isAdmin() || ownsDriverData();
+      allow update: if isAdmin() || (
+        ownedExistingDriverData()
+        && request.resource.data.driverId == resource.data.driverId
+        && request.resource.data.tripId == resource.data.tripId
+        && request.resource.data.vehicleId == resource.data.vehicleId
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /incidents/{incidentId} {
+      allow read: if isAdmin() || ownedExistingDriverData();
+      allow create: if isAdmin() || ownsDriverData();
+      allow update: if isAdmin() || (
+        ownedExistingDriverData()
+        && request.resource.data.driverId == resource.data.driverId
+        && request.resource.data.tripId == resource.data.tripId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'description',
+          'cost',
+          'photoUrl'
+        ])
+      );
+      allow delete: if isAdmin();
+    }
+  }
+}

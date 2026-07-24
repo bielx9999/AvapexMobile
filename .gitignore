@@ -1,0 +1,36 @@
+# Flutter/Dart
+.dart_tool/
+.packages
+.flutter-plugins
+.flutter-plugins-dependencies
+build/
+coverage/
+
+# Environment
+.env
+*.env
+!.env.example
+
+# IDE
+.idea/
+.vscode/
+!.vscode/
+!.vscode/settings.json
+!.vscode/launch.json
+
+# Firebase native app config generated/downloaded per environment.
+apps/mobile/android/app/google-services.json
+apps/mobile/ios/Runner/GoogleService-Info.plist
+
+# Local build/test artifacts
+/*.apk
+/*.log
+/*.png
+/*.xml
+/apps/mobile/*.log
+/apps/mobile/*.png
+/apps/mobile/*.xml
+
+# OS
+.DS_Store
+Thumbs.db

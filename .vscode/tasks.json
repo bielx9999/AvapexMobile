@@ -1,0 +1,38 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Firebase: login",
+      "type": "shell",
+      "command": "firebase login",
+      "problemMatcher": []
+    },
+    {
+      "label": "Firebase: flutterfire configure",
+      "type": "shell",
+      "command": "flutterfire configure --project=logisticaavapex-dede6 --android-package-name=br.com.avapex.logistica.mobile --ios-bundle-id=br.com.avapex.logistica.mobile",
+      "options": {
+        "cwd": "${workspaceFolder}/apps/mobile"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Firebase: deploy rules and indexes",
+      "type": "shell",
+      "command": "firebase deploy --only firestore:rules,firestore:indexes,storage",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Flutter: analyze and test",
+      "type": "shell",
+      "command": "flutter analyze && flutter test",
+      "options": {
+        "cwd": "${workspaceFolder}/apps/mobile"
+      },
+      "problemMatcher": []
+    }
+  ]
+}

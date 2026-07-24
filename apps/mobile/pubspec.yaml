@@ -1,0 +1,33 @@
+name: logistica_avapex_mobile
+description: Mobile app offline-first para motoristas do sistema de gestao logistica.
+publish_to: "none"
+version: 0.1.0+1
+
+environment:
+  sdk: ">=3.8.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cloud_firestore: ^6.7.1
+  firebase_auth: ^6.5.6
+  firebase_core: ^4.12.1
+  firebase_storage: ^13.4.5
+  flutter_image_compress: ^2.5.0
+  flutter_riverpod: ^3.3.2
+  flutter_dotenv: ^6.0.1
+  shared_preferences: ^2.5.5
+  google_sign_in: ^7.2.0
+  geolocator: ^14.0.3
+
+dev_dependencies:
+  flutter_lints: ^5.0.0
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
+  assets:
+    - .env
+    - assets/images/avapex_transportes_logo.png
+    - assets/images/google_logo.png

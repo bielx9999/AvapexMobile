@@ -1,0 +1,30 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "trips",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "driverId", "order": "ASCENDING" },
+        { "fieldPath": "scheduledAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "checklists",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "driverId", "order": "ASCENDING" },
+        { "fieldPath": "tripId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "incidents",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "driverId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}
