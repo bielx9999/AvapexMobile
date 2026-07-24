@@ -58,9 +58,13 @@ final class FirebaseFailure implements Exception {
     }
 
     if (error is FirebaseException) {
+      final storageSetupMessage = _storageSetupMessage(error);
       return FirebaseFailure(
         code: _firebaseCode(error.code),
-        message: error.message ?? 'Erro ao comunicar com o Firebase.',
+        message:
+            storageSetupMessage ??
+            error.message ??
+            'Erro ao comunicar com o Firebase.',
         originalError: error,
         stackTrace: stackTrace,
       );
@@ -92,6 +96,28 @@ final class FirebaseFailure implements Exception {
       'network-request-failed' => FirebaseFailureCode.networkUnavailable,
       _ => FirebaseFailureCode.unknown,
     };
+  }
+
+  static String? _storageSetupMessage(FirebaseException error) {
+    final code = error.code.toLowerCase();
+    final message = (error.message ?? '').toLowerCase();
+    final isStorageError =
+        error.plugin == 'firebase_storage' ||
+        message.contains('storage') ||
+        message.contains('bucket');
+
+    if (!isStorageError) {
+      return null;
+    }
+
+    if (code.contains('bucket-not-found') ||
+        code.contains('no-default-bucket') ||
+        message.contains('bucket') && message.contains('not found') ||
+        message.contains('firebase storage has not been set up')) {
+      return 'Firebase Storage ainda nao esta ativado neste projeto. Ative o Storage no Console Firebase para salvar fotos.';
+    }
+
+    return null;
   }
 
   @override

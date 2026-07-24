@@ -68,12 +68,29 @@ final class UserRepository {
           .update(updates)
           .timeout(const Duration(seconds: 10));
 
-      await _auth.currentUser?.updateDisplayName(name.trim());
-      if (photoUrl != null) {
-        await _auth.currentUser?.updatePhotoURL(photoUrl);
-      }
+      unawaited(_syncAuthProfile(name: name.trim(), photoUrl: photoUrl));
     } on Object catch (error, stackTrace) {
       throw FirebaseFailure.fromException(error, stackTrace);
+    }
+  }
+
+  Future<void> _syncAuthProfile({
+    required String name,
+    String? photoUrl,
+  }) async {
+    try {
+      final currentUser = _auth.currentUser;
+      if (currentUser == null) {
+        return;
+      }
+
+      await currentUser.updateDisplayName(name);
+      if (photoUrl != null) {
+        await currentUser.updatePhotoURL(photoUrl);
+      }
+    } on Object {
+      // Firestore is the source of truth for the app profile. Auth profile sync
+      // is best effort because provider accounts may reject auxiliary updates.
     }
   }
 
