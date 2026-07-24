@@ -1,11 +1,16 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../../core/errors/firebase_failure.dart';
 import '../../../core/providers/firebase_providers.dart';
 import '../../checklists/data/services/device_location_service.dart';
+import '../../media/application/media_providers.dart';
+import '../../media/data/models/driver_media_type.dart';
 import '../../users/application/user_providers.dart';
 import '../application/delivery_receipt_providers.dart';
 import '../data/models/cte_access_key.dart';
@@ -26,6 +31,8 @@ final class _DeliveryReceiptsPageState
   final _receiverNameController = TextEditingController();
   final _receiverDocumentController = TextEditingController();
   final List<Offset?> _signaturePoints = [];
+  final List<File> _physicalProofPhotos = [];
+  final _imagePicker = ImagePicker();
 
   CteAccessKey? _cteAccessKey;
   DeviceLocation? _confirmedLocation;
@@ -130,6 +137,32 @@ final class _DeliveryReceiptsPageState
     setState(_signaturePoints.clear);
   }
 
+  Future<void> _pickPhysicalProofPhoto(ImageSource source) async {
+    setState(() => _errorMessage = null);
+
+    try {
+      final picked = await _imagePicker.pickImage(
+        source: source,
+        imageQuality: 85,
+        maxWidth: 1920,
+        maxHeight: 1920,
+      );
+      if (picked == null) {
+        return;
+      }
+      setState(() => _physicalProofPhotos.add(File(picked.path)));
+    } on PlatformException catch (error) {
+      setState(
+        () => _errorMessage =
+            'Nao foi possivel acessar ${source == ImageSource.camera ? 'a camera' : 'a galeria'}: ${error.message ?? error.code}.',
+      );
+    }
+  }
+
+  void _removePhysicalProofPhoto(File photo) {
+    setState(() => _physicalProofPhotos.remove(photo));
+  }
+
   Future<void> _openSignatureCapture() async {
     final draftPoints = List<Offset?>.of(_signaturePoints);
     final result = await showModalBottomSheet<List<Offset?>>(
@@ -194,8 +227,27 @@ final class _DeliveryReceiptsPageState
       final receiverName = _receiverNameController.text.trim();
       final receiverDocument = _receiverDocumentController.text.trim();
       final now = DateTime.now();
+      final receiptId = 'receipt_${uid}_${now.microsecondsSinceEpoch}';
+      final uploadedPhotoUrls = <String>[];
+      final pendingPhotoPaths = <String>[];
+
+      for (final photo in _physicalProofPhotos) {
+        final url = await ref
+            .read(mediaUploadServiceProvider)
+            .uploadOrQueueDriverImage(
+              localFile: photo,
+              mediaType: DriverMediaType.deliveryDocument,
+              ownerEntityId: receiptId,
+            );
+        if (url == null) {
+          pendingPhotoPaths.add(photo.path);
+        } else {
+          uploadedPhotoUrls.add(url);
+        }
+      }
+
       final receipt = DeliveryReceipt(
-        id: 'receipt_${uid}_${now.microsecondsSinceEpoch}',
+        id: receiptId,
         driverId: uid,
         driverName:
             profile?.name ?? authUser?.displayName ?? authUser?.email ?? '',
@@ -208,6 +260,8 @@ final class _DeliveryReceiptsPageState
           for (final point in _signaturePoints)
             {'x': point?.dx, 'y': point?.dy},
         ],
+        physicalProofPhotoUrls: uploadedPhotoUrls,
+        pendingPhysicalProofLocalPaths: pendingPhotoPaths,
         declaration: _buildDeclaration(
           receiverName: receiverName,
           receiverDocument: receiverDocument,
@@ -231,9 +285,16 @@ final class _DeliveryReceiptsPageState
         _cteAccessKey = null;
         _confirmedLocation = null;
         _signaturePoints.clear();
+        _physicalProofPhotos.clear();
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Comprovante enviado com sucesso.')),
+        SnackBar(
+          content: Text(
+            pendingPhotoPaths.isEmpty
+                ? 'Comprovante enviado com sucesso.'
+                : 'Comprovante salvo. Foto pendente sera enviada quando houver conexao.',
+          ),
+        ),
       );
     } on FirebaseFailure catch (failure) {
       if (mounted) {
@@ -389,6 +450,48 @@ final class _DeliveryReceiptsPageState
                     cteNumber: _cteAccessKey?.number ?? '________',
                   ),
                 ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          _SectionCard(
+            title: 'Comprovante fisico assinado',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () =>
+                            _pickPhysicalProofPhoto(ImageSource.camera),
+                        icon: const Icon(Icons.photo_camera_outlined),
+                        label: const Text('Tirar foto'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () =>
+                            _pickPhysicalProofPhoto(ImageSource.gallery),
+                        icon: const Icon(Icons.upload_file_outlined),
+                        label: const Text('Enviar foto'),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                if (_physicalProofPhotos.isEmpty)
+                  const _InfoBanner(
+                    icon: Icons.image_outlined,
+                    label: 'Anexo',
+                    value: 'Nenhuma foto anexada',
+                  )
+                else
+                  _PhysicalProofPhotoList(
+                    photos: _physicalProofPhotos,
+                    onRemove: _removePhysicalProofPhoto,
+                  ),
               ],
             ),
           ),
@@ -828,6 +931,71 @@ final class _DeclarationBox extends StatelessWidget {
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.35),
         ),
       ),
+    );
+  }
+}
+
+final class _PhysicalProofPhotoList extends StatelessWidget {
+  const _PhysicalProofPhotoList({required this.photos, required this.onRemove});
+
+  final List<File> photos;
+  final ValueChanged<File> onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        for (final photo in photos)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFB8B8B8)),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(8),
+                child: Row(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: Image.file(
+                        photo,
+                        width: 64,
+                        height: 64,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, _, _) => const SizedBox.square(
+                          dimension: 64,
+                          child: ColoredBox(
+                            color: Color(0xFFF6F6F6),
+                            child: Icon(Icons.broken_image_outlined),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        photo.path.split(Platform.pathSeparator).last,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Remover foto',
+                      onPressed: () => onRemove(photo),
+                      icon: const Icon(Icons.close),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

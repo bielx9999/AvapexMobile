@@ -13,6 +13,8 @@ final class DeliveryReceipt {
     required this.receiverDocument,
     required this.location,
     required this.signaturePoints,
+    required this.physicalProofPhotoUrls,
+    required this.pendingPhysicalProofLocalPaths,
     required this.declaration,
     required this.createdAt,
   });
@@ -26,6 +28,8 @@ final class DeliveryReceipt {
   final String receiverDocument;
   final Map<String, dynamic> location;
   final List<Map<String, double?>> signaturePoints;
+  final List<String> physicalProofPhotoUrls;
+  final List<String> pendingPhysicalProofLocalPaths;
   final String declaration;
   final DateTime createdAt;
 
@@ -53,6 +57,11 @@ final class DeliveryReceipt {
       receiverDocument: json['receiverDocument'] as String,
       location: readMap(json, 'location'),
       signaturePoints: _readSignaturePoints(json['signaturePoints']),
+      physicalProofPhotoUrls: readStringList(json, 'physicalProofPhotoUrls'),
+      pendingPhysicalProofLocalPaths: readStringList(
+        json,
+        'pendingPhysicalProofLocalPaths',
+      ),
       declaration: json['declaration'] as String,
       createdAt: readDateTime(json, 'createdAt'),
     );
@@ -69,6 +78,8 @@ final class DeliveryReceipt {
       'receiverDocument': receiverDocument,
       'location': location,
       'signaturePoints': signaturePoints,
+      'physicalProofPhotoUrls': physicalProofPhotoUrls,
+      'pendingPhysicalProofLocalPaths': pendingPhysicalProofLocalPaths,
       'declaration': declaration,
       'createdAt': writeTimestamp(createdAt),
     };
