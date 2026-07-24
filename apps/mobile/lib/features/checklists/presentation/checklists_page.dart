@@ -270,6 +270,7 @@ final class _ChecklistHistoryTabState
     extends ConsumerState<_ChecklistHistoryTab> {
   DateTime? _startDate;
   DateTime? _endDate;
+  ChecklistType? _selectedChecklistType;
 
   Future<void> _pickStartDate() async {
     final picked = await _pickDate(initialDate: _startDate ?? DateTime.now());
@@ -310,15 +311,20 @@ final class _ChecklistHistoryTabState
     setState(() {
       _startDate = null;
       _endDate = null;
+      _selectedChecklistType = null;
     });
   }
 
-  List<Checklist> _filterByPeriod(List<Checklist> checklists) {
+  List<Checklist> _filterHistory(List<Checklist> checklists) {
     final start = _startDate;
     final endExclusive = _endDate?.add(const Duration(days: 1));
+    final selectedType = _selectedChecklistType;
 
     return checklists
         .where((checklist) {
+          if (selectedType != null && checklist.type != selectedType) {
+            return false;
+          }
           final createdAt = checklist.createdAt.toLocal();
           if (start != null && createdAt.isBefore(start)) {
             return false;
@@ -337,7 +343,7 @@ final class _ChecklistHistoryTabState
 
     return history.when(
       data: (checklists) {
-        final filteredChecklists = _filterByPeriod(checklists);
+        final filteredChecklists = _filterHistory(checklists);
 
         return ListView(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
@@ -345,8 +351,12 @@ final class _ChecklistHistoryTabState
             _HistoryFilters(
               startDate: _startDate,
               endDate: _endDate,
+              selectedChecklistType: _selectedChecklistType,
               onPickStart: _pickStartDate,
               onPickEnd: _pickEndDate,
+              onChecklistTypeChanged: (type) {
+                setState(() => _selectedChecklistType = type);
+              },
               onClear: _clearFilters,
             ),
             const SizedBox(height: 12),
@@ -437,18 +447,23 @@ final class _HistoryFilters extends StatelessWidget {
   const _HistoryFilters({
     required this.startDate,
     required this.endDate,
+    required this.selectedChecklistType,
     required this.onPickStart,
     required this.onPickEnd,
+    required this.onChecklistTypeChanged,
     required this.onClear,
   });
 
   final DateTime? startDate;
   final DateTime? endDate;
+  final ChecklistType? selectedChecklistType;
   final VoidCallback onPickStart;
   final VoidCallback onPickEnd;
+  final ValueChanged<ChecklistType?> onChecklistTypeChanged;
   final VoidCallback onClear;
 
-  bool get hasFilters => startDate != null || endDate != null;
+  bool get hasFilters =>
+      startDate != null || endDate != null || selectedChecklistType != null;
 
   @override
   Widget build(BuildContext context) {
@@ -459,10 +474,37 @@ final class _HistoryFilters extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              'Filtrar por periodo',
+              'Filtrar historico',
               style: Theme.of(
                 context,
               ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 10),
+            DropdownButtonFormField<ChecklistType?>(
+              initialValue: selectedChecklistType,
+              decoration: const InputDecoration(
+                labelText: 'Modelo de checklist',
+                prefixIcon: Icon(Icons.fact_check_outlined),
+              ),
+              items: const [
+                DropdownMenuItem<ChecklistType?>(
+                  value: null,
+                  child: Text('Todos os modelos'),
+                ),
+                DropdownMenuItem<ChecklistType?>(
+                  value: ChecklistType.vehicleDaily,
+                  child: Text('Checklist de Veiculo'),
+                ),
+                DropdownMenuItem<ChecklistType?>(
+                  value: ChecklistType.chainTensioner,
+                  child: Text('Checklist Corrente/Tensionador'),
+                ),
+                DropdownMenuItem<ChecklistType?>(
+                  value: ChecklistType.strapRatchet,
+                  child: Text('Checklist Cinta/Catraca'),
+                ),
+              ],
+              onChanged: onChecklistTypeChanged,
             ),
             const SizedBox(height: 10),
             Wrap(
