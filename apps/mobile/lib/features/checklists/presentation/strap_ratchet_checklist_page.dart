@@ -407,15 +407,9 @@ final class _StrapRatchetChecklistPageState
               obscureText: true,
               keyboardType: TextInputType.number,
               decoration: const InputDecoration(
-                labelText: 'PIN/Senha do motorista',
+                labelText: 'PIN/Senha do motorista (opcional)',
                 prefixIcon: Icon(Icons.lock_outline),
               ),
-              validator: (value) {
-                if ((value ?? '').trim().length < 4) {
-                  return 'Confirme com PIN ou senha de pelo menos 4 digitos.';
-                }
-                return null;
-              },
             ),
             if (_errorMessage != null) ...[
               const SizedBox(height: 12),
