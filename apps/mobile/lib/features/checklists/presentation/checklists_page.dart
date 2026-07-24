@@ -507,35 +507,71 @@ final class _HistoryFilters extends StatelessWidget {
               onChanged: onChecklistTypeChanged,
             ),
             const SizedBox(height: 10),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                OutlinedButton.icon(
-                  onPressed: onPickStart,
-                  icon: const Icon(Icons.event_outlined),
-                  label: Text(
-                    startDate == null
+                Expanded(
+                  child: _HistoryDateFilterButton(
+                    icon: Icons.event_outlined,
+                    label: startDate == null
                         ? 'Data inicial'
                         : _formatDate(startDate!),
+                    onPressed: onPickStart,
                   ),
                 ),
-                OutlinedButton.icon(
-                  onPressed: onPickEnd,
-                  icon: const Icon(Icons.event_available_outlined),
-                  label: Text(
-                    endDate == null ? 'Data final' : _formatDate(endDate!),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _HistoryDateFilterButton(
+                    icon: Icons.event_available_outlined,
+                    label: endDate == null
+                        ? 'Data final'
+                        : _formatDate(endDate!),
+                    onPressed: onPickEnd,
                   ),
                 ),
-                if (hasFilters)
-                  IconButton.outlined(
-                    tooltip: 'Limpar filtros',
-                    onPressed: onClear,
-                    icon: const Icon(Icons.close),
+                if (hasFilters) ...[
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    height: 56,
+                    width: 48,
+                    child: IconButton.outlined(
+                      tooltip: 'Limpar filtros',
+                      onPressed: onClear,
+                      icon: const Icon(Icons.close),
+                    ),
                   ),
+                ],
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+final class _HistoryDateFilterButton extends StatelessWidget {
+  const _HistoryDateFilterButton({
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 56,
+      child: OutlinedButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon),
+        label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+        style: OutlinedButton.styleFrom(
+          alignment: Alignment.centerLeft,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
         ),
       ),
     );
