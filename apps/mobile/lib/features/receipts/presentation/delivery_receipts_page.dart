@@ -130,6 +130,26 @@ final class _DeliveryReceiptsPageState
     setState(_signaturePoints.clear);
   }
 
+  Future<void> _openSignatureCapture() async {
+    final draftPoints = List<Offset?>.of(_signaturePoints);
+    final result = await showModalBottomSheet<List<Offset?>>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (context) => _SignatureCaptureSheet(initialPoints: draftPoints),
+    );
+
+    if (result == null) {
+      return;
+    }
+
+    setState(() {
+      _signaturePoints
+        ..clear()
+        ..addAll(result);
+    });
+  }
+
   Future<void> _submit() async {
     final form = _formKey.currentState;
     setState(() => _errorMessage = null);
@@ -233,6 +253,7 @@ final class _DeliveryReceiptsPageState
     return Form(
       key: _formKey,
       child: ListView(
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
         children: [
           _SectionCard(
@@ -345,9 +366,9 @@ final class _DeliveryReceiptsPageState
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _SignaturePad(
+                _SignaturePreview(
                   points: _signaturePoints,
-                  onChanged: () => setState(() {}),
+                  onOpen: _openSignatureCapture,
                 ),
                 const SizedBox(height: 8),
                 Align(
@@ -492,6 +513,127 @@ final class _CteQrScannerPageState extends State<_CteQrScannerPage> {
   }
 }
 
+final class _SignatureCaptureSheet extends StatefulWidget {
+  const _SignatureCaptureSheet({required this.initialPoints});
+
+  final List<Offset?> initialPoints;
+
+  @override
+  State<_SignatureCaptureSheet> createState() => _SignatureCaptureSheetState();
+}
+
+final class _SignatureCaptureSheetState extends State<_SignatureCaptureSheet> {
+  late final List<Offset?> _points;
+
+  @override
+  void initState() {
+    super.initState();
+    _points = List<Offset?>.of(widget.initialPoints);
+  }
+
+  void _clear() {
+    setState(_points.clear);
+  }
+
+  void _confirm() {
+    Navigator.of(context).pop(List<Offset?>.of(_points));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Assinatura do recebedor',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Fechar',
+                onPressed: () => Navigator.of(context).pop(),
+                icon: const Icon(Icons.close),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          _SignaturePad(points: _points, onChanged: () => setState(() {})),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _points.isEmpty ? null : _clear,
+                  icon: const Icon(Icons.backspace_outlined),
+                  label: const Text('Limpar'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: _confirm,
+                  icon: const Icon(Icons.check),
+                  label: const Text('Confirmar'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+final class _SignaturePreview extends StatelessWidget {
+  const _SignaturePreview({required this.points, required this.onOpen});
+
+  final List<Offset?> points;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: onOpen,
+      child: AspectRatio(
+        aspectRatio: 2.4,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            border: Border.all(color: const Color(0xFF1F1C1C)),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: CustomPaint(
+              painter: _SignaturePainter(points),
+              child: Center(
+                child: Text(
+                  points.isEmpty
+                      ? 'Toque para coletar assinatura'
+                      : 'Editar assinatura',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: const Color(0xFF6B7280),
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 final class _SignaturePad extends StatelessWidget {
   const _SignaturePad({required this.points, required this.onChanged});
 
@@ -508,32 +650,47 @@ final class _SignaturePad extends StatelessWidget {
           border: Border.all(color: const Color(0xFF1F1C1C)),
           borderRadius: BorderRadius.circular(8),
         ),
-        child: GestureDetector(
-          onPanStart: (details) {
-            points.add(details.localPosition);
-            onChanged();
-          },
-          onPanUpdate: (details) {
-            points.add(details.localPosition);
-            onChanged();
-          },
-          onPanEnd: (_) {
-            points.add(null);
-            onChanged();
-          },
-          child: CustomPaint(
-            painter: _SignaturePainter(points),
-            child: Center(
-              child: points.isEmpty
-                  ? Text(
-                      'Assine aqui',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: const Color(0xFF6B7280),
-                        fontWeight: FontWeight.w700,
-                      ),
-                    )
-                  : const SizedBox.shrink(),
-            ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              Offset clampPoint(Offset point) {
+                return Offset(
+                  point.dx.clamp(0, constraints.maxWidth).toDouble(),
+                  point.dy.clamp(0, constraints.maxHeight).toDouble(),
+                );
+              }
+
+              return GestureDetector(
+                onPanStart: (details) {
+                  points.add(clampPoint(details.localPosition));
+                  onChanged();
+                },
+                onPanUpdate: (details) {
+                  points.add(clampPoint(details.localPosition));
+                  onChanged();
+                },
+                onPanEnd: (_) {
+                  points.add(null);
+                  onChanged();
+                },
+                child: CustomPaint(
+                  painter: _SignaturePainter(points),
+                  child: Center(
+                    child: points.isEmpty
+                        ? Text(
+                            'Assine aqui',
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(
+                                  color: const Color(0xFF6B7280),
+                                  fontWeight: FontWeight.w700,
+                                ),
+                          )
+                        : const SizedBox.shrink(),
+                  ),
+                ),
+              );
+            },
           ),
         ),
       ),
