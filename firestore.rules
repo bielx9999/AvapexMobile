@@ -80,5 +80,15 @@ service cloud.firestore {
       );
       allow delete: if isAdmin();
     }
+
+    match /deliveryReceipts/{receiptId} {
+      allow read: if isAdmin() || ownedExistingDriverData();
+      allow create: if isAdmin() || ownsDriverData();
+      allow update: if isAdmin() || (
+        ownedExistingDriverData()
+        && request.resource.data.driverId == resource.data.driverId
+      );
+      allow delete: if isAdmin();
+    }
   }
 }
