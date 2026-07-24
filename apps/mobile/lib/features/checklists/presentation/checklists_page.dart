@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../application/checklist_providers.dart';
 import '../data/models/checklist_model.dart';
 import 'chain_tensioner_checklist_page.dart';
+import 'strap_ratchet_checklist_page.dart';
 import 'vehicle_checklist_page.dart';
 
 enum ChecklistTemplate {
@@ -130,6 +131,14 @@ final class _NewChecklistTab extends StatelessWidget {
                     Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (_) => const ChainTensionerChecklistPage(),
+                      ),
+                    );
+                    return;
+                  }
+                  if (template == ChecklistTemplate.strapRatchet) {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const StrapRatchetChecklistPage(),
                       ),
                     );
                     return;
@@ -608,6 +617,7 @@ String _historyChecklistTitle(Checklist checklist) {
   return switch (checklist.type) {
     ChecklistType.vehicleDaily => checklist.vehiclePlate ?? 'Checklist Veiculo',
     ChecklistType.chainTensioner => 'Checklist Corrente/Tensionador',
+    ChecklistType.strapRatchet => 'Checklist Cinta/Catraca',
     ChecklistType.departure => 'Checklist de saida',
     ChecklistType.arrival => 'Checklist de chegada',
   };

@@ -447,6 +447,7 @@ String _checklistTitle(ChecklistType type) {
     ChecklistType.arrival => 'Checklist de chegada',
     ChecklistType.vehicleDaily => 'Checklist de veiculo',
     ChecklistType.chainTensioner => 'Checklist de corrente/tensionador',
+    ChecklistType.strapRatchet => 'Checklist de cinta/catraca',
   };
 }
 

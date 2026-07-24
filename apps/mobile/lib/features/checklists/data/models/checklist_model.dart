@@ -6,7 +6,8 @@ enum ChecklistType {
   departure('departure'),
   arrival('arrival'),
   vehicleDaily('vehicle_daily'),
-  chainTensioner('chain_tensioner');
+  chainTensioner('chain_tensioner'),
+  strapRatchet('strap_ratchet');
 
   const ChecklistType(this.value);
 
