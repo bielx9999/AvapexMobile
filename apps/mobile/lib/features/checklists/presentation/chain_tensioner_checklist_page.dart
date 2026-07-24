@@ -275,9 +275,7 @@ final class _ChainTensionerChecklistPageState
               monthYearText: _formatMonthYear(_openedAt),
               driverText: profile.when(
                 data: (user) {
-                  final name = user?.name ?? 'Usuario logado';
-                  final registration = user?.uid ?? 'Matricula indisponivel';
-                  return '$name - $registration';
+                  return user?.name ?? 'Usuario logado';
                 },
                 error: (_, _) => 'Usuario logado',
                 loading: () => 'Carregando usuario...',
@@ -450,7 +448,7 @@ final class _HeaderCard extends StatelessWidget {
             ),
             _InfoRow(
               icon: Icons.person_outline,
-              label: 'Motorista / Matricula',
+              label: 'Motorista',
               value: driverText,
             ),
             const SizedBox(height: 10),
