@@ -72,6 +72,7 @@ final class AppUser {
     required this.status,
     required this.createdAt,
     this.cnh,
+    this.photoUrl,
   });
 
   final String uid;
@@ -82,6 +83,7 @@ final class AppUser {
   final DriverLicense? cnh;
   final UserStatus status;
   final DateTime createdAt;
+  final String? photoUrl;
 
   factory AppUser.fromDocument(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data();
@@ -113,6 +115,7 @@ final class AppUser {
           : DriverLicense.fromFirestore(Map<String, dynamic>.from(cnhValue)),
       status: UserStatus.fromFirestore(json['status'] as String),
       createdAt: readDateTime(json, 'createdAt'),
+      photoUrl: json['photoUrl'] as String?,
     );
   }
 
@@ -130,6 +133,7 @@ final class AppUser {
       'cnh': cnh?.toFirestore(),
       'status': status.value,
       'createdAt': writeTimestamp(createdAt),
+      if (photoUrl != null) 'photoUrl': photoUrl,
     };
   }
 }

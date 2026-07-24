@@ -51,6 +51,32 @@ final class UserRepository {
     }
   }
 
+  Future<void> updateCurrentUserProfile({
+    required String name,
+    String? photoUrl,
+  }) async {
+    try {
+      final uid = _requireCurrentUserId();
+      final updates = <String, dynamic>{'name': name.trim()};
+      if (photoUrl != null) {
+        updates['photoUrl'] = photoUrl;
+      }
+
+      await _firestore
+          .collection(FirestoreCollections.users)
+          .doc(uid)
+          .update(updates)
+          .timeout(const Duration(seconds: 10));
+
+      await _auth.currentUser?.updateDisplayName(name.trim());
+      if (photoUrl != null) {
+        await _auth.currentUser?.updatePhotoURL(photoUrl);
+      }
+    } on Object catch (error, stackTrace) {
+      throw FirebaseFailure.fromException(error, stackTrace);
+    }
+  }
+
   String _requireCurrentUserId() {
     final uid = _auth.currentUser?.uid;
     if (uid == null || uid.isEmpty) {

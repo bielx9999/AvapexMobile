@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/checklists/presentation/checklists_page.dart';
+import '../../features/profile/presentation/profile_page.dart';
 import '../../features/receipts/presentation/delivery_receipts_page.dart';
 import '../../features/trips/presentation/driver_home_page.dart';
 import '../../features/users/application/user_providers.dart';
@@ -185,6 +186,7 @@ final class _AppNavigationRail extends ConsumerWidget {
                   data: (user) => _ProfileSummary(
                     name: user?.name ?? 'Usuario',
                     email: user?.email ?? '',
+                    photoUrl: user?.photoUrl,
                     isOnSidebar: true,
                   ),
                   error: (_, _) => const _ProfileSummary(
@@ -285,6 +287,7 @@ final class _AppDrawer extends ConsumerWidget {
                 data: (user) => _ProfileSummary(
                   name: user?.name ?? 'Usuario',
                   email: user?.email ?? '',
+                  photoUrl: user?.photoUrl,
                   isOnSidebar: true,
                 ),
                 error: (_, _) => const _ProfileSummary(
@@ -341,11 +344,13 @@ final class _ProfileSummary extends StatelessWidget {
   const _ProfileSummary({
     required this.name,
     required this.email,
+    this.photoUrl,
     this.isOnSidebar = false,
   });
 
   final String name;
   final String email;
+  final String? photoUrl;
   final bool isOnSidebar;
 
   @override
@@ -362,7 +367,12 @@ final class _ProfileSummary extends StatelessWidget {
       children: [
         CircleAvatar(
           backgroundColor: avatarBackground,
-          child: Icon(Icons.person_outline, color: avatarForeground),
+          foregroundImage: photoUrl == null || photoUrl!.isEmpty
+              ? null
+              : NetworkImage(photoUrl!),
+          child: photoUrl == null || photoUrl!.isEmpty
+              ? Icon(Icons.person_outline, color: avatarForeground)
+              : null,
         ),
         const SizedBox(width: 12),
         Expanded(
@@ -417,7 +427,7 @@ final class _SectionBody extends StatelessWidget {
         message:
             'O registro de abastecimentos da viagem sera feito nesta area.',
       ),
-      _AppSection.profile => const _ProfilePage(),
+      _AppSection.profile => const ProfilePage(),
     };
   }
 }
@@ -458,54 +468,6 @@ final class _ComingSoonPage extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-final class _ProfilePage extends ConsumerWidget {
-  const _ProfilePage();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final profile = ref.watch(currentUserProfileProvider);
-
-    return profile.when(
-      data: (user) => ListView(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-        children: [
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: _ProfileSummary(
-                name: user?.name ?? 'Usuario',
-                email: user?.email ?? '',
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.badge_outlined),
-              title: const Text('Tipo de acesso'),
-              subtitle: Text(user?.role.value ?? 'indisponivel'),
-            ),
-          ),
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.verified_user_outlined),
-              title: const Text('Status'),
-              subtitle: Text(user?.status.value ?? 'indisponivel'),
-            ),
-          ),
-        ],
-      ),
-      error: (error, _) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Text('Falha ao carregar perfil: $error'),
-        ),
-      ),
-      loading: () => const Center(child: CircularProgressIndicator()),
     );
   }
 }

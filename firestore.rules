@@ -27,7 +27,7 @@ service cloud.firestore {
       allow update: if isAdmin() || (
         signedIn()
         && uid == request.auth.uid
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'phone'])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'phone', 'photoUrl'])
       );
       allow create, delete: if isAdmin();
     }
