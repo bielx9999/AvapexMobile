@@ -247,7 +247,7 @@ export function ChecklistsPage({ checklists, users, loading }: ChecklistsPagePro
       <section className="grid gap-4">
         <ChartCard title="Evolucao de checklists">
           {byDay.length > 0 ? (
-            <ApexTimelineChart data={byDay} />
+            <ApexDatetimeChart data={byDay} />
           ) : (
             <EmptyText>Nenhum checklist encontrado no filtro.</EmptyText>
           )}
@@ -415,26 +415,51 @@ function ApexBarChart({ categories, data, color, seriesName }: ApexBarChartProps
   );
 }
 
-type ApexTimelineChartProps = {
+type ApexDatetimeChartProps = {
   data: Array<{ date: string; total: number }>;
 };
 
-function ApexTimelineChart({ data }: ApexTimelineChartProps) {
+function ApexDatetimeChart({ data }: ApexDatetimeChartProps) {
+  const seriesData = data.map((item) => ({
+    x: new Date(`${item.date}T12:00:00`).getTime(),
+    y: item.total,
+  }));
+
   const options: ApexOptions = {
     chart: {
+      id: 'checklist-datetime-xaxis',
       fontFamily: 'Inter, system-ui, sans-serif',
-      toolbar: { show: false },
-      zoom: { enabled: false },
+      toolbar: {
+        show: true,
+        tools: {
+          download: false,
+          pan: false,
+          reset: true,
+          selection: false,
+          zoom: true,
+          zoomin: true,
+          zoomout: true,
+        },
+      },
+      zoom: {
+        autoScaleYaxis: true,
+        enabled: true,
+        type: 'x',
+      },
     },
     colors: ['#FACC15'],
     dataLabels: { enabled: false },
-    fill: {
-      gradient: {
-        opacityFrom: 0.35,
-        opacityTo: 0.03,
-        shadeIntensity: 0.2,
+    markers: {
+      hover: { size: 7 },
+      size: 4,
+      strokeColors: '#FFFFFF',
+      strokeWidth: 2,
+    },
+    noData: {
+      text: 'Sem dados no periodo',
+      style: {
+        color: '#71717A',
       },
-      type: 'gradient',
     },
     grid: {
       borderColor: '#E5E7EB',
@@ -448,19 +473,25 @@ function ApexTimelineChart({ data }: ApexTimelineChartProps) {
       theme: 'light',
       x: { format: 'dd/MM/yyyy' },
       y: {
-        formatter: (value) => `${value} checklists`,
+        formatter: (value) => `${Math.round(Number(value))} checklists`,
       },
     },
     xaxis: {
+      axisBorder: { color: '#E5E7EB' },
+      axisTicks: { color: '#E5E7EB' },
       labels: {
         datetimeUTC: false,
+        format: 'dd/MM',
         style: { colors: '#52525B' },
       },
       type: 'datetime',
     },
     yaxis: {
       decimalsInFloat: 0,
+      forceNiceScale: true,
+      min: 0,
       labels: {
+        formatter: (value) => `${Math.round(Number(value))}`,
         style: { colors: '#52525B' },
       },
     },
@@ -468,15 +499,15 @@ function ApexTimelineChart({ data }: ApexTimelineChartProps) {
 
   return (
     <Chart
-      height={300}
+      height={320}
       options={options}
       series={[
         {
-          data: data.map((item) => [new Date(`${item.date}T12:00:00`).getTime(), item.total]),
+          data: seriesData,
           name: 'Checklists',
         },
       ]}
-      type="area"
+      type="line"
     />
   );
 }
