@@ -111,19 +111,20 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
 
   return (
     <main className="min-h-screen bg-avapex-paper text-avapex-ink">
-      <aside className="fixed left-0 top-0 hidden h-full w-64 bg-avapex-black px-5 py-6 text-white lg:block">
-        <div className="mb-10 flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-avapex-yellow font-black text-avapex-black">
-            AV
+      <aside className="fixed left-0 top-0 hidden h-full w-64 flex-col bg-avapex-black px-5 py-6 text-white lg:flex">
+        <div>
+          <div className="mb-10 flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-avapex-yellow font-black text-avapex-black">
+              AV
+            </div>
+            <div>
+              <p className="font-semibold">Avapex</p>
+              <p className="text-xs text-zinc-400">Painel administrativo</p>
+            </div>
           </div>
-          <div>
-            <p className="font-semibold">Avapex</p>
-            <p className="text-xs text-zinc-400">Painel administrativo</p>
-          </div>
-        </div>
 
-        <nav className="space-y-1 text-sm">
-          {navItems.map((item) => (
+          <nav className="space-y-1 text-sm">
+            {navItems.map((item) => (
               <button
                 className={`flex h-10 w-full items-center rounded-xl px-3 text-left ${
                   activePage === item.key
@@ -138,7 +139,21 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
                 {item.label}
               </button>
             ))}
-        </nav>
+          </nav>
+        </div>
+
+        <div className="mt-auto border-t border-white/10 pt-4">
+          <p className="truncate px-3 text-sm font-medium">{session.profile.name || session.firebaseUser.email}</p>
+          <p className="mt-1 truncate px-3 text-xs text-zinc-400">{session.firebaseUser.email}</p>
+          <button
+            className="ui-button mt-4 flex h-10 w-full items-center gap-2 bg-white/10 px-3 text-sm font-medium text-white hover:bg-white/15"
+            onClick={() => void logoutAdmin()}
+            type="button"
+          >
+            <LogOut size={16} />
+            Sair
+          </button>
+        </div>
       </aside>
 
       <section className="lg:pl-64">
@@ -147,9 +162,6 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
             <h1 className="text-2xl font-semibold tracking-normal">{pageTitle}</h1>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-2xl border border-zinc-200 px-3 py-2 text-sm text-zinc-700">
-              {session.profile.name || session.firebaseUser.email}
-            </span>
             <button
               className="ui-button flex h-10 items-center gap-2 border border-zinc-300 bg-white px-3 text-sm font-medium text-zinc-800 hover:bg-zinc-50"
               onClick={() => void loadData()}
@@ -157,14 +169,6 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
             >
               <RefreshCw size={16} />
               Atualizar
-            </button>
-            <button
-              className="ui-button flex h-10 items-center gap-2 bg-avapex-black px-3 text-sm font-medium text-white hover:bg-black"
-              onClick={() => void logoutAdmin()}
-              type="button"
-            >
-              <LogOut size={16} />
-              Sair
             </button>
           </div>
         </header>
