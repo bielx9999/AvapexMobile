@@ -1,5 +1,7 @@
 import {
+  GoogleAuthProvider,
   onAuthStateChanged,
+  signInWithPopup,
   signInWithEmailAndPassword,
   signOut,
   type User,
@@ -50,6 +52,30 @@ export async function loginAdmin(email: string, password: string): Promise<Admin
       throw error;
     }
     throw mapFirebaseError(error, 'Erro ao entrar no painel administrativo.');
+  }
+}
+
+export async function loginAdminWithGoogle(): Promise<AdminSession> {
+  try {
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
+    const credential = await signInWithPopup(auth, provider);
+    const profile = await loadUserProfile(credential.user.uid);
+
+    if (!profile || profile.role !== 'admin') {
+      await signOut(auth);
+      throw new Error('Este usuario nao possui permissao administrativa.');
+    }
+
+    return {
+      firebaseUser: credential.user,
+      profile,
+    };
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('permissao administrativa')) {
+      throw error;
+    }
+    throw mapFirebaseError(error, 'Erro ao entrar com Google no painel administrativo.');
   }
 }
 

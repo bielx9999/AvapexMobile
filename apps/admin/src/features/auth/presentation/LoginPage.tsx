@@ -1,6 +1,8 @@
 import { FormEvent, useState } from 'react';
-import { LogIn, ShieldCheck } from 'lucide-react';
-import { loginAdmin } from '../data/authRepository';
+import { Eye, EyeOff, Lock, LogIn, Mail, X } from 'lucide-react';
+import { loginAdmin, loginAdminWithGoogle } from '../data/authRepository';
+import avapexLogo from '../../../assets/images/avapex_transportes_logo.png';
+import googleLogo from '../../../assets/images/google_logo.png';
 
 type LoginPageProps = {
   onSignedIn: () => void;
@@ -12,6 +14,8 @@ export function LoginPage({ onSignedIn, message }: LoginPageProps) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState(message ?? '');
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -28,25 +32,34 @@ export function LoginPage({ onSignedIn, message }: LoginPageProps) {
     }
   }
 
+  async function handleGoogleLogin() {
+    setError('');
+    setGoogleLoading(true);
+
+    try {
+      await loginAdminWithGoogle();
+      onSignedIn();
+    } catch (loginError) {
+      setError(loginError instanceof Error ? loginError.message : 'Erro ao entrar com Google.');
+    } finally {
+      setGoogleLoading(false);
+    }
+  }
+
   return (
-    <main className="flex min-h-screen items-center justify-center bg-avapex-black px-4 py-8">
-      <section className="w-full max-w-md">
-        <div className="mb-8 flex items-center gap-3 text-white">
-          <div className="flex h-12 w-12 items-center justify-center rounded bg-avapex-yellow text-avapex-black">
-            <ShieldCheck size={28} />
-          </div>
-          <div>
-            <h1 className="text-2xl font-semibold">Avapex Admin</h1>
-            <p className="text-sm text-zinc-300">Painel de gestao logistica</p>
-          </div>
+    <main className="flex min-h-screen items-center justify-center bg-[#211D1D] px-6 py-8 text-white">
+      <section className="flex min-h-[min(760px,calc(100vh-64px))] w-full max-w-[420px] flex-col justify-center">
+        <div className="mb-20 flex justify-center">
+          <img className="h-[72px] w-auto object-contain" src={avapexLogo} alt="Avapex Transportes" />
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4 rounded bg-white p-6 shadow-xl">
-          <label className="block">
-            <span className="mb-2 block text-sm font-medium text-zinc-700">Email administrativo</span>
+        <form onSubmit={handleSubmit} className="space-y-7">
+          <label className="relative block">
+            <Mail className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-white" size={28} />
             <input
-              className="h-12 w-full rounded border border-zinc-300 px-3 outline-none focus:border-avapex-yellow focus:ring-2 focus:ring-avapex-yellow/40"
+              className="h-[54px] w-full rounded-[10px] border border-[#E8E1DF] bg-transparent pl-[58px] pr-4 text-sm text-white outline-none placeholder:text-white focus:border-white focus:ring-1 focus:ring-white"
               type="email"
+              placeholder="Digite o email"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
               autoComplete="email"
@@ -54,29 +67,76 @@ export function LoginPage({ onSignedIn, message }: LoginPageProps) {
             />
           </label>
 
-          <label className="block">
-            <span className="mb-2 block text-sm font-medium text-zinc-700">Senha</span>
+          <label className="relative block">
+            <Lock className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-white" size={28} />
             <input
-              className="h-12 w-full rounded border border-zinc-300 px-3 outline-none focus:border-avapex-yellow focus:ring-2 focus:ring-avapex-yellow/40"
-              type="password"
+              className="h-[54px] w-full rounded-[10px] border border-[#E8E1DF] bg-transparent pl-[58px] pr-[94px] text-sm text-white outline-none placeholder:text-white focus:border-white focus:ring-1 focus:ring-white"
+              type={showPassword ? 'text' : 'password'}
+              placeholder="Digite a senha"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               autoComplete="current-password"
               required
             />
+            <div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center">
+              {password ? (
+                <button
+                  aria-label="Limpar senha"
+                  className="flex h-10 w-10 items-center justify-center rounded text-white hover:bg-white/10"
+                  onClick={() => setPassword('')}
+                  type="button"
+                >
+                  <X size={20} />
+                </button>
+              ) : null}
+              <button
+                aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                className="flex h-10 w-10 items-center justify-center rounded text-white hover:bg-white/10"
+                onClick={() => setShowPassword((current) => !current)}
+                type="button"
+              >
+                {showPassword ? <EyeOff size={21} /> : <Eye size={21} />}
+              </button>
+            </div>
           </label>
 
-          {error ? <p className="rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
+          <div className="-mt-5 flex justify-end">
+            <button className="text-sm text-white hover:underline" type="button">
+              Esqueceu a senha?
+            </button>
+          </div>
+
+          {error ? (
+            <p className="rounded-lg border border-[#B8B8B8] bg-white px-3 py-3 text-sm font-semibold text-black">
+              {error}
+            </p>
+          ) : null}
 
           <button
-            className="flex h-12 w-full items-center justify-center gap-2 rounded bg-avapex-yellow font-semibold text-avapex-black transition hover:bg-yellow-300 disabled:cursor-not-allowed disabled:opacity-60"
-            disabled={loading}
+            className="flex h-[54px] w-full items-center justify-center gap-2 rounded-[10px] bg-white font-medium text-black transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={loading || googleLoading}
             type="submit"
           >
             <LogIn size={20} />
             {loading ? 'Entrando...' : 'Entrar'}
           </button>
+
+          <button
+            className="flex h-[52px] w-full items-center justify-center gap-3 rounded-[10px] bg-white font-medium text-black transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={loading || googleLoading}
+            onClick={() => void handleGoogleLogin()}
+            type="button"
+          >
+            {googleLoading ? (
+              <span className="h-5 w-5 animate-spin rounded-full border-2 border-black border-t-transparent" />
+            ) : (
+              <img className="h-[22px] w-[22px]" src={googleLogo} alt="" />
+            )}
+            {googleLoading ? 'Conectando...' : 'Entrar com Google'}
+          </button>
         </form>
+
+        <p className="mt-24 text-center text-xs text-white">Desenvolvido por @GabrielOtavio</p>
       </section>
     </main>
   );
