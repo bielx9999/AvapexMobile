@@ -22,10 +22,11 @@ type ComprovantesPageProps = {
 type ReceiptStatus = NonNullable<DeliveryReceipt['adminStatus']>;
 
 export function ComprovantesPage({ loading, onChanged, receipts }: ComprovantesPageProps) {
+  const today = new Date().toISOString().slice(0, 10);
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState<'all' | ReceiptStatus>('all');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [startDate, setStartDate] = useState(today);
+  const [endDate, setEndDate] = useState(today);
   const [selectedReceipt, setSelectedReceipt] = useState<DeliveryReceipt | null>(null);
   const [failureReceipt, setFailureReceipt] = useState<DeliveryReceipt | null>(null);
   const [failureReason, setFailureReason] = useState('');
