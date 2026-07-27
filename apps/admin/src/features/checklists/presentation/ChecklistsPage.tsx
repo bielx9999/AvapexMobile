@@ -526,7 +526,6 @@ function ApexDatetimeChart({ data }: ApexDatetimeChartProps) {
       labels: {
         datetimeUTC: false,
         format: 'dd/MM',
-        show: false,
         style: { colors: '#52525B' },
       },
       type: 'datetime',
