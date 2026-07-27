@@ -1,5 +1,5 @@
 import { type ReactNode, useMemo, useState } from 'react';
-import { CalendarDays, ClipboardCheck, Search, UserRound, XCircle } from 'lucide-react';
+import { CalendarDays, ClipboardCheck, Filter, Search, UserRound, XCircle } from 'lucide-react';
 import type { AppUser, Checklist, ChecklistType } from '../../shared/domain/models';
 
 type ChecklistsPageProps = {
@@ -20,6 +20,7 @@ export function ChecklistsPage({ checklists, users, loading }: ChecklistsPagePro
   const [driverId, setDriverId] = useState('');
   const [type, setType] = useState<'all' | ChecklistType>('all');
   const [query, setQuery] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
 
   const drivers = useMemo(
     () =>
@@ -111,6 +112,7 @@ export function ChecklistsPage({ checklists, users, loading }: ChecklistsPagePro
 
   const maxDriverTotal = Math.max(...byDriver.map((item) => item.total), 1);
   const maxTypeTotal = Math.max(...byType.map((item) => item.total), 1);
+  const activeFilterCount = [startDate, endDate, driverId, type !== 'all' ? type : '', query].filter(Boolean).length;
 
   function clearFilters() {
     setStartDate('');
@@ -122,7 +124,26 @@ export function ChecklistsPage({ checklists, users, loading }: ChecklistsPagePro
 
   return (
     <div className="space-y-5">
-      <section className="ui-card p-4">
+      <div className="flex justify-end">
+        <button
+          className={`ui-button flex h-10 items-center gap-2 px-4 text-sm font-semibold ${
+            showFilters || activeFilterCount > 0
+              ? 'bg-avapex-yellow text-avapex-black hover:bg-yellow-300'
+              : 'border border-zinc-300 bg-white text-zinc-800 hover:bg-zinc-50'
+          }`}
+          onClick={() => setShowFilters((current) => !current)}
+          type="button"
+        >
+          <Filter size={17} />
+          Filtros
+          {activeFilterCount > 0 ? (
+            <span className="rounded-full bg-avapex-black px-2 py-0.5 text-xs text-white">{activeFilterCount}</span>
+          ) : null}
+        </button>
+      </div>
+
+      {showFilters ? (
+        <section className="ui-card p-4">
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
           <label className="block">
             <span className="mb-2 block text-sm font-medium text-zinc-700">Data inicial</span>
@@ -173,7 +194,8 @@ export function ChecklistsPage({ checklists, users, loading }: ChecklistsPagePro
             Limpar filtros
           </button>
         </div>
-      </section>
+        </section>
+      ) : null}
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard icon={<ClipboardCheck size={18} />} label="Total" value={loading ? '-' : stats.total} />
