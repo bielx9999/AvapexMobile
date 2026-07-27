@@ -215,179 +215,212 @@ final class _FuelingPageState extends ConsumerState<FuelingPage> {
   Widget build(BuildContext context) {
     final vehicles = ref.watch(fuelingVehiclesProvider);
 
-    return vehicles.when(
-      data: (items) {
-        return Form(
-          key: _formKey,
-          child: ListView(
-            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-            children: [
-              _FuelingSectionCard(
-                title: 'Dados do abastecimento',
-                child: Column(
-                  children: [
-                    DropdownButtonFormField<String>(
-                      initialValue: _selectedVehicleId,
-                      isExpanded: true,
-                      decoration: const InputDecoration(
-                        labelText: 'Veiculo abastecido',
-                        prefixIcon: Icon(Icons.local_shipping_outlined),
-                      ),
-                      items: [
-                        for (final vehicle in items)
-                          DropdownMenuItem(
-                            value: vehicle.id,
-                            child: Text(
-                              '${vehicle.plate} - ${vehicle.model}',
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                      ],
-                      onChanged: items.isEmpty || _isSaving
-                          ? null
-                          : (value) => setState(() {
-                              _selectedVehicleId = value;
-                              _errorMessage = null;
-                            }),
-                      validator: (value) =>
-                          value == null ? 'Selecione o veiculo.' : null,
-                    ),
-                    if (items.isEmpty) ...[
-                      const SizedBox(height: 8),
-                      const _FuelingInfoBanner(
-                        icon: Icons.info_outline,
-                        label: 'Veiculos',
-                        value:
-                            'Nenhum veiculo cadastrado. O painel administrativo fara esse cadastro.',
-                      ),
-                    ],
-                    const SizedBox(height: 10),
-                    TextFormField(
-                      controller: _kmController,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      inputFormatters: [
-                        FilteringTextInputFormatter.allow(RegExp(r'[0-9,.]')),
-                      ],
-                      decoration: const InputDecoration(
-                        labelText: 'KM abastecido',
-                        prefixIcon: Icon(Icons.speed_outlined),
-                      ),
-                      validator: (value) {
-                        final parsed = num.tryParse(
-                          (value ?? '').replaceAll(',', '.'),
-                        );
-                        if (parsed == null || parsed <= 0) {
-                          return 'Informe o KM abastecido.';
-                        }
-                        return null;
-                      },
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
-              _FuelingSectionCard(
-                title: 'Tipo de combustivel',
-                child: SegmentedButton<FuelType>(
-                  emptySelectionAllowed: true,
-                  selected: {if (_selectedFuelType != null) _selectedFuelType!},
-                  segments: const [
-                    ButtonSegment(
-                      value: FuelType.diesel,
-                      icon: Icon(Icons.local_gas_station_outlined),
-                      label: Text('Diesel'),
-                    ),
-                    ButtonSegment(
-                      value: FuelType.arla,
-                      icon: Icon(Icons.opacity_outlined),
-                      label: Text('Arla'),
-                    ),
-                  ],
-                  onSelectionChanged: _isSaving
-                      ? null
-                      : (selection) {
-                          setState(() {
-                            _selectedFuelType = selection.isEmpty
-                                ? null
-                                : selection.first;
-                            _errorMessage = null;
-                          });
-                        },
-                ),
-              ),
-              const SizedBox(height: 12),
-              _FuelingSectionCard(
-                title: 'Fotos obrigatorias',
-                child: Column(
-                  children: [
-                    _FuelingPhotoField(
-                      title: 'Nota do abastecimento',
-                      description: 'Foto nitida da notinha fiscal.',
-                      file: _receiptPhoto,
-                      onCamera: () => _pickPhoto(
-                        source: ImageSource.camera,
-                        target: _FuelingPhotoTarget.receipt,
-                      ),
-                      onGallery: () => _pickPhoto(
-                        source: ImageSource.gallery,
-                        target: _FuelingPhotoTarget.receipt,
-                      ),
-                      onRemove: () => _removePhoto(_FuelingPhotoTarget.receipt),
-                    ),
-                    const SizedBox(height: 12),
-                    _FuelingPhotoField(
-                      title: 'Contador de KM',
-                      description: 'Foto do painel mostrando a quilometragem.',
-                      file: _odometerPhoto,
-                      onCamera: () => _pickPhoto(
-                        source: ImageSource.camera,
-                        target: _FuelingPhotoTarget.odometer,
-                      ),
-                      onGallery: () => _pickPhoto(
-                        source: ImageSource.gallery,
-                        target: _FuelingPhotoTarget.odometer,
-                      ),
-                      onRemove: () =>
-                          _removePhoto(_FuelingPhotoTarget.odometer),
-                    ),
-                  ],
-                ),
-              ),
-              if (_errorMessage != null) ...[
-                const SizedBox(height: 12),
-                _FuelingErrorBox(message: _errorMessage!),
-              ],
-              const SizedBox(height: 18),
-              FilledButton.icon(
-                onPressed: _isSaving ? null : () => _submit(items),
-                icon: _isSaving
-                    ? const SizedBox.square(
-                        dimension: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.send),
-                label: Text(_isSaving ? 'Enviando...' : 'Enviar abastecimento'),
-              ),
-              const SizedBox(height: 18),
-              Text(
-                'Ultimos abastecimentos',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-              ),
-              const SizedBox(height: 8),
-              const _FuelingHistoryPreview(),
+    return DefaultTabController(
+      length: 2,
+      child: Column(
+        children: [
+          const TabBar(
+            tabs: [
+              Tab(icon: Icon(Icons.local_gas_station_outlined), text: 'Enviar'),
+              Tab(icon: Icon(Icons.history_outlined), text: 'Historico'),
             ],
           ),
-        );
-      },
-      error: (error, _) => Center(
-        child: _FuelingErrorBox(message: 'Falha ao carregar veiculos: $error'),
+          Expanded(
+            child: TabBarView(
+              children: [
+                vehicles.when(
+                  data: (items) {
+                    return Form(
+                      key: _formKey,
+                      child: ListView(
+                        keyboardDismissBehavior:
+                            ScrollViewKeyboardDismissBehavior.onDrag,
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                        children: [
+                          _FuelingSectionCard(
+                            title: 'Dados do abastecimento',
+                            child: Column(
+                              children: [
+                                DropdownButtonFormField<String>(
+                                  initialValue: _selectedVehicleId,
+                                  isExpanded: true,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Veiculo abastecido',
+                                    prefixIcon: Icon(
+                                      Icons.local_shipping_outlined,
+                                    ),
+                                  ),
+                                  items: [
+                                    for (final vehicle in items)
+                                      DropdownMenuItem(
+                                        value: vehicle.id,
+                                        child: Text(
+                                          '${vehicle.plate} - ${vehicle.model}',
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                  ],
+                                  onChanged: items.isEmpty || _isSaving
+                                      ? null
+                                      : (value) => setState(() {
+                                          _selectedVehicleId = value;
+                                          _errorMessage = null;
+                                        }),
+                                  validator: (value) => value == null
+                                      ? 'Selecione o veiculo.'
+                                      : null,
+                                ),
+                                if (items.isEmpty) ...[
+                                  const SizedBox(height: 8),
+                                  const _FuelingInfoBanner(
+                                    icon: Icons.info_outline,
+                                    label: 'Veiculos',
+                                    value:
+                                        'Nenhum veiculo cadastrado. O painel administrativo fara esse cadastro.',
+                                  ),
+                                ],
+                                const SizedBox(height: 10),
+                                TextFormField(
+                                  controller: _kmController,
+                                  keyboardType:
+                                      const TextInputType.numberWithOptions(
+                                        decimal: true,
+                                      ),
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.allow(
+                                      RegExp(r'[0-9,.]'),
+                                    ),
+                                  ],
+                                  decoration: const InputDecoration(
+                                    labelText: 'KM abastecido',
+                                    prefixIcon: Icon(Icons.speed_outlined),
+                                  ),
+                                  validator: (value) {
+                                    final parsed = num.tryParse(
+                                      (value ?? '').replaceAll(',', '.'),
+                                    );
+                                    if (parsed == null || parsed <= 0) {
+                                      return 'Informe o KM abastecido.';
+                                    }
+                                    return null;
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          _FuelingSectionCard(
+                            title: 'Tipo de combustivel',
+                            child: SegmentedButton<FuelType>(
+                              emptySelectionAllowed: true,
+                              selected: {
+                                if (_selectedFuelType != null)
+                                  _selectedFuelType!,
+                              },
+                              segments: const [
+                                ButtonSegment(
+                                  value: FuelType.diesel,
+                                  icon: Icon(Icons.local_gas_station_outlined),
+                                  label: Text('Diesel'),
+                                ),
+                                ButtonSegment(
+                                  value: FuelType.arla,
+                                  icon: Icon(Icons.opacity_outlined),
+                                  label: Text('Arla'),
+                                ),
+                              ],
+                              onSelectionChanged: _isSaving
+                                  ? null
+                                  : (selection) {
+                                      setState(() {
+                                        _selectedFuelType = selection.isEmpty
+                                            ? null
+                                            : selection.first;
+                                        _errorMessage = null;
+                                      });
+                                    },
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          _FuelingSectionCard(
+                            title: 'Fotos obrigatorias',
+                            child: Column(
+                              children: [
+                                _FuelingPhotoField(
+                                  title: 'Nota do abastecimento',
+                                  description: 'Foto nitida da notinha fiscal.',
+                                  file: _receiptPhoto,
+                                  onCamera: () => _pickPhoto(
+                                    source: ImageSource.camera,
+                                    target: _FuelingPhotoTarget.receipt,
+                                  ),
+                                  onGallery: () => _pickPhoto(
+                                    source: ImageSource.gallery,
+                                    target: _FuelingPhotoTarget.receipt,
+                                  ),
+                                  onRemove: () =>
+                                      _removePhoto(_FuelingPhotoTarget.receipt),
+                                ),
+                                const SizedBox(height: 12),
+                                _FuelingPhotoField(
+                                  title: 'Contador de KM',
+                                  description:
+                                      'Foto do painel mostrando a quilometragem.',
+                                  file: _odometerPhoto,
+                                  onCamera: () => _pickPhoto(
+                                    source: ImageSource.camera,
+                                    target: _FuelingPhotoTarget.odometer,
+                                  ),
+                                  onGallery: () => _pickPhoto(
+                                    source: ImageSource.gallery,
+                                    target: _FuelingPhotoTarget.odometer,
+                                  ),
+                                  onRemove: () => _removePhoto(
+                                    _FuelingPhotoTarget.odometer,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (_errorMessage != null) ...[
+                            const SizedBox(height: 12),
+                            _FuelingErrorBox(message: _errorMessage!),
+                          ],
+                          const SizedBox(height: 18),
+                          FilledButton.icon(
+                            onPressed: _isSaving ? null : () => _submit(items),
+                            icon: _isSaving
+                                ? const SizedBox.square(
+                                    dimension: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.send),
+                            label: Text(
+                              _isSaving
+                                  ? 'Enviando...'
+                                  : 'Enviar abastecimento',
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                  error: (error, _) => Center(
+                    child: _FuelingErrorBox(
+                      message: 'Falha ao carregar veiculos: $error',
+                    ),
+                  ),
+                  loading: () =>
+                      const Center(child: CircularProgressIndicator()),
+                ),
+                const _FuelingHistoryTab(),
+              ],
+            ),
+          ),
+        ],
       ),
-      loading: () => const Center(child: CircularProgressIndicator()),
     );
   }
 }
@@ -576,37 +609,222 @@ final class _FuelingInfoBanner extends StatelessWidget {
   }
 }
 
-final class _FuelingHistoryPreview extends ConsumerWidget {
-  const _FuelingHistoryPreview();
+final class _FuelingHistoryTab extends ConsumerStatefulWidget {
+  const _FuelingHistoryTab();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_FuelingHistoryTab> createState() => _FuelingHistoryTabState();
+}
+
+final class _FuelingHistoryTabState extends ConsumerState<_FuelingHistoryTab> {
+  DateTime? _startDate;
+  DateTime? _endDate;
+
+  Future<void> _pickStartDate() async {
+    final picked = await _pickDate(initialDate: _startDate ?? DateTime.now());
+    if (picked == null) {
+      return;
+    }
+    setState(() => _startDate = _dateOnly(picked));
+  }
+
+  Future<void> _pickEndDate() async {
+    final picked = await _pickDate(initialDate: _endDate ?? DateTime.now());
+    if (picked == null) {
+      return;
+    }
+    setState(() => _endDate = _dateOnly(picked));
+  }
+
+  Future<DateTime?> _pickDate({required DateTime initialDate}) {
+    return showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: DateTime(2024),
+      lastDate: DateTime.now(),
+    );
+  }
+
+  void _clearFilters() {
+    setState(() {
+      _startDate = null;
+      _endDate = null;
+    });
+  }
+
+  List<FuelingRecord> _filterByPeriod(List<FuelingRecord> records) {
+    final start = _startDate;
+    final endExclusive = _endDate?.add(const Duration(days: 1));
+
+    return records
+        .where((record) {
+          final createdAt = record.createdAt.toLocal();
+          if (start != null && createdAt.isBefore(start)) {
+            return false;
+          }
+          if (endExclusive != null && !createdAt.isBefore(endExclusive)) {
+            return false;
+          }
+          return true;
+        })
+        .toList(growable: false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final records = ref.watch(driverFuelingRecordsProvider);
 
     return records.when(
       data: (items) {
-        if (items.isEmpty) {
-          return const Card(
-            child: Padding(
-              padding: EdgeInsets.all(16),
-              child: Text('Nenhum abastecimento registrado ainda.'),
-            ),
-          );
-        }
+        final filtered = _filterByPeriod(items);
 
-        return Column(
+        return ListView(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
           children: [
-            for (final record in items.take(5)) _FuelingHistoryTile(record),
+            _FuelingHistoryFilters(
+              startDate: _startDate,
+              endDate: _endDate,
+              onPickStart: _pickStartDate,
+              onPickEnd: _pickEndDate,
+              onClear: _clearFilters,
+            ),
+            const SizedBox(height: 12),
+            if (items.isEmpty)
+              const _FuelingEmptyHistory()
+            else if (filtered.isEmpty)
+              const Card(
+                child: Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Text(
+                    'Nenhum abastecimento encontrado para o periodo selecionado.',
+                  ),
+                ),
+              )
+            else
+              for (final record in filtered) _FuelingHistoryTile(record),
           ],
         );
       },
-      error: (error, _) =>
-          _FuelingErrorBox(message: 'Falha ao carregar historico: $error'),
-      loading: () => const Center(
-        child: Padding(
-          padding: EdgeInsets.all(16),
-          child: CircularProgressIndicator(),
+      error: (error, _) => Center(
+        child: _FuelingErrorBox(message: 'Falha ao carregar historico: $error'),
+      ),
+      loading: () => const Center(child: CircularProgressIndicator()),
+    );
+  }
+}
+
+final class _FuelingHistoryFilters extends StatelessWidget {
+  const _FuelingHistoryFilters({
+    required this.startDate,
+    required this.endDate,
+    required this.onPickStart,
+    required this.onPickEnd,
+    required this.onClear,
+  });
+
+  final DateTime? startDate;
+  final DateTime? endDate;
+  final VoidCallback onPickStart;
+  final VoidCallback onPickEnd;
+  final VoidCallback onClear;
+
+  bool get hasFilters => startDate != null || endDate != null;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Filtrar historico',
+              style: Theme.of(
+                context,
+              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: _FuelingDateFilterButton(
+                    icon: Icons.event_outlined,
+                    label: startDate == null
+                        ? 'Data inicial'
+                        : _formatDate(startDate!),
+                    onPressed: onPickStart,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _FuelingDateFilterButton(
+                    icon: Icons.event_available_outlined,
+                    label: endDate == null
+                        ? 'Data final'
+                        : _formatDate(endDate!),
+                    onPressed: onPickEnd,
+                  ),
+                ),
+                if (hasFilters) ...[
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    height: 56,
+                    width: 48,
+                    child: IconButton.outlined(
+                      tooltip: 'Limpar filtros',
+                      onPressed: onClear,
+                      icon: const Icon(Icons.close),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ],
         ),
+      ),
+    );
+  }
+}
+
+final class _FuelingDateFilterButton extends StatelessWidget {
+  const _FuelingDateFilterButton({
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 56,
+      child: OutlinedButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon),
+        label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+        style: OutlinedButton.styleFrom(
+          alignment: Alignment.centerLeft,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+        ),
+      ),
+    );
+  }
+}
+
+final class _FuelingEmptyHistory extends StatelessWidget {
+  const _FuelingEmptyHistory();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Card(
+      child: Padding(
+        padding: EdgeInsets.all(16),
+        child: Text('Nenhum abastecimento registrado ainda.'),
       ),
     );
   }
@@ -624,9 +842,9 @@ final class _FuelingHistoryTile extends StatelessWidget {
         leading: const Icon(Icons.local_gas_station_outlined),
         title: Text('${record.vehiclePlate} - ${record.fuelType.label}'),
         subtitle: Text(
-          'KM ${record.kmRegistered} - ${_formatDateTime(record.createdAt)}',
+          'KM ${record.kmRegistered} - ${_formatDateTime(record.createdAt)}\n${_historyStatus(record)}',
         ),
-        trailing: const Icon(Icons.chevron_right),
+        isThreeLine: true,
       ),
     );
   }
@@ -657,6 +875,33 @@ final class _FuelingErrorBox extends StatelessWidget {
       ),
     );
   }
+}
+
+String _historyStatus(FuelingRecord record) {
+  final hasPendingPhotos =
+      record.pendingReceiptPhotoLocalPaths.isNotEmpty ||
+      record.pendingOdometerPhotoLocalPaths.isNotEmpty;
+  if (hasPendingPhotos) {
+    return 'Fotos pendentes de sincronizacao';
+  }
+  return switch (record.notificationStatus) {
+    FuelingNotificationStatus.pendingWhatsapp =>
+      'Pendente para envio ao responsavel',
+    FuelingNotificationStatus.sentWhatsapp => 'Enviado ao responsavel',
+    FuelingNotificationStatus.failedWhatsapp => 'Falha no envio ao responsavel',
+  };
+}
+
+DateTime _dateOnly(DateTime dateTime) {
+  return DateTime(dateTime.year, dateTime.month, dateTime.day);
+}
+
+String _formatDate(DateTime value) {
+  final local = value.toLocal();
+  final day = local.day.toString().padLeft(2, '0');
+  final month = local.month.toString().padLeft(2, '0');
+  final year = local.year.toString();
+  return '$day/$month/$year';
 }
 
 String _formatDateTime(DateTime value) {
