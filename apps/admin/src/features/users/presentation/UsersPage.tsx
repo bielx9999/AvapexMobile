@@ -1,5 +1,5 @@
 import { FormEvent, type ReactNode, useMemo, useState } from 'react';
-import { Ban, KeyRound, Plus, Search, Trash2, UserCheck } from 'lucide-react';
+import { Ban, KeyRound, Plus, Search, Trash2, UserCheck, X } from 'lucide-react';
 import { adminUserRepository } from '../data/adminUserRepository';
 import type { AppUser, UserRole } from '../../shared/domain/models';
 
@@ -78,6 +78,14 @@ export function UsersPage({ users, loading, currentUid, onChanged }: UsersPagePr
     }
   }
 
+  function closeCreateForm() {
+    if (submitting) {
+      return;
+    }
+    setShowCreateForm(false);
+    setForm(initialForm);
+  }
+
   return (
     <div className="space-y-5">
       {message ? <p className="rounded border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{message}</p> : null}
@@ -92,7 +100,7 @@ export function UsersPage({ users, loading, currentUid, onChanged }: UsersPagePr
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <button
               className="flex h-10 items-center justify-center gap-2 rounded bg-avapex-yellow px-4 text-sm font-semibold text-avapex-black hover:bg-yellow-300"
-              onClick={() => setShowCreateForm((current) => !current)}
+              onClick={() => setShowCreateForm(true)}
               type="button"
             >
               <Plus size={18} />
@@ -109,95 +117,6 @@ export function UsersPage({ users, loading, currentUid, onChanged }: UsersPagePr
             </label>
           </div>
         </div>
-
-        {showCreateForm ? (
-          <form className="space-y-5 border-b border-zinc-200 bg-zinc-50 p-4" onSubmit={handleCreateUser}>
-            <FormTopic title="Dados pessoais">
-              <TextField
-                label="Nome e sobrenome"
-                value={form.name}
-                onChange={(value) => setForm((current) => ({ ...current, name: value }))}
-                required
-              />
-              <TextField
-                label="Email"
-                type="email"
-                value={form.email}
-                onChange={(value) => setForm((current) => ({ ...current, email: value }))}
-                required
-              />
-              <TextField
-                label="Telefone"
-                value={form.phone}
-                onChange={(value) => setForm((current) => ({ ...current, phone: value }))}
-              />
-            </FormTopic>
-
-            <FormTopic title="Acesso">
-              <label className="block">
-                <span className="mb-2 block text-sm font-medium text-zinc-700">Tipo de usuario</span>
-                <select
-                  className="h-11 w-full rounded border border-zinc-300 bg-white px-3 outline-none focus:border-avapex-yellow focus:ring-2 focus:ring-avapex-yellow/30"
-                  value={form.role}
-                  onChange={(event) => setForm((current) => ({ ...current, role: event.target.value as UserRole }))}
-                >
-                  <option value="driver">Motorista</option>
-                  <option value="admin">Administrativo</option>
-                </select>
-              </label>
-              <TextField
-                label="Senha provisoria"
-                type="password"
-                minLength={6}
-                value={form.password}
-                onChange={(value) => setForm((current) => ({ ...current, password: value }))}
-                required
-              />
-            </FormTopic>
-
-            {form.role === 'driver' ? (
-              <FormTopic title="CNH">
-                <TextField
-                  label="Numero CNH"
-                  value={form.cnhNumber}
-                  onChange={(value) => setForm((current) => ({ ...current, cnhNumber: value }))}
-                  required
-                />
-                <TextField
-                  label="Categoria CNH"
-                  value={form.cnhCategory}
-                  onChange={(value) => setForm((current) => ({ ...current, cnhCategory: value }))}
-                  required
-                />
-                <TextField
-                  label="Validade CNH"
-                  type="date"
-                  value={form.cnhExpirationDate}
-                  onChange={(value) => setForm((current) => ({ ...current, cnhExpirationDate: value }))}
-                  required
-                />
-              </FormTopic>
-            ) : null}
-
-            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-              <button
-                className="h-11 rounded border border-zinc-300 bg-white px-4 text-sm font-medium text-zinc-800 hover:bg-zinc-50"
-                onClick={() => setShowCreateForm(false)}
-                type="button"
-              >
-                Cancelar
-              </button>
-              <button
-                className="flex h-11 items-center justify-center gap-2 rounded bg-avapex-yellow px-5 text-sm font-semibold text-avapex-black hover:bg-yellow-300 disabled:cursor-not-allowed disabled:opacity-60"
-                disabled={submitting}
-                type="submit"
-              >
-                <Plus size={18} />
-                {submitting ? 'Criando...' : 'Criar usuario'}
-              </button>
-            </div>
-          </form>
-        ) : null}
 
         <div className="overflow-x-auto">
           <table className="w-full min-w-[900px] text-left text-sm">
@@ -298,6 +217,117 @@ export function UsersPage({ users, loading, currentUid, onChanged }: UsersPagePr
           </table>
         </div>
       </section>
+
+      {showCreateForm ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 px-4 py-6">
+          <section className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded border border-zinc-200 bg-white shadow-2xl">
+            <header className="flex items-start justify-between gap-4 border-b border-zinc-200 px-5 py-4">
+              <div>
+                <h2 className="text-lg font-semibold">Novo Usuario</h2>
+                <p className="mt-1 text-sm text-zinc-500">Cadastro por email e senha, sem acesso Google obrigatorio.</p>
+              </div>
+              <button
+                aria-label="Fechar cadastro"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded border border-zinc-300 text-zinc-700 hover:bg-zinc-50"
+                onClick={closeCreateForm}
+                type="button"
+              >
+                <X size={18} />
+              </button>
+            </header>
+
+            <form className="flex min-h-0 flex-1 flex-col" onSubmit={handleCreateUser}>
+              <div className="space-y-5 overflow-y-auto bg-zinc-50 p-5">
+                <FormTopic title="Dados pessoais">
+                  <TextField
+                    label="Nome e sobrenome"
+                    value={form.name}
+                    onChange={(value) => setForm((current) => ({ ...current, name: value }))}
+                    required
+                  />
+                  <TextField
+                    label="Email"
+                    type="email"
+                    value={form.email}
+                    onChange={(value) => setForm((current) => ({ ...current, email: value }))}
+                    required
+                  />
+                  <TextField
+                    label="Telefone"
+                    value={form.phone}
+                    onChange={(value) => setForm((current) => ({ ...current, phone: value }))}
+                  />
+                </FormTopic>
+
+                <FormTopic title="Acesso">
+                  <label className="block">
+                    <span className="mb-2 block text-sm font-medium text-zinc-700">Tipo de usuario</span>
+                    <select
+                      className="h-11 w-full rounded border border-zinc-300 bg-white px-3 outline-none focus:border-avapex-yellow focus:ring-2 focus:ring-avapex-yellow/30"
+                      value={form.role}
+                      onChange={(event) => setForm((current) => ({ ...current, role: event.target.value as UserRole }))}
+                    >
+                      <option value="driver">Motorista</option>
+                      <option value="admin">Administrativo</option>
+                    </select>
+                  </label>
+                  <TextField
+                    label="Senha provisoria"
+                    type="password"
+                    minLength={6}
+                    value={form.password}
+                    onChange={(value) => setForm((current) => ({ ...current, password: value }))}
+                    required
+                  />
+                </FormTopic>
+
+                {form.role === 'driver' ? (
+                  <FormTopic title="CNH">
+                    <TextField
+                      label="Numero CNH"
+                      value={form.cnhNumber}
+                      onChange={(value) => setForm((current) => ({ ...current, cnhNumber: value }))}
+                      required
+                    />
+                    <TextField
+                      label="Categoria CNH"
+                      value={form.cnhCategory}
+                      onChange={(value) => setForm((current) => ({ ...current, cnhCategory: value }))}
+                      required
+                    />
+                    <TextField
+                      label="Validade CNH"
+                      type="date"
+                      value={form.cnhExpirationDate}
+                      onChange={(value) => setForm((current) => ({ ...current, cnhExpirationDate: value }))}
+                      required
+                    />
+                  </FormTopic>
+                ) : null}
+              </div>
+
+              <footer className="flex flex-col-reverse gap-2 border-t border-zinc-200 bg-white px-5 py-4 sm:flex-row sm:justify-end">
+                <button
+                  className="h-11 rounded border border-zinc-300 bg-white px-4 text-sm font-medium text-zinc-800 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={submitting}
+                  onClick={closeCreateForm}
+                  type="button"
+                >
+                  Cancelar
+                </button>
+                <button
+                  className="flex h-11 items-center justify-center gap-2 rounded bg-avapex-yellow px-5 text-sm font-semibold text-avapex-black hover:bg-yellow-300 disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={submitting}
+                  type="submit"
+                >
+                  <Plus size={18} />
+                  {submitting ? 'Criando...' : 'Criar usuario'}
+                </button>
+              </footer>
+            </form>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }
