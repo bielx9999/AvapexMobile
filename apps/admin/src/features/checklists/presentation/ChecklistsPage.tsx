@@ -150,7 +150,7 @@ export function ChecklistsPage({ checklists, users, loading }: ChecklistsPagePro
             onClick={() => setShowFilters(false)}
             type="button"
           />
-          <aside className="relative flex h-full w-full max-w-sm flex-col bg-white/95 shadow-2xl backdrop-blur">
+          <aside className="relative ml-auto flex h-full w-full max-w-sm flex-col bg-white/95 shadow-2xl backdrop-blur">
             <header className="flex items-center justify-between border-b border-zinc-200 px-5 py-4">
               <div className="flex items-center gap-2">
                 <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-avapex-yellow text-avapex-black">
