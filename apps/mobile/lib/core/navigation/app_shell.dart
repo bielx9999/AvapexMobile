@@ -26,12 +26,6 @@ enum _AppSection {
     icon: Icons.fact_check_outlined,
     selectedIcon: Icons.fact_check,
   ),
-  incidents(
-    label: 'Ocorrencias',
-    title: 'Ocorrencias',
-    icon: Icons.report_problem_outlined,
-    selectedIcon: Icons.report_problem,
-  ),
   receipts(
     label: 'Comprovantes',
     title: 'Comprovantes',
@@ -416,54 +410,9 @@ final class _SectionBody extends StatelessWidget {
     return switch (section) {
       _AppSection.trips => const DriverHomePage(),
       _AppSection.checklists => const ChecklistsPage(),
-      _AppSection.incidents => const _ComingSoonPage(
-        icon: Icons.report_problem_outlined,
-        title: 'Ocorrencias',
-        message: 'Registros de avarias, atrasos e despesas entram nesta area.',
-      ),
       _AppSection.receipts => const DeliveryReceiptsPage(),
       _AppSection.fueling => const FuelingPage(),
       _AppSection.profile => const ProfilePage(),
     };
-  }
-}
-
-final class _ComingSoonPage extends StatelessWidget {
-  const _ComingSoonPage({
-    required this.icon,
-    required this.title,
-    required this.message,
-  });
-
-  final IconData icon;
-  final String title;
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 48, color: Theme.of(context).colorScheme.primary),
-            const SizedBox(height: 14),
-            Text(
-              title,
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }
