@@ -25,7 +25,6 @@ const initialForm = {
 export function UsersPage({ users, loading, currentUid, onChanged }: UsersPageProps) {
   const [form, setForm] = useState(initialForm);
   const [query, setQuery] = useState('');
-  const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [busyUid, setBusyUid] = useState('');
@@ -49,7 +48,6 @@ export function UsersPage({ users, loading, currentUid, onChanged }: UsersPagePr
     event.preventDefault();
     setSubmitting(true);
     setError('');
-    setMessage('');
 
     try {
       if (editingUser) {
@@ -63,10 +61,8 @@ export function UsersPage({ users, loading, currentUid, onChanged }: UsersPagePr
           cnhCategory: form.cnhCategory,
           cnhExpirationDate: form.cnhExpirationDate,
         });
-        setMessage('Usuario atualizado com sucesso.');
       } else {
         await adminUserRepository.createUser(form);
-        setMessage('Usuario criado com sucesso.');
       }
       setForm(initialForm);
       setShowCreateForm(false);
@@ -79,14 +75,12 @@ export function UsersPage({ users, loading, currentUid, onChanged }: UsersPagePr
     }
   }
 
-  async function runUserAction(uid: string, action: () => Promise<void>, successMessage: string) {
+  async function runUserAction(uid: string, action: () => Promise<void>) {
     setBusyUid(uid);
     setError('');
-    setMessage('');
 
     try {
       await action();
-      setMessage(successMessage);
       await onChanged();
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : 'Erro ao executar acao.');
@@ -128,7 +122,6 @@ export function UsersPage({ users, loading, currentUid, onChanged }: UsersPagePr
 
   return (
     <div className="space-y-5">
-      {message ? <p className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{message}</p> : null}
       {error ? <p className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
 
       <section className="ui-card overflow-hidden">
@@ -209,7 +202,6 @@ export function UsersPage({ users, loading, currentUid, onChanged }: UsersPagePr
                           void runUserAction(
                             user.uid,
                             () => adminUserRepository.sendPasswordReset(user),
-                            'Email de redefinicao enviado.',
                           )
                         }
                       >
@@ -222,7 +214,6 @@ export function UsersPage({ users, loading, currentUid, onChanged }: UsersPagePr
                           void runUserAction(
                             user.uid,
                             () => adminUserRepository.setStatus(user.uid, user.status === 'active' ? 'inactive' : 'active'),
-                            user.status === 'active' ? 'Usuario bloqueado.' : 'Usuario ativado.',
                           )
                         }
                       >
@@ -242,7 +233,6 @@ export function UsersPage({ users, loading, currentUid, onChanged }: UsersPagePr
                           void runUserAction(
                             user.uid,
                             () => adminUserRepository.deleteProfile(user.uid),
-                            'Cadastro excluido do Firestore.',
                           );
                         }}
                       >
