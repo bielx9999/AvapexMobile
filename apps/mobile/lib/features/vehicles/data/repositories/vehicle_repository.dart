@@ -21,6 +21,21 @@ final class VehicleRepository {
         );
   }
 
+  Stream<List<Vehicle>> watchAllVehicles() {
+    return _vehicles
+        .snapshots()
+        .map((snapshot) {
+          final vehicles = snapshot.docs
+              .map((document) => document.data())
+              .toList(growable: false);
+          vehicles.sort((a, b) => a.plate.compareTo(b.plate));
+          return vehicles;
+        })
+        .handleError((Object error, StackTrace stackTrace) {
+          throw FirebaseFailure.fromException(error, stackTrace);
+        });
+  }
+
   Stream<List<Vehicle>> watchAvailableVehicles() {
     return _vehicles
         .where('status', isEqualTo: VehicleStatus.available.value)

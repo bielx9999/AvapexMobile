@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/checklists/presentation/checklists_page.dart';
+import '../../features/fueling/presentation/fueling_page.dart';
 import '../../features/profile/presentation/profile_page.dart';
 import '../../features/receipts/presentation/delivery_receipts_page.dart';
 import '../../features/trips/presentation/driver_home_page.dart';
@@ -421,12 +422,7 @@ final class _SectionBody extends StatelessWidget {
         message: 'Registros de avarias, atrasos e despesas entram nesta area.',
       ),
       _AppSection.receipts => const DeliveryReceiptsPage(),
-      _AppSection.fueling => const _ComingSoonPage(
-        icon: Icons.local_gas_station_outlined,
-        title: 'Registrar abastecimento',
-        message:
-            'O registro de abastecimentos da viagem sera feito nesta area.',
-      ),
+      _AppSection.fueling => const FuelingPage(),
       _AppSection.profile => const ProfilePage(),
     };
   }

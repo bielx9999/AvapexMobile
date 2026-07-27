@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:logistica_avapex_mobile/features/fueling/data/models/fueling_record_model.dart';
 import 'package:logistica_avapex_mobile/features/trips/data/models/trip_model.dart';
 import 'package:logistica_avapex_mobile/features/users/data/models/app_user_model.dart';
 
@@ -41,6 +42,39 @@ void main() {
         'createdAt': Timestamp.fromDate(DateTime.utc(2026)),
       }),
       throwsFormatException,
+    );
+  });
+
+  test('Fueling record converts Firestore timestamps and media lists', () {
+    final createdAt = DateTime.utc(2026, 7, 27, 14, 30);
+
+    final record = FuelingRecord.fromFirestore({
+      'id': 'fueling-1',
+      'driverId': 'driver-1',
+      'driverName': 'Motorista',
+      'vehicleId': 'vehicle-1',
+      'vehiclePlate': 'ABC1D23',
+      'vehicleModel': 'Truck',
+      'kmRegistered': 123456,
+      'fuelType': 'diesel',
+      'receiptPhotoUrls': ['receipt-url'],
+      'odometerPhotoUrls': ['odometer-url'],
+      'pendingReceiptPhotoLocalPaths': ['receipt-local'],
+      'pendingOdometerPhotoLocalPaths': ['odometer-local'],
+      'notificationStatus': 'pending_whatsapp',
+      'createdAt': Timestamp.fromDate(createdAt),
+    });
+
+    expect(record.fuelType, FuelType.diesel);
+    expect(
+      record.notificationStatus,
+      FuelingNotificationStatus.pendingWhatsapp,
+    );
+    expect(record.receiptPhotoUrls, ['receipt-url']);
+    expect(record.pendingOdometerPhotoLocalPaths, ['odometer-local']);
+    expect(
+      record.createdAt.millisecondsSinceEpoch,
+      createdAt.millisecondsSinceEpoch,
     );
   });
 }
