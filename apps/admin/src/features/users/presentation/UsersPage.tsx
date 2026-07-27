@@ -28,6 +28,7 @@ export function UsersPage({ users, loading, currentUid, onChanged }: UsersPagePr
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [busyUid, setBusyUid] = useState('');
+  const [showCreateForm, setShowCreateForm] = useState(false);
 
   const filteredUsers = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -51,6 +52,7 @@ export function UsersPage({ users, loading, currentUid, onChanged }: UsersPagePr
     try {
       await adminUserRepository.createUser(form);
       setForm(initialForm);
+      setShowCreateForm(false);
       setMessage('Usuario criado com sucesso.');
       await onChanged();
     } catch (createError) {
@@ -78,89 +80,6 @@ export function UsersPage({ users, loading, currentUid, onChanged }: UsersPagePr
 
   return (
     <div className="space-y-5">
-      <section className="rounded border border-zinc-200 bg-white">
-        <div className="border-b border-zinc-200 px-4 py-3">
-          <h2 className="font-semibold">Criar usuario</h2>
-          <p className="mt-1 text-sm text-zinc-500">Cadastro por email e senha, sem acesso Google obrigatorio.</p>
-        </div>
-
-        <form className="grid gap-4 p-4 lg:grid-cols-4" onSubmit={handleCreateUser}>
-          <TextField
-            label="Nome e sobrenome"
-            value={form.name}
-            onChange={(value) => setForm((current) => ({ ...current, name: value }))}
-            required
-          />
-          <TextField
-            label="Email"
-            type="email"
-            value={form.email}
-            onChange={(value) => setForm((current) => ({ ...current, email: value }))}
-            required
-          />
-          <TextField
-            label="Telefone"
-            value={form.phone}
-            onChange={(value) => setForm((current) => ({ ...current, phone: value }))}
-          />
-          <TextField
-            label="Senha provisoria"
-            type="password"
-            minLength={6}
-            value={form.password}
-            onChange={(value) => setForm((current) => ({ ...current, password: value }))}
-            required
-          />
-
-          <label className="block">
-            <span className="mb-2 block text-sm font-medium text-zinc-700">Tipo de usuario</span>
-            <select
-              className="h-11 w-full rounded border border-zinc-300 bg-white px-3 outline-none focus:border-avapex-yellow focus:ring-2 focus:ring-avapex-yellow/30"
-              value={form.role}
-              onChange={(event) => setForm((current) => ({ ...current, role: event.target.value as UserRole }))}
-            >
-              <option value="driver">Motorista</option>
-              <option value="admin">Administrativo</option>
-            </select>
-          </label>
-
-          {form.role === 'driver' ? (
-            <>
-              <TextField
-                label="Numero CNH"
-                value={form.cnhNumber}
-                onChange={(value) => setForm((current) => ({ ...current, cnhNumber: value }))}
-                required
-              />
-              <TextField
-                label="Categoria CNH"
-                value={form.cnhCategory}
-                onChange={(value) => setForm((current) => ({ ...current, cnhCategory: value }))}
-                required
-              />
-              <TextField
-                label="Validade CNH"
-                type="date"
-                value={form.cnhExpirationDate}
-                onChange={(value) => setForm((current) => ({ ...current, cnhExpirationDate: value }))}
-                required
-              />
-            </>
-          ) : null}
-
-          <div className="flex items-end">
-            <button
-              className="flex h-11 w-full items-center justify-center gap-2 rounded bg-avapex-yellow px-4 font-semibold text-avapex-black hover:bg-yellow-300 disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={submitting}
-              type="submit"
-            >
-              <Plus size={18} />
-              {submitting ? 'Criando...' : 'Criar usuario'}
-            </button>
-          </div>
-        </form>
-      </section>
-
       {message ? <p className="rounded border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{message}</p> : null}
       {error ? <p className="rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
 
@@ -170,16 +89,115 @@ export function UsersPage({ users, loading, currentUid, onChanged }: UsersPagePr
             <h2 className="font-semibold">Gerenciar usuarios</h2>
             <p className="mt-1 text-sm text-zinc-500">Bloqueio, redefinicao de senha e exclusao de cadastro.</p>
           </div>
-          <label className="relative block md:w-80">
-            <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" size={18} />
-            <input
-              className="h-10 w-full rounded border border-zinc-300 pl-10 pr-3 text-sm outline-none focus:border-avapex-yellow focus:ring-2 focus:ring-avapex-yellow/30"
-              placeholder="Buscar usuario"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-          </label>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <button
+              className="flex h-10 items-center justify-center gap-2 rounded bg-avapex-yellow px-4 text-sm font-semibold text-avapex-black hover:bg-yellow-300"
+              onClick={() => setShowCreateForm((current) => !current)}
+              type="button"
+            >
+              <Plus size={18} />
+              Novo Usuario
+            </button>
+            <label className="relative block sm:w-80">
+              <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" size={18} />
+              <input
+                className="h-10 w-full rounded border border-zinc-300 pl-10 pr-3 text-sm outline-none focus:border-avapex-yellow focus:ring-2 focus:ring-avapex-yellow/30"
+                placeholder="Buscar usuario"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+              />
+            </label>
+          </div>
         </div>
+
+        {showCreateForm ? (
+          <form className="space-y-5 border-b border-zinc-200 bg-zinc-50 p-4" onSubmit={handleCreateUser}>
+            <FormTopic title="Dados pessoais">
+              <TextField
+                label="Nome e sobrenome"
+                value={form.name}
+                onChange={(value) => setForm((current) => ({ ...current, name: value }))}
+                required
+              />
+              <TextField
+                label="Email"
+                type="email"
+                value={form.email}
+                onChange={(value) => setForm((current) => ({ ...current, email: value }))}
+                required
+              />
+              <TextField
+                label="Telefone"
+                value={form.phone}
+                onChange={(value) => setForm((current) => ({ ...current, phone: value }))}
+              />
+            </FormTopic>
+
+            <FormTopic title="Acesso">
+              <label className="block">
+                <span className="mb-2 block text-sm font-medium text-zinc-700">Tipo de usuario</span>
+                <select
+                  className="h-11 w-full rounded border border-zinc-300 bg-white px-3 outline-none focus:border-avapex-yellow focus:ring-2 focus:ring-avapex-yellow/30"
+                  value={form.role}
+                  onChange={(event) => setForm((current) => ({ ...current, role: event.target.value as UserRole }))}
+                >
+                  <option value="driver">Motorista</option>
+                  <option value="admin">Administrativo</option>
+                </select>
+              </label>
+              <TextField
+                label="Senha provisoria"
+                type="password"
+                minLength={6}
+                value={form.password}
+                onChange={(value) => setForm((current) => ({ ...current, password: value }))}
+                required
+              />
+            </FormTopic>
+
+            {form.role === 'driver' ? (
+              <FormTopic title="CNH">
+                <TextField
+                  label="Numero CNH"
+                  value={form.cnhNumber}
+                  onChange={(value) => setForm((current) => ({ ...current, cnhNumber: value }))}
+                  required
+                />
+                <TextField
+                  label="Categoria CNH"
+                  value={form.cnhCategory}
+                  onChange={(value) => setForm((current) => ({ ...current, cnhCategory: value }))}
+                  required
+                />
+                <TextField
+                  label="Validade CNH"
+                  type="date"
+                  value={form.cnhExpirationDate}
+                  onChange={(value) => setForm((current) => ({ ...current, cnhExpirationDate: value }))}
+                  required
+                />
+              </FormTopic>
+            ) : null}
+
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                className="h-11 rounded border border-zinc-300 bg-white px-4 text-sm font-medium text-zinc-800 hover:bg-zinc-50"
+                onClick={() => setShowCreateForm(false)}
+                type="button"
+              >
+                Cancelar
+              </button>
+              <button
+                className="flex h-11 items-center justify-center gap-2 rounded bg-avapex-yellow px-5 text-sm font-semibold text-avapex-black hover:bg-yellow-300 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={submitting}
+                type="submit"
+              >
+                <Plus size={18} />
+                {submitting ? 'Criando...' : 'Criar usuario'}
+              </button>
+            </div>
+          </form>
+        ) : null}
 
         <div className="overflow-x-auto">
           <table className="w-full min-w-[900px] text-left text-sm">
@@ -306,6 +324,20 @@ function TextField({ label, value, onChange, type = 'text', required, minLength 
         minLength={minLength}
       />
     </label>
+  );
+}
+
+type FormTopicProps = {
+  title: string;
+  children: ReactNode;
+};
+
+function FormTopic({ title, children }: FormTopicProps) {
+  return (
+    <section className="rounded border border-zinc-200 bg-white p-4">
+      <h3 className="mb-3 text-sm font-semibold text-zinc-800">{title}</h3>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{children}</div>
+    </section>
   );
 }
 
