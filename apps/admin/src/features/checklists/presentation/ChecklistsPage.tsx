@@ -355,8 +355,8 @@ type ChartCardProps = {
 
 function ChartCard({ title, children }: ChartCardProps) {
   return (
-    <section className="ui-card p-4">
-      <h2 className="mb-4 font-semibold">{title}</h2>
+    <section className="ui-card p-3">
+      <h2 className="mb-2 px-1 text-sm font-semibold">{title}</h2>
       {children}
     </section>
   );
@@ -378,6 +378,7 @@ function ApexBarChart({ categories, data, color, seriesName }: ApexBarChartProps
     colors: [color],
     dataLabels: {
       enabled: true,
+      offsetX: 2,
       style: { colors: ['#111111'] },
     },
     grid: {
@@ -386,7 +387,8 @@ function ApexBarChart({ categories, data, color, seriesName }: ApexBarChartProps
     },
     plotOptions: {
       bar: {
-        borderRadius: 8,
+        barHeight: '58%',
+        borderRadius: 7,
         horizontal: true,
       },
     },
@@ -411,7 +413,7 @@ function ApexBarChart({ categories, data, color, seriesName }: ApexBarChartProps
   };
 
   return (
-    <Chart height={320} options={options} series={[{ data, name: seriesName }]} type="bar" />
+    <Chart height={260} options={options} series={[{ data, name: seriesName }]} type="bar" />
   );
 }
 
@@ -450,8 +452,8 @@ function ApexDatetimeChart({ data }: ApexDatetimeChartProps) {
     colors: ['#FACC15'],
     dataLabels: { enabled: false },
     markers: {
-      hover: { size: 7 },
-      size: 4,
+      hover: { size: 6 },
+      size: 3,
       strokeColors: '#FFFFFF',
       strokeWidth: 2,
     },
@@ -467,7 +469,7 @@ function ApexDatetimeChart({ data }: ApexDatetimeChartProps) {
     },
     stroke: {
       curve: 'smooth',
-      width: 3,
+      width: 2.5,
     },
     tooltip: {
       theme: 'light',
@@ -499,7 +501,7 @@ function ApexDatetimeChart({ data }: ApexDatetimeChartProps) {
 
   return (
     <Chart
-      height={320}
+      height={280}
       options={options}
       series={[
         {
