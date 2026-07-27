@@ -30,7 +30,6 @@ final class _DeliveryReceiptsPageState
   final _cteKeyController = TextEditingController();
   final _receiverNameController = TextEditingController();
   final _receiverDocumentController = TextEditingController();
-  final List<Offset?> _signaturePoints = [];
   final List<File> _physicalProofPhotos = [];
   final _imagePicker = ImagePicker();
 
@@ -44,8 +43,6 @@ final class _DeliveryReceiptsPageState
   void initState() {
     super.initState();
     _cteKeyController.addListener(_updateCteFromInput);
-    _receiverNameController.addListener(_refreshDeclaration);
-    _receiverDocumentController.addListener(_refreshDeclaration);
   }
 
   @override
@@ -53,17 +50,9 @@ final class _DeliveryReceiptsPageState
     _cteKeyController
       ..removeListener(_updateCteFromInput)
       ..dispose();
-    _receiverNameController
-      ..removeListener(_refreshDeclaration)
-      ..dispose();
-    _receiverDocumentController
-      ..removeListener(_refreshDeclaration)
-      ..dispose();
+    _receiverNameController.dispose();
+    _receiverDocumentController.dispose();
     super.dispose();
-  }
-
-  void _refreshDeclaration() {
-    setState(() {});
   }
 
   void _updateCteFromInput() {
@@ -133,10 +122,6 @@ final class _DeliveryReceiptsPageState
     }
   }
 
-  void _clearSignature() {
-    setState(_signaturePoints.clear);
-  }
-
   Future<void> _pickPhysicalProofPhoto(ImageSource source) async {
     setState(() => _errorMessage = null);
 
@@ -163,26 +148,6 @@ final class _DeliveryReceiptsPageState
     setState(() => _physicalProofPhotos.remove(photo));
   }
 
-  Future<void> _openSignatureCapture() async {
-    final draftPoints = List<Offset?>.of(_signaturePoints);
-    final result = await showModalBottomSheet<List<Offset?>>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      builder: (context) => _SignatureCaptureSheet(initialPoints: draftPoints),
-    );
-
-    if (result == null) {
-      return;
-    }
-
-    setState(() {
-      _signaturePoints
-        ..clear()
-        ..addAll(result);
-    });
-  }
-
   Future<void> _submit() async {
     final form = _formKey.currentState;
     setState(() => _errorMessage = null);
@@ -205,10 +170,10 @@ final class _DeliveryReceiptsPageState
       return;
     }
 
-    final hasSignature = _signaturePoints.whereType<Offset>().length >= 2;
-    if (!hasSignature) {
+    if (_physicalProofPhotos.isEmpty) {
       setState(
-        () => _errorMessage = 'Solicite a assinatura digital do recebedor.',
+        () => _errorMessage =
+            'Anexe ao menos uma foto do comprovante fisico assinado.',
       );
       return;
     }
@@ -256,10 +221,7 @@ final class _DeliveryReceiptsPageState
         receiverName: receiverName,
         receiverDocument: receiverDocument,
         location: location.toFirestore(),
-        signaturePoints: [
-          for (final point in _signaturePoints)
-            {'x': point?.dx, 'y': point?.dy},
-        ],
+        signaturePoints: const [],
         physicalProofPhotoUrls: uploadedPhotoUrls,
         pendingPhysicalProofLocalPaths: pendingPhotoPaths,
         declaration: _buildDeclaration(
@@ -284,7 +246,6 @@ final class _DeliveryReceiptsPageState
       setState(() {
         _cteAccessKey = null;
         _confirmedLocation = null;
-        _signaturePoints.clear();
         _physicalProofPhotos.clear();
       });
       ScaffoldMessenger.of(context).showSnackBar(
@@ -309,234 +270,210 @@ final class _DeliveryReceiptsPageState
 
   @override
   Widget build(BuildContext context) {
-    final receipts = ref.watch(driverDeliveryReceiptsProvider);
-
-    return Form(
-      key: _formKey,
-      child: ListView(
-        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+    return DefaultTabController(
+      length: 2,
+      child: Column(
         children: [
-          _SectionCard(
-            title: 'CT-e da entrega',
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                TextFormField(
-                  controller: _cteKeyController,
-                  keyboardType: TextInputType.text,
-                  decoration: InputDecoration(
-                    labelText: 'Chave CT-e ou conteudo do QR Code',
-                    prefixIcon: const Icon(Icons.qr_code_2_outlined),
-                    suffixIcon: IconButton(
-                      tooltip: 'Escanear QR Code',
-                      onPressed: _scanQrCode,
-                      icon: const Icon(Icons.qr_code_scanner),
-                    ),
-                  ),
-                  inputFormatters: [
-                    FilteringTextInputFormatter.allow(
-                      RegExp(r'[0-9A-Za-z:/?&=._%-]'),
-                    ),
-                  ],
-                  validator: (value) {
-                    return CteAccessKey.tryParse(value ?? '') == null
-                        ? 'Informe uma chave CT-e valida com 44 digitos.'
-                        : null;
-                  },
-                ),
-                const SizedBox(height: 10),
-                OutlinedButton.icon(
-                  onPressed: _scanQrCode,
-                  icon: const Icon(Icons.camera_alt_outlined),
-                  label: const Text('Escanear QR Code do CT-e'),
-                ),
-                if (_cteAccessKey != null) ...[
-                  const SizedBox(height: 10),
-                  _InfoBanner(
-                    icon: Icons.description_outlined,
-                    label: 'Numero do CT-e',
-                    value: _cteAccessKey!.number,
-                  ),
-                ],
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-          _SectionCard(
-            title: 'Localizacao da entrega',
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _InfoBanner(
-                  icon: _confirmedLocation == null
-                      ? Icons.location_off_outlined
-                      : Icons.location_on_outlined,
-                  label: 'Status',
-                  value: _confirmedLocation == null
-                      ? 'Localizacao ainda nao confirmada'
-                      : _confirmedLocation!.display,
-                ),
-                const SizedBox(height: 10),
-                OutlinedButton.icon(
-                  onPressed: _isLocating ? null : _confirmLocation,
-                  icon: _isLocating
-                      ? const SizedBox.square(
-                          dimension: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.my_location_outlined),
-                  label: Text(
-                    _isLocating
-                        ? 'Confirmando...'
-                        : 'Confirmar localizacao atual',
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-          _SectionCard(
-            title: 'Dados do recebedor',
-            child: Column(
-              children: [
-                TextFormField(
-                  controller: _receiverNameController,
-                  textCapitalization: TextCapitalization.words,
-                  decoration: const InputDecoration(
-                    labelText: 'Nome do recebedor',
-                    prefixIcon: Icon(Icons.person_outline),
-                  ),
-                  validator: _requiredText,
-                ),
-                const SizedBox(height: 10),
-                TextFormField(
-                  controller: _receiverDocumentController,
-                  decoration: const InputDecoration(
-                    labelText: 'Matricula, CPF ou RG',
-                    prefixIcon: Icon(Icons.badge_outlined),
-                  ),
-                  validator: _requiredText,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-          _SectionCard(
-            title: 'Assinatura digital',
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _SignaturePreview(
-                  points: _signaturePoints,
-                  onOpen: _openSignatureCapture,
-                ),
-                const SizedBox(height: 8),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton.icon(
-                    onPressed: _signaturePoints.isEmpty
-                        ? null
-                        : _clearSignature,
-                    icon: const Icon(Icons.backspace_outlined),
-                    label: const Text('Limpar assinatura'),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                _DeclarationBox(
-                  declaration: _buildDeclaration(
-                    receiverName: _receiverNameController.text.trim(),
-                    receiverDocument: _receiverDocumentController.text.trim(),
-                    cteNumber: _cteAccessKey?.number ?? '________',
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-          _SectionCard(
-            title: 'Comprovante fisico assinado',
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () =>
-                            _pickPhysicalProofPhoto(ImageSource.camera),
-                        icon: const Icon(Icons.photo_camera_outlined),
-                        label: const Text('Tirar foto'),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () =>
-                            _pickPhysicalProofPhoto(ImageSource.gallery),
-                        icon: const Icon(Icons.upload_file_outlined),
-                        label: const Text('Enviar foto'),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                if (_physicalProofPhotos.isEmpty)
-                  const _InfoBanner(
-                    icon: Icons.image_outlined,
-                    label: 'Anexo',
-                    value: 'Nenhuma foto anexada',
-                  )
-                else
-                  _PhysicalProofPhotoList(
-                    photos: _physicalProofPhotos,
-                    onRemove: _removePhysicalProofPhoto,
-                  ),
-              ],
-            ),
-          ),
-          if (_errorMessage != null) ...[
-            const SizedBox(height: 12),
-            _ErrorBox(message: _errorMessage!),
-          ],
-          const SizedBox(height: 18),
-          FilledButton.icon(
-            onPressed: _isSaving ? null : _submit,
-            icon: _isSaving
-                ? const SizedBox.square(
-                    dimension: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.send),
-            label: Text(_isSaving ? 'Enviando...' : 'Finalizar comprovante'),
-          ),
-          const SizedBox(height: 18),
-          Text(
-            'Ultimos comprovantes',
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-          ),
-          const SizedBox(height: 8),
-          receipts.when(
-            data: (items) {
-              if (items.isEmpty) {
-                return const _EmptyHistory();
-              }
-              return Column(
-                children: [
-                  for (final receipt in items.take(6))
-                    _ReceiptHistoryTile(receipt: receipt),
-                ],
-              );
-            },
-            error: (error, _) =>
-                _ErrorBox(message: 'Falha ao carregar comprovantes: $error'),
-            loading: () => const Center(
-              child: Padding(
-                padding: EdgeInsets.all(16),
-                child: CircularProgressIndicator(),
+          const TabBar(
+            tabs: [
+              Tab(
+                icon: Icon(Icons.add_photo_alternate_outlined),
+                text: 'Enviar',
               ),
+              Tab(icon: Icon(Icons.history_outlined), text: 'Historico'),
+            ],
+          ),
+          Expanded(
+            child: TabBarView(
+              children: [
+                Form(
+                  key: _formKey,
+                  child: ListView(
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                    children: [
+                      _SectionCard(
+                        title: 'CT-e da entrega',
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            TextFormField(
+                              controller: _cteKeyController,
+                              keyboardType: TextInputType.text,
+                              decoration: InputDecoration(
+                                labelText: 'Chave CT-e ou conteudo do QR Code',
+                                prefixIcon: const Icon(
+                                  Icons.qr_code_2_outlined,
+                                ),
+                                suffixIcon: IconButton(
+                                  tooltip: 'Escanear QR Code',
+                                  onPressed: _scanQrCode,
+                                  icon: const Icon(Icons.qr_code_scanner),
+                                ),
+                              ),
+                              inputFormatters: [
+                                FilteringTextInputFormatter.allow(
+                                  RegExp(r'[0-9A-Za-z:/?&=._%-]'),
+                                ),
+                              ],
+                              validator: (value) {
+                                return CteAccessKey.tryParse(value ?? '') ==
+                                        null
+                                    ? 'Informe uma chave CT-e valida com 44 digitos.'
+                                    : null;
+                              },
+                            ),
+                            const SizedBox(height: 10),
+                            OutlinedButton.icon(
+                              onPressed: _scanQrCode,
+                              icon: const Icon(Icons.camera_alt_outlined),
+                              label: const Text('Escanear QR Code do CT-e'),
+                            ),
+                            if (_cteAccessKey != null) ...[
+                              const SizedBox(height: 10),
+                              _InfoBanner(
+                                icon: Icons.description_outlined,
+                                label: 'Numero do CT-e',
+                                value: _cteAccessKey!.number,
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      _SectionCard(
+                        title: 'Localizacao da entrega',
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _InfoBanner(
+                              icon: _confirmedLocation == null
+                                  ? Icons.location_off_outlined
+                                  : Icons.location_on_outlined,
+                              label: 'Status',
+                              value: _confirmedLocation == null
+                                  ? 'Localizacao ainda nao confirmada'
+                                  : _confirmedLocation!.display,
+                            ),
+                            const SizedBox(height: 10),
+                            OutlinedButton.icon(
+                              onPressed: _isLocating ? null : _confirmLocation,
+                              icon: _isLocating
+                                  ? const SizedBox.square(
+                                      dimension: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : const Icon(Icons.my_location_outlined),
+                              label: Text(
+                                _isLocating
+                                    ? 'Confirmando...'
+                                    : 'Confirmar localizacao atual',
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      _SectionCard(
+                        title: 'Dados do recebedor',
+                        child: Column(
+                          children: [
+                            TextFormField(
+                              controller: _receiverNameController,
+                              textCapitalization: TextCapitalization.words,
+                              decoration: const InputDecoration(
+                                labelText: 'Nome do recebedor',
+                                prefixIcon: Icon(Icons.person_outline),
+                              ),
+                              validator: _requiredText,
+                            ),
+                            const SizedBox(height: 10),
+                            TextFormField(
+                              controller: _receiverDocumentController,
+                              decoration: const InputDecoration(
+                                labelText: 'Matricula, CPF ou RG',
+                                prefixIcon: Icon(Icons.badge_outlined),
+                              ),
+                              validator: _requiredText,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      _SectionCard(
+                        title: 'Comprovante fisico assinado',
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: OutlinedButton.icon(
+                                    onPressed: () => _pickPhysicalProofPhoto(
+                                      ImageSource.camera,
+                                    ),
+                                    icon: const Icon(
+                                      Icons.photo_camera_outlined,
+                                    ),
+                                    label: const Text('Tirar foto'),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: OutlinedButton.icon(
+                                    onPressed: () => _pickPhysicalProofPhoto(
+                                      ImageSource.gallery,
+                                    ),
+                                    icon: const Icon(
+                                      Icons.upload_file_outlined,
+                                    ),
+                                    label: const Text('Enviar foto'),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            if (_physicalProofPhotos.isEmpty)
+                              const _InfoBanner(
+                                icon: Icons.image_outlined,
+                                label: 'Anexo',
+                                value: 'Nenhuma foto anexada',
+                              )
+                            else
+                              _PhysicalProofPhotoList(
+                                photos: _physicalProofPhotos,
+                                onRemove: _removePhysicalProofPhoto,
+                              ),
+                          ],
+                        ),
+                      ),
+                      if (_errorMessage != null) ...[
+                        const SizedBox(height: 12),
+                        _ErrorBox(message: _errorMessage!),
+                      ],
+                      const SizedBox(height: 18),
+                      FilledButton.icon(
+                        onPressed: _isSaving ? null : _submit,
+                        icon: _isSaving
+                            ? const SizedBox.square(
+                                dimension: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.send),
+                        label: Text(
+                          _isSaving ? 'Enviando...' : 'Finalizar comprovante',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const _ReceiptHistoryTab(),
+              ],
             ),
           ),
         ],
@@ -616,219 +553,6 @@ final class _CteQrScannerPageState extends State<_CteQrScannerPage> {
   }
 }
 
-final class _SignatureCaptureSheet extends StatefulWidget {
-  const _SignatureCaptureSheet({required this.initialPoints});
-
-  final List<Offset?> initialPoints;
-
-  @override
-  State<_SignatureCaptureSheet> createState() => _SignatureCaptureSheetState();
-}
-
-final class _SignatureCaptureSheetState extends State<_SignatureCaptureSheet> {
-  late final List<Offset?> _points;
-
-  @override
-  void initState() {
-    super.initState();
-    _points = List<Offset?>.of(widget.initialPoints);
-  }
-
-  void _clear() {
-    setState(_points.clear);
-  }
-
-  void _confirm() {
-    Navigator.of(context).pop(List<Offset?>.of(_points));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Assinatura do recebedor',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-              IconButton(
-                tooltip: 'Fechar',
-                onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(Icons.close),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          _SignaturePad(points: _points, onChanged: () => setState(() {})),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _points.isEmpty ? null : _clear,
-                  icon: const Icon(Icons.backspace_outlined),
-                  label: const Text('Limpar'),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: FilledButton.icon(
-                  onPressed: _confirm,
-                  icon: const Icon(Icons.check),
-                  label: const Text('Confirmar'),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-final class _SignaturePreview extends StatelessWidget {
-  const _SignaturePreview({required this.points, required this.onOpen});
-
-  final List<Offset?> points;
-  final VoidCallback onOpen;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(8),
-      onTap: onOpen,
-      child: AspectRatio(
-        aspectRatio: 2.4,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            border: Border.all(color: const Color(0xFF1F1C1C)),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: CustomPaint(
-              painter: _SignaturePainter(points),
-              child: Center(
-                child: Text(
-                  points.isEmpty
-                      ? 'Toque para coletar assinatura'
-                      : 'Editar assinatura',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: const Color(0xFF6B7280),
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-final class _SignaturePad extends StatelessWidget {
-  const _SignaturePad({required this.points, required this.onChanged});
-
-  final List<Offset?> points;
-  final VoidCallback onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return AspectRatio(
-      aspectRatio: 2.4,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          border: Border.all(color: const Color(0xFF1F1C1C)),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              Offset clampPoint(Offset point) {
-                return Offset(
-                  point.dx.clamp(0, constraints.maxWidth).toDouble(),
-                  point.dy.clamp(0, constraints.maxHeight).toDouble(),
-                );
-              }
-
-              return GestureDetector(
-                onPanStart: (details) {
-                  points.add(clampPoint(details.localPosition));
-                  onChanged();
-                },
-                onPanUpdate: (details) {
-                  points.add(clampPoint(details.localPosition));
-                  onChanged();
-                },
-                onPanEnd: (_) {
-                  points.add(null);
-                  onChanged();
-                },
-                child: CustomPaint(
-                  painter: _SignaturePainter(points),
-                  child: Center(
-                    child: points.isEmpty
-                        ? Text(
-                            'Assine aqui',
-                            style: Theme.of(context).textTheme.bodyMedium
-                                ?.copyWith(
-                                  color: const Color(0xFF6B7280),
-                                  fontWeight: FontWeight.w700,
-                                ),
-                          )
-                        : const SizedBox.shrink(),
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-final class _SignaturePainter extends CustomPainter {
-  const _SignaturePainter(this.points);
-
-  final List<Offset?> points;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.black
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
-      ..strokeWidth = 3;
-
-    for (var index = 0; index < points.length - 1; index++) {
-      final current = points[index];
-      final next = points[index + 1];
-      if (current != null && next != null) {
-        canvas.drawLine(current, next, paint);
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _SignaturePainter oldDelegate) {
-    return true;
-  }
-}
-
 final class _SectionCard extends StatelessWidget {
   const _SectionCard({required this.title, required this.child});
 
@@ -905,30 +629,6 @@ final class _InfoBanner extends StatelessWidget {
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-final class _DeclarationBox extends StatelessWidget {
-  const _DeclarationBox({required this.declaration});
-
-  final String declaration;
-
-  @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: const Color(0xFFF6F6F6),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFB8B8B8)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Text(
-          declaration,
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.35),
         ),
       ),
     );
@@ -1024,6 +724,214 @@ final class _ErrorBox extends StatelessWidget {
   }
 }
 
+final class _ReceiptHistoryTab extends ConsumerStatefulWidget {
+  const _ReceiptHistoryTab();
+
+  @override
+  ConsumerState<_ReceiptHistoryTab> createState() => _ReceiptHistoryTabState();
+}
+
+final class _ReceiptHistoryTabState extends ConsumerState<_ReceiptHistoryTab> {
+  DateTime? _startDate;
+  DateTime? _endDate;
+
+  Future<void> _pickStartDate() async {
+    final picked = await _pickDate(initialDate: _startDate ?? DateTime.now());
+    if (picked == null) {
+      return;
+    }
+    setState(() => _startDate = _dateOnly(picked));
+  }
+
+  Future<void> _pickEndDate() async {
+    final picked = await _pickDate(initialDate: _endDate ?? DateTime.now());
+    if (picked == null) {
+      return;
+    }
+    setState(() => _endDate = _dateOnly(picked));
+  }
+
+  Future<DateTime?> _pickDate({required DateTime initialDate}) {
+    return showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: DateTime(2024),
+      lastDate: DateTime.now(),
+    );
+  }
+
+  void _clearFilters() {
+    setState(() {
+      _startDate = null;
+      _endDate = null;
+    });
+  }
+
+  List<DeliveryReceipt> _filterByPeriod(List<DeliveryReceipt> receipts) {
+    final start = _startDate;
+    final endExclusive = _endDate?.add(const Duration(days: 1));
+
+    return receipts
+        .where((receipt) {
+          final createdAt = receipt.createdAt.toLocal();
+          if (start != null && createdAt.isBefore(start)) {
+            return false;
+          }
+          if (endExclusive != null && !createdAt.isBefore(endExclusive)) {
+            return false;
+          }
+          return true;
+        })
+        .toList(growable: false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final receipts = ref.watch(driverDeliveryReceiptsProvider);
+
+    return receipts.when(
+      data: (items) {
+        final filtered = _filterByPeriod(items);
+
+        return ListView(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+          children: [
+            _ReceiptHistoryFilters(
+              startDate: _startDate,
+              endDate: _endDate,
+              onPickStart: _pickStartDate,
+              onPickEnd: _pickEndDate,
+              onClear: _clearFilters,
+            ),
+            const SizedBox(height: 12),
+            if (items.isEmpty)
+              const _EmptyHistory()
+            else if (filtered.isEmpty)
+              const Card(
+                child: Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Text(
+                    'Nenhum comprovante encontrado para o periodo selecionado.',
+                  ),
+                ),
+              )
+            else
+              for (final receipt in filtered)
+                _ReceiptHistoryTile(receipt: receipt),
+          ],
+        );
+      },
+      error: (error, _) => Center(
+        child: _ErrorBox(message: 'Falha ao carregar comprovantes: $error'),
+      ),
+      loading: () => const Center(child: CircularProgressIndicator()),
+    );
+  }
+}
+
+final class _ReceiptHistoryFilters extends StatelessWidget {
+  const _ReceiptHistoryFilters({
+    required this.startDate,
+    required this.endDate,
+    required this.onPickStart,
+    required this.onPickEnd,
+    required this.onClear,
+  });
+
+  final DateTime? startDate;
+  final DateTime? endDate;
+  final VoidCallback onPickStart;
+  final VoidCallback onPickEnd;
+  final VoidCallback onClear;
+
+  bool get hasFilters => startDate != null || endDate != null;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Filtrar historico',
+              style: Theme.of(
+                context,
+              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: _HistoryDateFilterButton(
+                    icon: Icons.event_outlined,
+                    label: startDate == null
+                        ? 'Data inicial'
+                        : _formatDate(startDate!),
+                    onPressed: onPickStart,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _HistoryDateFilterButton(
+                    icon: Icons.event_available_outlined,
+                    label: endDate == null
+                        ? 'Data final'
+                        : _formatDate(endDate!),
+                    onPressed: onPickEnd,
+                  ),
+                ),
+                if (hasFilters) ...[
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    height: 56,
+                    width: 48,
+                    child: IconButton.outlined(
+                      tooltip: 'Limpar filtros',
+                      onPressed: onClear,
+                      icon: const Icon(Icons.close),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+final class _HistoryDateFilterButton extends StatelessWidget {
+  const _HistoryDateFilterButton({
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 56,
+      child: OutlinedButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon),
+        label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+        style: OutlinedButton.styleFrom(
+          alignment: Alignment.centerLeft,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+        ),
+      ),
+    );
+  }
+}
+
 final class _EmptyHistory extends StatelessWidget {
   const _EmptyHistory();
 
@@ -1075,6 +983,18 @@ String _buildDeclaration({
       ? '________________'
       : receiverDocument;
   return 'Eu, $name, portador(a) do documento/matricula $document, declaro que recebi a entrega referente ao CT-e $cteNumber, confirmando a entrega no local registrado pelo aplicativo.';
+}
+
+DateTime _dateOnly(DateTime dateTime) {
+  return DateTime(dateTime.year, dateTime.month, dateTime.day);
+}
+
+String _formatDate(DateTime value) {
+  final local = value.toLocal();
+  final day = local.day.toString().padLeft(2, '0');
+  final month = local.month.toString().padLeft(2, '0');
+  final year = local.year.toString();
+  return '$day/$month/$year';
 }
 
 String _formatDateTime(DateTime value) {
