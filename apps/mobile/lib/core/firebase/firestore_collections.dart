@@ -5,4 +5,5 @@ abstract final class FirestoreCollections {
   static const checklists = 'checklists';
   static const incidents = 'incidents';
   static const deliveryReceipts = 'deliveryReceipts';
+  static const driverEquipments = 'driverEquipments';
 }

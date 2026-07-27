@@ -90,5 +90,10 @@ service cloud.firestore {
       );
       allow delete: if isAdmin();
     }
+
+    match /driverEquipments/{equipmentId} {
+      allow read: if isAdmin() || ownedExistingDriverData();
+      allow write: if isAdmin();
+    }
   }
 }

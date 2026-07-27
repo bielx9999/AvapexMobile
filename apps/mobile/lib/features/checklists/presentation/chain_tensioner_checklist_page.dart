@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/errors/firebase_failure.dart';
 import '../../../core/providers/firebase_providers.dart';
+import '../../equipment/application/driver_equipment_providers.dart';
+import '../../equipment/data/models/driver_equipment_model.dart';
 import '../../users/application/user_providers.dart';
 import '../data/models/checklist_model.dart';
 
@@ -12,6 +14,15 @@ enum ComplianceAnswer {
   notApplicable('NA');
 
   const ComplianceAnswer(this.label);
+
+  final String label;
+}
+
+enum RetroactiveReason {
+  forgetfulness('Esquecimento'),
+  other('Outro motivo');
+
+  const RetroactiveReason(this.label);
 
   final String label;
 }
@@ -29,27 +40,44 @@ final class _ChainTensionerChecklistPageState
   final _formKey = GlobalKey<FormState>();
   final _timeController = TextEditingController();
   final _kmController = TextEditingController();
-  final _chainCountController = TextEditingController();
-  final _tensionerCountController = TextEditingController();
   final _affectedItemController = TextEditingController();
   final _nonConformityController = TextEditingController();
   final _correctiveMeasureController = TextEditingController();
   final _responsibleController = TextEditingController();
   final _deadlineController = TextEditingController();
-  final _pinController = TextEditingController();
+  final _retroactiveOtherReasonController = TextEditingController();
   final _openedAt = DateTime.now();
   final Map<String, ComplianceAnswer?> _answers = {
     for (final item in _guidelineItems) item.id: null,
   };
-  final Map<String, TextEditingController> _tagNumberControllers = {};
+  final Set<String> _selectedEquipmentIds = {};
 
+  late DateTime _checklistDate = _dateOnly(_openedAt);
+  RetroactiveReason? _retroactiveReason;
   var _isSaving = false;
   String? _errorMessage;
+
+  bool get _isRetroactive => _checklistDate.isBefore(_dateOnly(DateTime.now()));
 
   bool get _hasNonConformity {
     return _currentItems.any(
       (item) => _answers[item.id] == ComplianceAnswer.nonConforming,
     );
+  }
+
+  List<DriverEquipment> _availableEquipment = const [];
+
+  @override
+  void dispose() {
+    _timeController.dispose();
+    _kmController.dispose();
+    _affectedItemController.dispose();
+    _nonConformityController.dispose();
+    _correctiveMeasureController.dispose();
+    _responsibleController.dispose();
+    _deadlineController.dispose();
+    _retroactiveOtherReasonController.dispose();
+    super.dispose();
   }
 
   @override
@@ -58,48 +86,58 @@ final class _ChainTensionerChecklistPageState
     _timeController.text = _formatTime(_openedAt);
   }
 
-  @override
-  void dispose() {
-    _timeController.dispose();
-    _kmController.dispose();
-    _chainCountController.dispose();
-    _tensionerCountController.dispose();
-    _affectedItemController.dispose();
-    _nonConformityController.dispose();
-    _correctiveMeasureController.dispose();
-    _responsibleController.dispose();
-    _deadlineController.dispose();
-    _pinController.dispose();
-    for (final controller in _tagNumberControllers.values) {
-      controller.dispose();
-    }
-    super.dispose();
-  }
-
   List<_ChecklistItem> get _currentItems {
+    final selectedEquipment = _availableEquipment
+        .where((equipment) => _selectedEquipmentIds.contains(equipment.id))
+        .toList(growable: false);
+
     return [
       ..._guidelineItems,
-      ..._buildTagItems(
-        count: _readCount(_chainCountController),
-        idPrefix: 'chain_tag',
-        numberPrefix: 'Corrente',
-        section: _sectionChains,
-        labelBuilder: (index) =>
-            'Corrente $index: verificar estado geral, isencao de nos, trava de seguranca e ausencia de cantos vivos.',
-      ),
-      ..._buildTagItems(
-        count: _readCount(_tensionerCountController),
-        idPrefix: 'tensioner_tag',
-        numberPrefix: 'Tensionador',
-        section: _sectionTensioners,
-        labelBuilder: (index) =>
-            'Tensionador $index: verificar trincas, catraca, gancho, alavanca e angulacao.',
-      ),
+      for (final equipment in selectedEquipment)
+        _ChecklistItem.equipment(equipment),
     ];
   }
 
-  TextEditingController _tagNumberControllerFor(String itemId) {
-    return _tagNumberControllers.putIfAbsent(itemId, TextEditingController.new);
+  Future<void> _pickChecklistDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _checklistDate,
+      firstDate: DateTime(2024),
+      lastDate: _dateOnly(DateTime.now()),
+    );
+
+    if (picked == null) {
+      return;
+    }
+
+    setState(() {
+      _checklistDate = _dateOnly(picked);
+      if (!_isRetroactive) {
+        _retroactiveReason = null;
+        _retroactiveOtherReasonController.clear();
+      }
+    });
+  }
+
+  void _toggleEquipment(DriverEquipment equipment, bool selected) {
+    setState(() {
+      if (selected) {
+        _selectedEquipmentIds.add(equipment.id);
+      } else {
+        _selectedEquipmentIds.remove(equipment.id);
+        _answers.remove(_equipmentAnswerId(equipment.id));
+      }
+    });
+  }
+
+  List<DriverEquipment> _selectedEquipmentByType(DriverEquipmentType type) {
+    return _availableEquipment
+        .where(
+          (equipment) =>
+              equipment.type == type &&
+              _selectedEquipmentIds.contains(equipment.id),
+        )
+        .toList(growable: false);
   }
 
   Future<void> _submit() async {
@@ -107,6 +145,29 @@ final class _ChainTensionerChecklistPageState
     setState(() => _errorMessage = null);
 
     if (form == null || !form.validate()) {
+      return;
+    }
+
+    if (_isRetroactive && _retroactiveReason == null) {
+      setState(
+        () => _errorMessage =
+            'Selecione o motivo da data retroativa antes de finalizar.',
+      );
+      return;
+    }
+
+    if (_isRetroactive &&
+        _retroactiveReason == RetroactiveReason.other &&
+        _retroactiveOtherReasonController.text.trim().isEmpty) {
+      setState(() => _errorMessage = 'Descreva o outro motivo.');
+      return;
+    }
+
+    if (_selectedEquipmentIds.isEmpty) {
+      setState(
+        () => _errorMessage =
+            'Selecione ao menos uma corrente ou tensionador disponivel.',
+      );
       return;
     }
 
@@ -166,14 +227,19 @@ final class _ChainTensionerChecklistPageState
 
     try {
       final profile = ref.read(currentUserProfileProvider).asData?.value;
+      final performedAt = _composeDateTime(
+        _checklistDate,
+        _timeController.text,
+      );
       final answers = {
         for (final item in _currentItems)
           item.id: {
             'number': item.number,
             'label': item.label,
             'section': item.section,
-            if (item.requiresTagNumber)
-              'tagNumber': _tagNumberControllerFor(item.id).text.trim(),
+            if (item.equipmentId != null) 'equipmentId': item.equipmentId,
+            if (item.tagNumber != null) 'tagNumber': item.tagNumber,
+            if (item.equipmentType != null) 'equipmentType': item.equipmentType,
             'answer': _answers[item.id]!.label,
           },
       };
@@ -204,7 +270,7 @@ final class _ChainTensionerChecklistPageState
         ),
         photoUrls: const [],
         signatureUrl: '',
-        createdAt: _openedAt,
+        createdAt: performedAt,
         category: 'chain_tensioner',
         vehiclePlate: 'Corrente/Tensionador',
         driverName: profile?.name ?? authUser?.displayName ?? authUser?.email,
@@ -212,12 +278,20 @@ final class _ChainTensionerChecklistPageState
           'metadata': {
             'procedure': 'PRO 0054',
             'departureTime': _timeController.text.trim(),
-            'date': _formatDate(_openedAt),
-            'monthYear': _formatMonthYear(_openedAt),
+            'date': _formatDate(performedAt),
+            'monthYear': _formatMonthYear(performedAt),
             'driverRegistration': profile?.uid ?? uid,
-            'chainCount': int.parse(_chainCountController.text),
-            'tensionerCount': int.parse(_tensionerCountController.text),
-            'pinConfirmed': _pinController.text.trim().isNotEmpty,
+            'chainCount': _selectedEquipmentByType(
+              DriverEquipmentType.chain,
+            ).length,
+            'tensionerCount': _selectedEquipmentByType(
+              DriverEquipmentType.tensioner,
+            ).length,
+            'isRetroactive': _isRetroactive,
+            if (_isRetroactive) 'retroactiveReason': _retroactiveReason!.label,
+            if (_isRetroactive && _retroactiveReason == RetroactiveReason.other)
+              'retroactiveOtherReason': _retroactiveOtherReasonController.text
+                  .trim(),
           },
           'items': answers,
           if (actionPlan != null) 'actionPlan': actionPlan,
@@ -257,6 +331,12 @@ final class _ChainTensionerChecklistPageState
   @override
   Widget build(BuildContext context) {
     final profile = ref.watch(currentUserProfileProvider);
+    final equipment = ref.watch(
+      availableDriverEquipmentProvider(const {
+        DriverEquipmentType.chain,
+        DriverEquipmentType.tensioner,
+      }),
+    );
 
     return Scaffold(
       appBar: AppBar(title: const Text('Corrente/Tensionador')),
@@ -268,11 +348,16 @@ final class _ChainTensionerChecklistPageState
             _HeaderCard(
               timeController: _timeController,
               kmController: _kmController,
-              chainCountController: _chainCountController,
-              tensionerCountController: _tensionerCountController,
-              onEquipmentCountChanged: () => setState(() {}),
-              dateText: _formatDate(_openedAt),
-              monthYearText: _formatMonthYear(_openedAt),
+              selectedDate: _checklistDate,
+              onPickDate: _pickChecklistDate,
+              isRetroactive: _isRetroactive,
+              retroactiveReason: _retroactiveReason,
+              retroactiveOtherReasonController:
+                  _retroactiveOtherReasonController,
+              onRetroactiveReasonChanged: (reason) {
+                setState(() => _retroactiveReason = reason);
+              },
+              monthYearText: _formatMonthYear(_checklistDate),
               driverText: profile.when(
                 data: (user) {
                   return user?.name ?? 'Usuario logado';
@@ -288,46 +373,46 @@ final class _ChainTensionerChecklistPageState
               title: _sectionGuidelines,
               items: _guidelineItems,
               answers: _answers,
-              tagNumberControllerFor: _tagNumberControllerFor,
               onChanged: (item, answer) {
                 setState(() => _answers[item.id] = answer);
               },
             ),
             const SizedBox(height: 12),
-            _InspectionSection(
-              title: _sectionChains,
-              items: _buildTagItems(
-                count: _readCount(_chainCountController),
-                idPrefix: 'chain_tag',
-                numberPrefix: 'Corrente',
-                section: _sectionChains,
-                labelBuilder: (index) =>
-                    'Corrente $index: verificar estado geral, isencao de nos, trava de seguranca e ausencia de cantos vivos.',
-              ),
-              answers: _answers,
-              tagNumberControllerFor: _tagNumberControllerFor,
-              emptyMessage: 'Informe o N de correntes para gerar as TAGs.',
-              onChanged: (item, answer) {
-                setState(() => _answers[item.id] = answer);
+            equipment.when(
+              data: (items) {
+                _availableEquipment = items;
+                return Column(
+                  children: [
+                    _EquipmentSelectionCard(
+                      title: 'Equipamentos disponiveis',
+                      equipment: items,
+                      selectedIds: _selectedEquipmentIds,
+                      onChanged: _toggleEquipment,
+                    ),
+                    const SizedBox(height: 12),
+                    _InspectionSection(
+                      title: 'Equipamentos selecionados',
+                      items: _currentItems
+                          .where((item) => item.equipmentId != null)
+                          .toList(growable: false),
+                      answers: _answers,
+                      emptyMessage:
+                          'Selecione os equipamentos disponiveis para iniciar a verificacao.',
+                      onChanged: (item, answer) {
+                        setState(() => _answers[item.id] = answer);
+                      },
+                    ),
+                  ],
+                );
               },
-            ),
-            const SizedBox(height: 12),
-            _InspectionSection(
-              title: _sectionTensioners,
-              items: _buildTagItems(
-                count: _readCount(_tensionerCountController),
-                idPrefix: 'tensioner_tag',
-                numberPrefix: 'Tensionador',
-                section: _sectionTensioners,
-                labelBuilder: (index) =>
-                    'Tensionador $index: verificar trincas, catraca, gancho, alavanca e angulacao.',
+              error: (error, _) =>
+                  _ErrorBox(message: 'Falha ao carregar equipamentos: $error'),
+              loading: () => const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(16),
+                  child: CircularProgressIndicator(),
+                ),
               ),
-              answers: _answers,
-              tagNumberControllerFor: _tagNumberControllerFor,
-              emptyMessage: 'Informe o N de tensionadores para gerar as TAGs.',
-              onChanged: (item, answer) {
-                setState(() => _answers[item.id] = answer);
-              },
             ),
             const SizedBox(height: 12),
             if (_hasNonConformity) ...[
@@ -340,31 +425,9 @@ final class _ChainTensionerChecklistPageState
               ),
               const SizedBox(height: 12),
             ],
-            TextFormField(
-              controller: _pinController,
-              obscureText: true,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'PIN/Senha do motorista (opcional)',
-                prefixIcon: Icon(Icons.lock_outline),
-              ),
-            ),
             if (_errorMessage != null) ...[
               const SizedBox(height: 12),
-              DecoratedBox(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFFB8B8B8)),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Text(
-                    _errorMessage!,
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                ),
-              ),
+              _ErrorBox(message: _errorMessage!),
             ],
             const SizedBox(height: 18),
             FilledButton.icon(
@@ -390,20 +453,24 @@ final class _HeaderCard extends StatelessWidget {
   const _HeaderCard({
     required this.timeController,
     required this.kmController,
-    required this.chainCountController,
-    required this.tensionerCountController,
-    required this.onEquipmentCountChanged,
-    required this.dateText,
+    required this.selectedDate,
+    required this.onPickDate,
+    required this.isRetroactive,
+    required this.retroactiveReason,
+    required this.retroactiveOtherReasonController,
+    required this.onRetroactiveReasonChanged,
     required this.monthYearText,
     required this.driverText,
   });
 
   final TextEditingController timeController;
   final TextEditingController kmController;
-  final TextEditingController chainCountController;
-  final TextEditingController tensionerCountController;
-  final VoidCallback onEquipmentCountChanged;
-  final String dateText;
+  final DateTime selectedDate;
+  final VoidCallback onPickDate;
+  final bool isRetroactive;
+  final RetroactiveReason? retroactiveReason;
+  final TextEditingController retroactiveOtherReasonController;
+  final ValueChanged<RetroactiveReason?> onRetroactiveReasonChanged;
   final String monthYearText;
   final String driverText;
 
@@ -439,8 +506,48 @@ final class _HeaderCard extends StatelessWidget {
             _InfoRow(
               icon: Icons.today_outlined,
               label: 'Data',
-              value: dateText,
+              value: _formatDate(selectedDate),
+              trailing: TextButton.icon(
+                onPressed: onPickDate,
+                icon: const Icon(Icons.edit_calendar_outlined),
+                label: const Text('Alterar'),
+              ),
             ),
+            if (isRetroactive) ...[
+              const SizedBox(height: 4),
+              DropdownButtonFormField<RetroactiveReason>(
+                initialValue: retroactiveReason,
+                decoration: const InputDecoration(
+                  labelText: 'Motivo da data retroativa',
+                  prefixIcon: Icon(Icons.history_outlined),
+                ),
+                items: [
+                  for (final reason in RetroactiveReason.values)
+                    DropdownMenuItem(value: reason, child: Text(reason.label)),
+                ],
+                validator: (value) {
+                  return value == null
+                      ? 'Selecione o motivo da data retroativa.'
+                      : null;
+                },
+                onChanged: onRetroactiveReasonChanged,
+              ),
+              if (retroactiveReason == RetroactiveReason.other) ...[
+                const SizedBox(height: 10),
+                TextFormField(
+                  controller: retroactiveOtherReasonController,
+                  decoration: const InputDecoration(
+                    labelText: 'Descreva o outro motivo',
+                    prefixIcon: Icon(Icons.notes_outlined),
+                  ),
+                  validator: (value) {
+                    return (value ?? '').trim().isEmpty
+                        ? 'Descreva o outro motivo.'
+                        : null;
+                  },
+                ),
+              ],
+            ],
             _InfoRow(
               icon: Icons.calendar_month_outlined,
               label: 'Mes/Ano',
@@ -460,34 +567,6 @@ final class _HeaderCard extends StatelessWidget {
                 prefixIcon: Icon(Icons.speed_outlined),
               ),
               validator: _requiredPositiveNumber,
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: TextFormField(
-                    controller: chainCountController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'N de correntes',
-                    ),
-                    onChanged: (_) => onEquipmentCountChanged(),
-                    validator: _requiredPositiveNumber,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: TextFormField(
-                    controller: tensionerCountController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'N de tensionadores',
-                    ),
-                    onChanged: (_) => onEquipmentCountChanged(),
-                    validator: _requiredPositiveNumber,
-                  ),
-                ),
-              ],
             ),
           ],
         ),
@@ -518,7 +597,6 @@ final class _InspectionSection extends StatelessWidget {
     required this.title,
     required this.items,
     required this.answers,
-    required this.tagNumberControllerFor,
     required this.onChanged,
     this.emptyMessage,
   });
@@ -526,7 +604,6 @@ final class _InspectionSection extends StatelessWidget {
   final String title;
   final List<_ChecklistItem> items;
   final Map<String, ComplianceAnswer?> answers;
-  final TextEditingController Function(String itemId) tagNumberControllerFor;
   final void Function(_ChecklistItem item, ComplianceAnswer answer) onChanged;
   final String? emptyMessage;
 
@@ -554,9 +631,6 @@ final class _InspectionSection extends StatelessWidget {
               for (final item in items)
                 _InspectionItemTile(
                   item: item,
-                  tagNumberController: item.requiresTagNumber
-                      ? tagNumberControllerFor(item.id)
-                      : null,
                   value: answers[item.id],
                   onChanged: (answer) => onChanged(item, answer),
                 ),
@@ -570,13 +644,11 @@ final class _InspectionSection extends StatelessWidget {
 final class _InspectionItemTile extends StatelessWidget {
   const _InspectionItemTile({
     required this.item,
-    this.tagNumberController,
     required this.value,
     required this.onChanged,
   });
 
   final _ChecklistItem item;
-  final TextEditingController? tagNumberController;
   final ComplianceAnswer? value;
   final ValueChanged<ComplianceAnswer> onChanged;
 
@@ -592,18 +664,10 @@ final class _InspectionItemTile extends StatelessWidget {
             style: Theme.of(context).textTheme.bodyMedium,
           ),
           const SizedBox(height: 8),
-          if (tagNumberController != null) ...[
-            TextFormField(
-              controller: tagNumberController,
-              decoration: const InputDecoration(
-                labelText: 'Numeracao da TAG',
-                prefixIcon: Icon(Icons.tag_outlined),
-              ),
-              validator: (value) {
-                return (value ?? '').trim().isEmpty
-                    ? 'Informe a numeracao da TAG.'
-                    : null;
-              },
+          if (item.tagNumber != null) ...[
+            _TagBanner(
+              label: item.equipmentTypeLabel ?? 'Equipamento',
+              tagNumber: item.tagNumber!,
             ),
             const SizedBox(height: 8),
           ],
@@ -679,6 +743,115 @@ final class _ActionPlanCard extends StatelessWidget {
   }
 }
 
+final class _EquipmentSelectionCard extends StatelessWidget {
+  const _EquipmentSelectionCard({
+    required this.title,
+    required this.equipment,
+    required this.selectedIds,
+    required this.onChanged,
+  });
+
+  final String title;
+  final List<DriverEquipment> equipment;
+  final Set<String> selectedIds;
+  final void Function(DriverEquipment equipment, bool selected) onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              title,
+              style: Theme.of(
+                context,
+              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 8),
+            if (equipment.isEmpty)
+              const Text(
+                'Nenhuma corrente ou tensionador vinculado ao seu usuario. O painel administrativo fara essa atribuicao.',
+              )
+            else
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final item in equipment)
+                    FilterChip(
+                      label: Text('${item.type.label} ${item.tagNumber}'),
+                      selected: selectedIds.contains(item.id),
+                      onSelected: (selected) => onChanged(item, selected),
+                    ),
+                ],
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+final class _TagBanner extends StatelessWidget {
+  const _TagBanner({required this.label, required this.tagNumber});
+
+  final String label;
+  final String tagNumber;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: const Color(0xFFF6F6F6),
+        border: Border.all(color: const Color(0xFFB8B8B8)),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(10),
+        child: Row(
+          children: [
+            const Icon(Icons.tag_outlined, size: 18),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                '$label vinculado: $tagNumber',
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+final class _ErrorBox extends StatelessWidget {
+  const _ErrorBox({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFB8B8B8)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Text(
+          message,
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+      ),
+    );
+  }
+}
+
 final class _RequiredTextField extends StatelessWidget {
   const _RequiredTextField({
     required this.controller,
@@ -712,11 +885,13 @@ final class _InfoRow extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.value,
+    this.trailing,
   });
 
   final IconData icon;
   final String label;
   final String value;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -740,6 +915,7 @@ final class _InfoRow extends StatelessWidget {
               ],
             ),
           ),
+          if (trailing != null) trailing!,
         ],
       ),
     );
@@ -752,14 +928,47 @@ final class _ChecklistItem {
     required this.number,
     required this.section,
     required this.label,
-    this.requiresTagNumber = false,
+  }) : equipmentId = null,
+       tagNumber = null,
+       equipmentType = null,
+       equipmentTypeLabel = null;
+
+  factory _ChecklistItem.equipment(DriverEquipment equipment) {
+    final isChain = equipment.type == DriverEquipmentType.chain;
+    final label = isChain
+        ? 'Verificar estado geral, isencao de nos, trava de seguranca e ausencia de cantos vivos.'
+        : 'Verificar trincas, catraca, gancho, alavanca e angulacao.';
+    return _ChecklistItem._equipment(
+      id: _equipmentAnswerId(equipment.id),
+      number: '${equipment.type.label} ${equipment.tagNumber}',
+      section: isChain ? _sectionChains : _sectionTensioners,
+      label: label,
+      equipmentId: equipment.id,
+      tagNumber: equipment.tagNumber,
+      equipmentType: equipment.type.value,
+      equipmentTypeLabel: equipment.type.label,
+    );
+  }
+
+  const _ChecklistItem._equipment({
+    required this.id,
+    required this.number,
+    required this.section,
+    required this.label,
+    required this.equipmentId,
+    required this.tagNumber,
+    required this.equipmentType,
+    required this.equipmentTypeLabel,
   });
 
   final String id;
   final String number;
   final String section;
   final String label;
-  final bool requiresTagNumber;
+  final String? equipmentId;
+  final String? tagNumber;
+  final String? equipmentType;
+  final String? equipmentTypeLabel;
 }
 
 const _sectionGuidelines = 'Diretrizes de Amarracao Especial';
@@ -829,35 +1038,25 @@ const _guidelineItems = [
   ),
 ];
 
-List<_ChecklistItem> _buildTagItems({
-  required int count,
-  required String idPrefix,
-  required String numberPrefix,
-  required String section,
-  required String Function(int index) labelBuilder,
-}) {
-  return [
-    for (var index = 1; index <= count; index++)
-      _ChecklistItem(
-        id: '${idPrefix}_$index',
-        number: '$numberPrefix $index',
-        section: section,
-        label: labelBuilder(index),
-        requiresTagNumber: true,
-      ),
-  ];
-}
-
-int _readCount(TextEditingController controller) {
-  return int.tryParse(controller.text.trim()) ?? 0;
-}
-
 String? _requiredPositiveNumber(String? value) {
   final number = num.tryParse((value ?? '').trim());
   if (number == null || number < 0) {
     return 'Informe um numero valido.';
   }
   return null;
+}
+
+String _equipmentAnswerId(String equipmentId) => 'equipment_$equipmentId';
+
+DateTime _dateOnly(DateTime dateTime) {
+  return DateTime(dateTime.year, dateTime.month, dateTime.day);
+}
+
+DateTime _composeDateTime(DateTime date, String timeText) {
+  final parts = timeText.split(':');
+  final hour = int.tryParse(parts.isNotEmpty ? parts[0] : '') ?? 0;
+  final minute = int.tryParse(parts.length > 1 ? parts[1] : '') ?? 0;
+  return DateTime(date.year, date.month, date.day, hour, minute);
 }
 
 String _formatTime(DateTime dateTime) {

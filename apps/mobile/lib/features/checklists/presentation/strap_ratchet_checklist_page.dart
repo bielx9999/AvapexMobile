@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/errors/firebase_failure.dart';
 import '../../../core/providers/firebase_providers.dart';
+import '../../equipment/application/driver_equipment_providers.dart';
+import '../../equipment/data/models/driver_equipment_model.dart';
 import '../../users/application/user_providers.dart';
 import '../data/models/checklist_model.dart';
 
@@ -30,6 +32,15 @@ enum CargoType {
   final String label;
 }
 
+enum StrapRetroactiveReason {
+  forgetfulness('Esquecimento'),
+  other('Outro motivo');
+
+  const StrapRetroactiveReason(this.label);
+
+  final String label;
+}
+
 final class StrapRatchetChecklistPage extends ConsumerStatefulWidget {
   const StrapRatchetChecklistPage({super.key});
 
@@ -43,8 +54,6 @@ final class _StrapRatchetChecklistPageState
   final _formKey = GlobalKey<FormState>();
   final _timeController = TextEditingController();
   final _kmController = TextEditingController();
-  final _strapCountController = TextEditingController();
-  final _ratchetCountController = TextEditingController();
   final _otherCargoController = TextEditingController();
   final _actionDateController = TextEditingController();
   final _affectedItemController = TextEditingController();
@@ -52,16 +61,21 @@ final class _StrapRatchetChecklistPageState
   final _correctiveMeasureController = TextEditingController();
   final _responsibleController = TextEditingController();
   final _deadlineController = TextEditingController();
-  final _pinController = TextEditingController();
+  final _retroactiveOtherReasonController = TextEditingController();
   final _openedAt = DateTime.now();
   final Set<CargoType> _selectedCargoTypes = {};
+  final Set<String> _selectedEquipmentIds = {};
   final Map<String, StrapComplianceAnswer?> _answers = {
     for (final item in _staticChecklistItems) item.id: null,
   };
-  final Map<String, TextEditingController> _tagNumberControllers = {};
 
+  late DateTime _checklistDate = _dateOnly(_openedAt);
+  StrapRetroactiveReason? _retroactiveReason;
+  List<DriverEquipment> _availableEquipment = const [];
   var _isSaving = false;
   String? _errorMessage;
+
+  bool get _isRetroactive => _checklistDate.isBefore(_dateOnly(DateTime.now()));
 
   bool get _hasNonConformity {
     return _currentItems.any(
@@ -70,24 +84,14 @@ final class _StrapRatchetChecklistPageState
   }
 
   List<_StrapChecklistItem> get _currentItems {
+    final selectedEquipment = _availableEquipment
+        .where((equipment) => _selectedEquipmentIds.contains(equipment.id))
+        .toList(growable: false);
+
     return [
       ..._staticChecklistItems,
-      ..._buildTagItems(
-        count: _readCount(_strapCountController),
-        idPrefix: 'strap_tag',
-        numberPrefix: 'Cinta',
-        section: _sectionStrapTags,
-        labelBuilder: (index) =>
-            'Cinta $index: controle individual do estado da cinta cadastrada.',
-      ),
-      ..._buildTagItems(
-        count: _readCount(_ratchetCountController),
-        idPrefix: 'ratchet_tag',
-        numberPrefix: 'Catraca',
-        section: _sectionRatchetTags,
-        labelBuilder: (index) =>
-            'Catraca $index: controle individual do estado da catraca cadastrada.',
-      ),
+      for (final equipment in selectedEquipment)
+        _StrapChecklistItem.equipment(equipment),
     ];
   }
 
@@ -102,8 +106,6 @@ final class _StrapRatchetChecklistPageState
   void dispose() {
     _timeController.dispose();
     _kmController.dispose();
-    _strapCountController.dispose();
-    _ratchetCountController.dispose();
     _otherCargoController.dispose();
     _actionDateController.dispose();
     _affectedItemController.dispose();
@@ -111,15 +113,51 @@ final class _StrapRatchetChecklistPageState
     _correctiveMeasureController.dispose();
     _responsibleController.dispose();
     _deadlineController.dispose();
-    _pinController.dispose();
-    for (final controller in _tagNumberControllers.values) {
-      controller.dispose();
-    }
+    _retroactiveOtherReasonController.dispose();
     super.dispose();
   }
 
-  TextEditingController _tagNumberControllerFor(String itemId) {
-    return _tagNumberControllers.putIfAbsent(itemId, TextEditingController.new);
+  Future<void> _pickChecklistDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _checklistDate,
+      firstDate: DateTime(2024),
+      lastDate: _dateOnly(DateTime.now()),
+    );
+
+    if (picked == null) {
+      return;
+    }
+
+    setState(() {
+      _checklistDate = _dateOnly(picked);
+      _actionDateController.text = _formatDate(_checklistDate);
+      if (!_isRetroactive) {
+        _retroactiveReason = null;
+        _retroactiveOtherReasonController.clear();
+      }
+    });
+  }
+
+  void _toggleEquipment(DriverEquipment equipment, bool selected) {
+    setState(() {
+      if (selected) {
+        _selectedEquipmentIds.add(equipment.id);
+      } else {
+        _selectedEquipmentIds.remove(equipment.id);
+        _answers.remove(_equipmentAnswerId(equipment.id));
+      }
+    });
+  }
+
+  List<DriverEquipment> _selectedEquipmentByType(DriverEquipmentType type) {
+    return _availableEquipment
+        .where(
+          (equipment) =>
+              equipment.type == type &&
+              _selectedEquipmentIds.contains(equipment.id),
+        )
+        .toList(growable: false);
   }
 
   Future<void> _submit() async {
@@ -132,6 +170,29 @@ final class _StrapRatchetChecklistPageState
 
     if (_selectedCargoTypes.isEmpty) {
       setState(() => _errorMessage = 'Selecione ao menos um tipo de carga.');
+      return;
+    }
+
+    if (_isRetroactive && _retroactiveReason == null) {
+      setState(
+        () => _errorMessage =
+            'Selecione o motivo da data retroativa antes de finalizar.',
+      );
+      return;
+    }
+
+    if (_isRetroactive &&
+        _retroactiveReason == StrapRetroactiveReason.other &&
+        _retroactiveOtherReasonController.text.trim().isEmpty) {
+      setState(() => _errorMessage = 'Descreva o outro motivo.');
+      return;
+    }
+
+    if (_selectedEquipmentIds.isEmpty) {
+      setState(
+        () => _errorMessage =
+            'Selecione ao menos uma cinta ou catraca disponivel.',
+      );
       return;
     }
 
@@ -190,14 +251,19 @@ final class _StrapRatchetChecklistPageState
 
     try {
       final profile = ref.read(currentUserProfileProvider).asData?.value;
+      final performedAt = _composeDateTime(
+        _checklistDate,
+        _timeController.text,
+      );
       final answers = {
         for (final item in _currentItems)
           item.id: {
             'number': item.number,
             'label': item.label,
             'section': item.section,
-            if (item.requiresTagNumber)
-              'tagNumber': _tagNumberControllerFor(item.id).text.trim(),
+            if (item.equipmentId != null) 'equipmentId': item.equipmentId,
+            if (item.tagNumber != null) 'tagNumber': item.tagNumber,
+            if (item.equipmentType != null) 'equipmentType': item.equipmentType,
             'answer': _answers[item.id]!.label,
           },
       };
@@ -238,7 +304,7 @@ final class _StrapRatchetChecklistPageState
         ),
         photoUrls: const [],
         signatureUrl: '',
-        createdAt: _openedAt,
+        createdAt: performedAt,
         category: 'strap_ratchet',
         vehiclePlate: 'Cinta/Catraca',
         driverName: profile?.name ?? authUser?.displayName ?? authUser?.email,
@@ -246,12 +312,21 @@ final class _StrapRatchetChecklistPageState
           'metadata': {
             'procedure': 'PRO 0051',
             'departureTime': _timeController.text.trim(),
-            'date': _formatDate(_openedAt),
-            'monthYear': _formatMonthYear(_openedAt),
+            'date': _formatDate(performedAt),
+            'monthYear': _formatMonthYear(performedAt),
             'driverRegistration': profile?.uid ?? uid,
-            'strapCount': int.parse(_strapCountController.text),
-            'ratchetCount': int.parse(_ratchetCountController.text),
-            'pinConfirmed': _pinController.text.trim().isNotEmpty,
+            'strapCount': _selectedEquipmentByType(
+              DriverEquipmentType.strap,
+            ).length,
+            'ratchetCount': _selectedEquipmentByType(
+              DriverEquipmentType.ratchet,
+            ).length,
+            'isRetroactive': _isRetroactive,
+            if (_isRetroactive) 'retroactiveReason': _retroactiveReason!.label,
+            if (_isRetroactive &&
+                _retroactiveReason == StrapRetroactiveReason.other)
+              'retroactiveOtherReason': _retroactiveOtherReasonController.text
+                  .trim(),
             'cargoTypes': selectedCargo,
           },
           'items': answers,
@@ -292,6 +367,12 @@ final class _StrapRatchetChecklistPageState
   @override
   Widget build(BuildContext context) {
     final profile = ref.watch(currentUserProfileProvider);
+    final equipment = ref.watch(
+      availableDriverEquipmentProvider(const {
+        DriverEquipmentType.strap,
+        DriverEquipmentType.ratchet,
+      }),
+    );
 
     return Scaffold(
       appBar: AppBar(title: const Text('Cinta/Catraca')),
@@ -303,11 +384,16 @@ final class _StrapRatchetChecklistPageState
             _HeaderCard(
               timeController: _timeController,
               kmController: _kmController,
-              strapCountController: _strapCountController,
-              ratchetCountController: _ratchetCountController,
-              onEquipmentCountChanged: () => setState(() {}),
-              dateText: _formatDate(_openedAt),
-              monthYearText: _formatMonthYear(_openedAt),
+              selectedDate: _checklistDate,
+              onPickDate: _pickChecklistDate,
+              isRetroactive: _isRetroactive,
+              retroactiveReason: _retroactiveReason,
+              retroactiveOtherReasonController:
+                  _retroactiveOtherReasonController,
+              onRetroactiveReasonChanged: (reason) {
+                setState(() => _retroactiveReason = reason);
+              },
+              monthYearText: _formatMonthYear(_checklistDate),
               driverText: profile.when(
                 data: (user) {
                   return user?.name ?? 'Usuario logado';
@@ -337,7 +423,6 @@ final class _StrapRatchetChecklistPageState
               title: _sectionGuidelines,
               items: _guidelineItems,
               answers: _answers,
-              tagNumberControllerFor: _tagNumberControllerFor,
               onChanged: (item, answer) {
                 setState(() => _answers[item.id] = answer);
               },
@@ -347,46 +432,46 @@ final class _StrapRatchetChecklistPageState
               title: _sectionStrapInspection,
               items: _strapInspectionItems,
               answers: _answers,
-              tagNumberControllerFor: _tagNumberControllerFor,
               onChanged: (item, answer) {
                 setState(() => _answers[item.id] = answer);
               },
             ),
             const SizedBox(height: 12),
-            _InspectionSection(
-              title: _sectionStrapTags,
-              items: _buildTagItems(
-                count: _readCount(_strapCountController),
-                idPrefix: 'strap_tag',
-                numberPrefix: 'Cinta',
-                section: _sectionStrapTags,
-                labelBuilder: (index) =>
-                    'Cinta $index: controle individual do estado da cinta cadastrada.',
-              ),
-              answers: _answers,
-              tagNumberControllerFor: _tagNumberControllerFor,
-              emptyMessage: 'Informe o N de cintas para gerar as TAGs.',
-              onChanged: (item, answer) {
-                setState(() => _answers[item.id] = answer);
+            equipment.when(
+              data: (items) {
+                _availableEquipment = items;
+                return Column(
+                  children: [
+                    _EquipmentSelectionCard(
+                      title: 'Equipamentos disponiveis',
+                      equipment: items,
+                      selectedIds: _selectedEquipmentIds,
+                      onChanged: _toggleEquipment,
+                    ),
+                    const SizedBox(height: 12),
+                    _InspectionSection(
+                      title: 'Equipamentos selecionados',
+                      items: _currentItems
+                          .where((item) => item.equipmentId != null)
+                          .toList(growable: false),
+                      answers: _answers,
+                      emptyMessage:
+                          'Selecione os equipamentos disponiveis para iniciar a verificacao.',
+                      onChanged: (item, answer) {
+                        setState(() => _answers[item.id] = answer);
+                      },
+                    ),
+                  ],
+                );
               },
-            ),
-            const SizedBox(height: 12),
-            _InspectionSection(
-              title: _sectionRatchetTags,
-              items: _buildTagItems(
-                count: _readCount(_ratchetCountController),
-                idPrefix: 'ratchet_tag',
-                numberPrefix: 'Catraca',
-                section: _sectionRatchetTags,
-                labelBuilder: (index) =>
-                    'Catraca $index: controle individual do estado da catraca cadastrada.',
+              error: (error, _) =>
+                  _ErrorBox(message: 'Falha ao carregar equipamentos: $error'),
+              loading: () => const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(16),
+                  child: CircularProgressIndicator(),
+                ),
               ),
-              answers: _answers,
-              tagNumberControllerFor: _tagNumberControllerFor,
-              emptyMessage: 'Informe o N de catracas para gerar as TAGs.',
-              onChanged: (item, answer) {
-                setState(() => _answers[item.id] = answer);
-              },
             ),
             const SizedBox(height: 12),
             if (_hasNonConformity) ...[
@@ -400,31 +485,9 @@ final class _StrapRatchetChecklistPageState
               ),
               const SizedBox(height: 12),
             ],
-            TextFormField(
-              controller: _pinController,
-              obscureText: true,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'PIN/Senha do motorista (opcional)',
-                prefixIcon: Icon(Icons.lock_outline),
-              ),
-            ),
             if (_errorMessage != null) ...[
               const SizedBox(height: 12),
-              DecoratedBox(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFFB8B8B8)),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Text(
-                    _errorMessage!,
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                ),
-              ),
+              _ErrorBox(message: _errorMessage!),
             ],
             const SizedBox(height: 18),
             FilledButton.icon(
@@ -450,20 +513,24 @@ final class _HeaderCard extends StatelessWidget {
   const _HeaderCard({
     required this.timeController,
     required this.kmController,
-    required this.strapCountController,
-    required this.ratchetCountController,
-    required this.onEquipmentCountChanged,
-    required this.dateText,
+    required this.selectedDate,
+    required this.onPickDate,
+    required this.isRetroactive,
+    required this.retroactiveReason,
+    required this.retroactiveOtherReasonController,
+    required this.onRetroactiveReasonChanged,
     required this.monthYearText,
     required this.driverText,
   });
 
   final TextEditingController timeController;
   final TextEditingController kmController;
-  final TextEditingController strapCountController;
-  final TextEditingController ratchetCountController;
-  final VoidCallback onEquipmentCountChanged;
-  final String dateText;
+  final DateTime selectedDate;
+  final VoidCallback onPickDate;
+  final bool isRetroactive;
+  final StrapRetroactiveReason? retroactiveReason;
+  final TextEditingController retroactiveOtherReasonController;
+  final ValueChanged<StrapRetroactiveReason?> onRetroactiveReasonChanged;
   final String monthYearText;
   final String driverText;
 
@@ -499,8 +566,48 @@ final class _HeaderCard extends StatelessWidget {
             _InfoRow(
               icon: Icons.today_outlined,
               label: 'Data',
-              value: dateText,
+              value: _formatDate(selectedDate),
+              trailing: TextButton.icon(
+                onPressed: onPickDate,
+                icon: const Icon(Icons.edit_calendar_outlined),
+                label: const Text('Alterar'),
+              ),
             ),
+            if (isRetroactive) ...[
+              const SizedBox(height: 4),
+              DropdownButtonFormField<StrapRetroactiveReason>(
+                initialValue: retroactiveReason,
+                decoration: const InputDecoration(
+                  labelText: 'Motivo da data retroativa',
+                  prefixIcon: Icon(Icons.history_outlined),
+                ),
+                items: [
+                  for (final reason in StrapRetroactiveReason.values)
+                    DropdownMenuItem(value: reason, child: Text(reason.label)),
+                ],
+                validator: (value) {
+                  return value == null
+                      ? 'Selecione o motivo da data retroativa.'
+                      : null;
+                },
+                onChanged: onRetroactiveReasonChanged,
+              ),
+              if (retroactiveReason == StrapRetroactiveReason.other) ...[
+                const SizedBox(height: 10),
+                TextFormField(
+                  controller: retroactiveOtherReasonController,
+                  decoration: const InputDecoration(
+                    labelText: 'Descreva o outro motivo',
+                    prefixIcon: Icon(Icons.notes_outlined),
+                  ),
+                  validator: (value) {
+                    return (value ?? '').trim().isEmpty
+                        ? 'Descreva o outro motivo.'
+                        : null;
+                  },
+                ),
+              ],
+            ],
             _InfoRow(
               icon: Icons.calendar_month_outlined,
               label: 'Mes/Ano',
@@ -520,32 +627,6 @@ final class _HeaderCard extends StatelessWidget {
                 prefixIcon: Icon(Icons.speed_outlined),
               ),
               validator: _requiredPositiveNumber,
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: TextFormField(
-                    controller: strapCountController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'N de cintas'),
-                    onChanged: (_) => onEquipmentCountChanged(),
-                    validator: _requiredPositiveNumber,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: TextFormField(
-                    controller: ratchetCountController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'N de catracas',
-                    ),
-                    onChanged: (_) => onEquipmentCountChanged(),
-                    validator: _requiredPositiveNumber,
-                  ),
-                ),
-              ],
             ),
           ],
         ),
@@ -638,7 +719,6 @@ final class _InspectionSection extends StatelessWidget {
     required this.title,
     required this.items,
     required this.answers,
-    required this.tagNumberControllerFor,
     required this.onChanged,
     this.emptyMessage,
   });
@@ -646,7 +726,6 @@ final class _InspectionSection extends StatelessWidget {
   final String title;
   final List<_StrapChecklistItem> items;
   final Map<String, StrapComplianceAnswer?> answers;
-  final TextEditingController Function(String itemId) tagNumberControllerFor;
   final void Function(_StrapChecklistItem item, StrapComplianceAnswer answer)
   onChanged;
   final String? emptyMessage;
@@ -675,9 +754,6 @@ final class _InspectionSection extends StatelessWidget {
               for (final item in items)
                 _InspectionItemTile(
                   item: item,
-                  tagNumberController: item.requiresTagNumber
-                      ? tagNumberControllerFor(item.id)
-                      : null,
                   value: answers[item.id],
                   onChanged: (answer) => onChanged(item, answer),
                 ),
@@ -691,13 +767,11 @@ final class _InspectionSection extends StatelessWidget {
 final class _InspectionItemTile extends StatelessWidget {
   const _InspectionItemTile({
     required this.item,
-    this.tagNumberController,
     required this.value,
     required this.onChanged,
   });
 
   final _StrapChecklistItem item;
-  final TextEditingController? tagNumberController;
   final StrapComplianceAnswer? value;
   final ValueChanged<StrapComplianceAnswer> onChanged;
 
@@ -713,18 +787,10 @@ final class _InspectionItemTile extends StatelessWidget {
             style: Theme.of(context).textTheme.bodyMedium,
           ),
           const SizedBox(height: 8),
-          if (tagNumberController != null) ...[
-            TextFormField(
-              controller: tagNumberController,
-              decoration: const InputDecoration(
-                labelText: 'Numeracao da TAG',
-                prefixIcon: Icon(Icons.tag_outlined),
-              ),
-              validator: (value) {
-                return (value ?? '').trim().isEmpty
-                    ? 'Informe a numeracao da TAG.'
-                    : null;
-              },
+          if (item.tagNumber != null) ...[
+            _TagBanner(
+              label: item.equipmentTypeLabel ?? 'Equipamento',
+              tagNumber: item.tagNumber!,
             ),
             const SizedBox(height: 8),
           ],
@@ -803,6 +869,115 @@ final class _ActionPlanCard extends StatelessWidget {
   }
 }
 
+final class _EquipmentSelectionCard extends StatelessWidget {
+  const _EquipmentSelectionCard({
+    required this.title,
+    required this.equipment,
+    required this.selectedIds,
+    required this.onChanged,
+  });
+
+  final String title;
+  final List<DriverEquipment> equipment;
+  final Set<String> selectedIds;
+  final void Function(DriverEquipment equipment, bool selected) onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              title,
+              style: Theme.of(
+                context,
+              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 8),
+            if (equipment.isEmpty)
+              const Text(
+                'Nenhuma cinta ou catraca vinculada ao seu usuario. O painel administrativo fara essa atribuicao.',
+              )
+            else
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final item in equipment)
+                    FilterChip(
+                      label: Text('${item.type.label} ${item.tagNumber}'),
+                      selected: selectedIds.contains(item.id),
+                      onSelected: (selected) => onChanged(item, selected),
+                    ),
+                ],
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+final class _TagBanner extends StatelessWidget {
+  const _TagBanner({required this.label, required this.tagNumber});
+
+  final String label;
+  final String tagNumber;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: const Color(0xFFF6F6F6),
+        border: Border.all(color: const Color(0xFFB8B8B8)),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(10),
+        child: Row(
+          children: [
+            const Icon(Icons.tag_outlined, size: 18),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                '$label vinculado: $tagNumber',
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+final class _ErrorBox extends StatelessWidget {
+  const _ErrorBox({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFB8B8B8)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Text(
+          message,
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+      ),
+    );
+  }
+}
+
 final class _RequiredTextField extends StatelessWidget {
   const _RequiredTextField({
     required this.controller,
@@ -836,11 +1011,13 @@ final class _InfoRow extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.value,
+    this.trailing,
   });
 
   final IconData icon;
   final String label;
   final String value;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -864,6 +1041,7 @@ final class _InfoRow extends StatelessWidget {
               ],
             ),
           ),
+          if (trailing != null) trailing!,
         ],
       ),
     );
@@ -876,14 +1054,47 @@ final class _StrapChecklistItem {
     required this.number,
     required this.section,
     required this.label,
-    this.requiresTagNumber = false,
+  }) : equipmentId = null,
+       tagNumber = null,
+       equipmentType = null,
+       equipmentTypeLabel = null;
+
+  factory _StrapChecklistItem.equipment(DriverEquipment equipment) {
+    final isStrap = equipment.type == DriverEquipmentType.strap;
+    final label = isStrap
+        ? 'Controle individual do estado da cinta cadastrada.'
+        : 'Controle individual do estado da catraca cadastrada.';
+    return _StrapChecklistItem._equipment(
+      id: _equipmentAnswerId(equipment.id),
+      number: '${equipment.type.label} ${equipment.tagNumber}',
+      section: isStrap ? _sectionStrapTags : _sectionRatchetTags,
+      label: label,
+      equipmentId: equipment.id,
+      tagNumber: equipment.tagNumber,
+      equipmentType: equipment.type.value,
+      equipmentTypeLabel: equipment.type.label,
+    );
+  }
+
+  const _StrapChecklistItem._equipment({
+    required this.id,
+    required this.number,
+    required this.section,
+    required this.label,
+    required this.equipmentId,
+    required this.tagNumber,
+    required this.equipmentType,
+    required this.equipmentTypeLabel,
   });
 
   final String id;
   final String number;
   final String section;
   final String label;
-  final bool requiresTagNumber;
+  final String? equipmentId;
+  final String? tagNumber;
+  final String? equipmentType;
+  final String? equipmentTypeLabel;
 }
 
 const _sectionGuidelines = 'Diretrizes Gerais de Amarracao';
@@ -1019,35 +1230,25 @@ const _strapInspectionItems = [
 
 const _staticChecklistItems = [..._guidelineItems, ..._strapInspectionItems];
 
-List<_StrapChecklistItem> _buildTagItems({
-  required int count,
-  required String idPrefix,
-  required String numberPrefix,
-  required String section,
-  required String Function(int index) labelBuilder,
-}) {
-  return [
-    for (var index = 1; index <= count; index++)
-      _StrapChecklistItem(
-        id: '${idPrefix}_$index',
-        number: '$numberPrefix $index',
-        section: section,
-        label: labelBuilder(index),
-        requiresTagNumber: true,
-      ),
-  ];
-}
-
-int _readCount(TextEditingController controller) {
-  return int.tryParse(controller.text.trim()) ?? 0;
-}
-
 String? _requiredPositiveNumber(String? value) {
   final number = num.tryParse((value ?? '').trim());
   if (number == null || number < 0) {
     return 'Informe um numero valido.';
   }
   return null;
+}
+
+String _equipmentAnswerId(String equipmentId) => 'equipment_$equipmentId';
+
+DateTime _dateOnly(DateTime dateTime) {
+  return DateTime(dateTime.year, dateTime.month, dateTime.day);
+}
+
+DateTime _composeDateTime(DateTime date, String timeText) {
+  final parts = timeText.split(':');
+  final hour = int.tryParse(parts.isNotEmpty ? parts[0] : '') ?? 0;
+  final minute = int.tryParse(parts.length > 1 ? parts[1] : '') ?? 0;
+  return DateTime(date.year, date.month, date.day, hour, minute);
 }
 
 String _formatTime(DateTime dateTime) {
