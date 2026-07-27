@@ -278,19 +278,38 @@ type StatusCardProps = {
 
 function StatusCard({ icon, label, tone, value }: StatusCardProps) {
   const toneClassNames = {
-    danger: 'bg-red-50 text-red-700 ring-red-100',
-    dark: 'bg-avapex-black text-white ring-zinc-200',
-    success: 'bg-emerald-50 text-emerald-700 ring-emerald-100',
-    yellow: 'bg-avapex-yellow text-avapex-black ring-yellow-100',
+    danger: {
+      accent: 'bg-red-500',
+      icon: 'bg-red-50 text-red-700 ring-red-100',
+      value: 'text-red-700',
+    },
+    dark: {
+      accent: 'bg-avapex-black',
+      icon: 'bg-avapex-black text-white ring-zinc-200',
+      value: 'text-avapex-black',
+    },
+    success: {
+      accent: 'bg-emerald-500',
+      icon: 'bg-emerald-50 text-emerald-700 ring-emerald-100',
+      value: 'text-emerald-700',
+    },
+    yellow: {
+      accent: 'bg-avapex-yellow',
+      icon: 'bg-avapex-yellow text-avapex-black ring-yellow-100',
+      value: 'text-avapex-black',
+    },
   }[tone];
 
   return (
-    <article className="ui-card p-4">
+    <article className="ui-card relative overflow-hidden p-4 transition duration-200 hover:-translate-y-0.5 hover:shadow-md">
+      <span className={`absolute inset-x-0 top-0 h-1 ${toneClassNames.accent}`} />
       <div className="mb-4 flex items-center justify-between">
         <span className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{label}</span>
-        <span className={`flex h-11 w-11 items-center justify-center rounded-2xl ring-1 ${toneClassNames}`}>{icon}</span>
+        <span className={`flex h-11 w-11 items-center justify-center rounded-2xl ring-1 ${toneClassNames.icon}`}>
+          {icon}
+        </span>
       </div>
-      <strong className="block text-3xl font-semibold leading-none">{value}</strong>
+      <strong className={`block text-3xl font-semibold leading-none ${toneClassNames.value}`}>{value}</strong>
     </article>
   );
 }
