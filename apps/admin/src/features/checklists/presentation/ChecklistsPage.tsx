@@ -1,5 +1,5 @@
 import { type ReactNode, useMemo, useState } from 'react';
-import { CalendarDays, ClipboardCheck, Filter, Search, UserRound, XCircle } from 'lucide-react';
+import { CalendarDays, ClipboardCheck, Filter, Search, UserRound, X, XCircle } from 'lucide-react';
 import type { AppUser, Checklist, ChecklistType } from '../../shared/domain/models';
 
 type ChecklistsPageProps = {
@@ -143,58 +143,84 @@ export function ChecklistsPage({ checklists, users, loading }: ChecklistsPagePro
       </div>
 
       {showFilters ? (
-        <section className="ui-card p-4">
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-          <label className="block">
-            <span className="mb-2 block text-sm font-medium text-zinc-700">Data inicial</span>
-            <input className="ui-input h-10 w-full px-3 text-sm" type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
-          </label>
-          <label className="block">
-            <span className="mb-2 block text-sm font-medium text-zinc-700">Data final</span>
-            <input className="ui-input h-10 w-full px-3 text-sm" type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
-          </label>
-          <label className="block">
-            <span className="mb-2 block text-sm font-medium text-zinc-700">Motorista</span>
-            <select className="ui-input h-10 w-full px-3 text-sm" value={driverId} onChange={(event) => setDriverId(event.target.value)}>
-              <option value="">Todos</option>
-              {drivers.map((driver) => (
-                <option key={driver.uid} value={driver.uid}>
-                  {driver.name || driver.email}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="block">
-            <span className="mb-2 block text-sm font-medium text-zinc-700">Modelo</span>
-            <select className="ui-input h-10 w-full px-3 text-sm" value={type} onChange={(event) => setType(event.target.value as 'all' | ChecklistType)}>
-              <option value="all">Todos</option>
-              <option value="vehicle_daily">Checklist de Veiculo</option>
-              <option value="strap_ratchet">Cinta/Catraca</option>
-              <option value="chain_tensioner">Corrente/Tensionador</option>
-              <option value="departure">Saida</option>
-              <option value="arrival">Chegada</option>
-            </select>
-          </label>
-          <label className="block">
-            <span className="mb-2 block text-sm font-medium text-zinc-700">Busca</span>
-            <span className="relative block">
-              <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" size={18} />
-              <input
-                className="ui-input h-10 w-full pl-10 pr-3 text-sm"
-                placeholder="Placa, motorista..."
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-              />
-            </span>
-          </label>
+        <div className="fixed inset-0 z-50 bg-black/35 backdrop-blur-[1px]">
+          <button
+            aria-label="Fechar filtros"
+            className="absolute inset-0 h-full w-full cursor-default"
+            onClick={() => setShowFilters(false)}
+            type="button"
+          />
+          <aside className="relative flex h-full w-full max-w-sm flex-col bg-white/95 shadow-2xl backdrop-blur">
+            <header className="flex items-center justify-between border-b border-zinc-200 px-5 py-4">
+              <div className="flex items-center gap-2">
+                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-avapex-yellow text-avapex-black">
+                  <Filter size={18} />
+                </span>
+                <h2 className="font-semibold">Filtros</h2>
+              </div>
+              <button
+                aria-label="Fechar filtros"
+                className="ui-icon-button flex h-9 w-9 items-center justify-center border-zinc-300 text-zinc-700 hover:bg-zinc-50"
+                onClick={() => setShowFilters(false)}
+                type="button"
+              >
+                <X size={18} />
+              </button>
+            </header>
+
+            <div className="flex-1 space-y-4 overflow-y-auto px-5 py-5">
+              <label className="block">
+                <span className="mb-2 block text-sm font-medium text-zinc-700">Data inicial</span>
+                <input className="ui-input h-10 w-full px-3 text-sm" type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
+              </label>
+              <label className="block">
+                <span className="mb-2 block text-sm font-medium text-zinc-700">Data final</span>
+                <input className="ui-input h-10 w-full px-3 text-sm" type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
+              </label>
+              <label className="block">
+                <span className="mb-2 block text-sm font-medium text-zinc-700">Motorista</span>
+                <select className="ui-input h-10 w-full px-3 text-sm" value={driverId} onChange={(event) => setDriverId(event.target.value)}>
+                  <option value="">Todos</option>
+                  {drivers.map((driver) => (
+                    <option key={driver.uid} value={driver.uid}>
+                      {driver.name || driver.email}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="mb-2 block text-sm font-medium text-zinc-700">Modelo</span>
+                <select className="ui-input h-10 w-full px-3 text-sm" value={type} onChange={(event) => setType(event.target.value as 'all' | ChecklistType)}>
+                  <option value="all">Todos</option>
+                  <option value="vehicle_daily">Checklist de Veiculo</option>
+                  <option value="strap_ratchet">Cinta/Catraca</option>
+                  <option value="chain_tensioner">Corrente/Tensionador</option>
+                  <option value="departure">Saida</option>
+                  <option value="arrival">Chegada</option>
+                </select>
+              </label>
+              <label className="block">
+                <span className="mb-2 block text-sm font-medium text-zinc-700">Busca</span>
+                <span className="relative block">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" size={18} />
+                  <input
+                    className="ui-input h-10 w-full pl-10 pr-3 text-sm"
+                    placeholder="Placa, motorista..."
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                  />
+                </span>
+              </label>
+            </div>
+
+            <footer className="border-t border-zinc-200 px-5 py-4">
+              <button className="ui-button flex h-10 w-full items-center justify-center gap-2 border border-zinc-300 bg-white px-4 text-sm font-medium text-zinc-800 hover:bg-zinc-50" onClick={clearFilters} type="button">
+                <XCircle size={17} />
+                Limpar filtros
+              </button>
+            </footer>
+          </aside>
         </div>
-        <div className="mt-4 flex justify-end">
-          <button className="ui-button flex h-10 items-center gap-2 border border-zinc-300 bg-white px-4 text-sm font-medium text-zinc-800 hover:bg-zinc-50" onClick={clearFilters} type="button">
-            <XCircle size={17} />
-            Limpar filtros
-          </button>
-        </div>
-        </section>
       ) : null}
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
