@@ -31,6 +31,5 @@ flutter:
   uses-material-design: true
   assets:
     - .env
-    - assets/images/app_logo.png
     - assets/images/avapex_transportes_logo.png
     - assets/images/google_logo.png

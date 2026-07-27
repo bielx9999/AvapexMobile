@@ -112,10 +112,10 @@ final class _LoginPageState extends ConsumerState<LoginPage> {
                         const SizedBox(height: 28),
                         Image.asset(
                           'assets/images/avapex_transportes_logo.png',
-                          height: 132,
+                          height: 72,
                           fit: BoxFit.contain,
                         ),
-                        const SizedBox(height: 58),
+                        const SizedBox(height: 86),
                         TextFormField(
                           controller: _emailController,
                           keyboardType: TextInputType.emailAddress,
