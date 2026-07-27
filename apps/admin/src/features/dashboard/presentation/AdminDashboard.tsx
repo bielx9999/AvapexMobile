@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   ClipboardCheck,
+  Filter,
   Fuel,
   LogOut,
   PackageCheck,
@@ -56,6 +57,8 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [activePage, setActivePage] = useState<AdminPage>('dashboard');
+  const [checklistFilterCount, setChecklistFilterCount] = useState(0);
+  const [showChecklistFilters, setShowChecklistFilters] = useState(false);
 
   async function loadData() {
     setLoading(true);
@@ -171,6 +174,25 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
             <h1 className="text-2xl font-semibold tracking-normal">{pageTitle}</h1>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            {activePage === 'checklists' ? (
+              <button
+                className={`ui-button flex h-10 items-center gap-2 px-4 text-sm font-semibold ${
+                  showChecklistFilters || checklistFilterCount > 0
+                    ? 'bg-avapex-yellow text-avapex-black hover:bg-yellow-300'
+                    : 'border border-zinc-300 bg-white text-zinc-800 hover:bg-zinc-50'
+                }`}
+                onClick={() => setShowChecklistFilters((current) => !current)}
+                type="button"
+              >
+                <Filter size={17} />
+                Filtros
+                {checklistFilterCount > 0 ? (
+                  <span className="rounded-full bg-avapex-black px-2 py-0.5 text-xs text-white">
+                    {checklistFilterCount}
+                  </span>
+                ) : null}
+              </button>
+            ) : null}
             <button
               className="ui-button flex h-10 items-center gap-2 border border-zinc-300 bg-white px-3 text-sm font-medium text-zinc-800 hover:bg-zinc-50"
               onClick={() => void loadData()}
@@ -195,7 +217,14 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
           ) : activePage === 'vehicles' ? (
             <VehiclesPage vehicles={data.vehicles} loading={loading} onChanged={loadData} />
           ) : activePage === 'checklists' ? (
-            <ChecklistsPage checklists={data.checklists} users={data.users} loading={loading} />
+            <ChecklistsPage
+              checklists={data.checklists}
+              loading={loading}
+              onActiveFilterCountChange={setChecklistFilterCount}
+              onShowFiltersChange={setShowChecklistFilters}
+              showFilters={showChecklistFilters}
+              users={data.users}
+            />
           ) : (
             <>
 

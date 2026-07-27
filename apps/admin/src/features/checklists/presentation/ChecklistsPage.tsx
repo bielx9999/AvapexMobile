@@ -1,4 +1,4 @@
-import { type ReactNode, useMemo, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   BarChart3,
@@ -19,6 +19,9 @@ type ChecklistsPageProps = {
   checklists: Checklist[];
   users: AppUser[];
   loading: boolean;
+  onActiveFilterCountChange?: (count: number) => void;
+  onShowFiltersChange?: (show: boolean) => void;
+  showFilters?: boolean;
 };
 
 type DriverCount = {
@@ -27,13 +30,19 @@ type DriverCount = {
   total: number;
 };
 
-export function ChecklistsPage({ checklists, users, loading }: ChecklistsPageProps) {
+export function ChecklistsPage({
+  checklists,
+  users,
+  loading,
+  onActiveFilterCountChange,
+  onShowFiltersChange,
+  showFilters = false,
+}: ChecklistsPageProps) {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [driverId, setDriverId] = useState('');
   const [type, setType] = useState<'all' | ChecklistType>('all');
   const [query, setQuery] = useState('');
-  const [showFilters, setShowFilters] = useState(false);
 
   const drivers = useMemo(
     () =>
@@ -139,6 +148,10 @@ export function ChecklistsPage({ checklists, users, loading }: ChecklistsPagePro
 
   const activeFilterCount = [startDate, endDate, driverId, type !== 'all' ? type : '', query].filter(Boolean).length;
 
+  useEffect(() => {
+    onActiveFilterCountChange?.(activeFilterCount);
+  }, [activeFilterCount, onActiveFilterCountChange]);
+
   function clearFilters() {
     setStartDate('');
     setEndDate('');
@@ -149,30 +162,12 @@ export function ChecklistsPage({ checklists, users, loading }: ChecklistsPagePro
 
   return (
     <div className="space-y-5">
-      <div className="flex justify-end">
-        <button
-          className={`ui-button flex h-10 items-center gap-2 px-4 text-sm font-semibold ${
-            showFilters || activeFilterCount > 0
-              ? 'bg-avapex-yellow text-avapex-black hover:bg-yellow-300'
-              : 'border border-zinc-300 bg-white text-zinc-800 hover:bg-zinc-50'
-          }`}
-          onClick={() => setShowFilters((current) => !current)}
-          type="button"
-        >
-          <Filter size={17} />
-          Filtros
-          {activeFilterCount > 0 ? (
-            <span className="rounded-full bg-avapex-black px-2 py-0.5 text-xs text-white">{activeFilterCount}</span>
-          ) : null}
-        </button>
-      </div>
-
       {showFilters ? (
         <div className="fixed inset-0 z-50 bg-black/35 backdrop-blur-[1px]">
           <button
             aria-label="Fechar filtros"
             className="absolute inset-0 h-full w-full cursor-default"
-            onClick={() => setShowFilters(false)}
+            onClick={() => onShowFiltersChange?.(false)}
             type="button"
           />
           <aside className="relative ml-auto flex h-full w-full max-w-sm flex-col bg-white/95 shadow-2xl backdrop-blur">
@@ -186,7 +181,7 @@ export function ChecklistsPage({ checklists, users, loading }: ChecklistsPagePro
               <button
                 aria-label="Fechar filtros"
                 className="ui-icon-button flex h-9 w-9 items-center justify-center border-zinc-300 text-zinc-700 hover:bg-zinc-50"
-                onClick={() => setShowFilters(false)}
+                onClick={() => onShowFiltersChange?.(false)}
                 type="button"
               >
                 <X size={18} />
