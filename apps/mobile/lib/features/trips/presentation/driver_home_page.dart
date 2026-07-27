@@ -215,7 +215,7 @@ final class _TripHistoryTabState extends ConsumerState<_TripHistoryTab> {
                   ),
                 )
               else
-                for (final trip in filtered)
+                for (final trip in filtered) ...[
                   _TripCard(
                     trip: trip,
                     onTap: () {
@@ -226,6 +226,8 @@ final class _TripHistoryTabState extends ConsumerState<_TripHistoryTab> {
                       );
                     },
                   ),
+                  const SizedBox(height: 10),
+                ],
             ],
           );
         },

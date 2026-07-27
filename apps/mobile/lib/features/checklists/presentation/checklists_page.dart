@@ -61,8 +61,8 @@ final class _ChecklistsPageState extends ConsumerState<ChecklistsPage> {
             color: Colors.white,
             child: TabBar(
               tabs: [
-                Tab(text: 'Novo checklist'),
-                Tab(text: 'Historico'),
+                Tab(icon: Icon(Icons.add_task_outlined), text: 'Novo'),
+                Tab(icon: Icon(Icons.history_outlined), text: 'Historico'),
               ],
             ),
           ),
@@ -150,7 +150,13 @@ final class _NewChecklistTab extends StatelessWidget {
                   );
                 },
           icon: const Icon(Icons.arrow_forward),
-          label: const Text('Selecionar modelo'),
+          label: Text(
+            selectedTemplate == null
+                ? 'Selecionar modelo'
+                : 'Iniciar ${selectedTemplate!.label}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       ],
     );
