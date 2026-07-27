@@ -1,6 +1,7 @@
 export type UserRole = 'driver' | 'admin';
 export type UserStatus = 'active' | 'inactive';
 export type VehicleStatus = 'available' | 'in_transit' | 'maintenance';
+export type VehicleType = 'mechanical_horse_trucado' | 'mechanical_horse_toco' | 'truck';
 export type TripStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled';
 export type ChecklistType = 'departure' | 'arrival' | 'vehicle_daily' | 'chain_tensioner' | 'strap_ratchet';
 export type FuelType = 'diesel' | 'arla';
@@ -26,6 +27,9 @@ export type Vehicle = {
   id: string;
   plate: string;
   model: string;
+  fleetNumber: string;
+  year: number | null;
+  type: VehicleType;
   currentKm: number;
   status: VehicleStatus;
   lastChecklistId?: string;

@@ -13,6 +13,7 @@ import {
 import { logoutAdmin, type AdminSession } from '../../auth/data/authRepository';
 import { adminReadRepository } from '../../shared/data/firestoreCollections';
 import { UsersPage } from '../../users/presentation/UsersPage';
+import { VehiclesPage } from '../../vehicles/presentation/VehiclesPage';
 import type {
   AppUser,
   Checklist,
@@ -47,7 +48,7 @@ type AdminDashboardProps = {
   session: AdminSession;
 };
 
-type AdminPage = 'dashboard' | 'users';
+type AdminPage = 'dashboard' | 'users' | 'vehicles';
 
 export function AdminDashboard({ session }: AdminDashboardProps) {
   const [data, setData] = useState<DashboardData>(emptyData);
@@ -98,11 +99,16 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
 
   const recentChecklists = data.checklists.slice(0, 6);
   const recentFueling = data.fueling.slice(0, 5);
-  const pageTitle = activePage === 'users' ? 'Usuarios' : 'Dashboard';
+  const pageTitle =
+    activePage === 'users'
+      ? 'Usuarios'
+      : activePage === 'vehicles'
+        ? 'Veiculos'
+        : 'Dashboard';
   const navItems: Array<{ key: AdminPage | 'placeholder'; label: string }> = [
     { key: 'dashboard', label: 'Dashboard' },
     { key: 'users', label: 'Usuarios' },
-    { key: 'placeholder', label: 'Veiculos' },
+    { key: 'vehicles', label: 'Veiculos' },
     { key: 'placeholder', label: 'Viagens' },
     { key: 'placeholder', label: 'Checklists' },
     { key: 'placeholder', label: 'Comprovantes' },
@@ -183,6 +189,8 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
               loading={loading}
               onChanged={loadData}
             />
+          ) : activePage === 'vehicles' ? (
+            <VehiclesPage vehicles={data.vehicles} loading={loading} onChanged={loadData} />
           ) : (
             <>
 

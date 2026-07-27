@@ -32,10 +32,22 @@ export function mapUser(id: string, data: Record<string, unknown>): AppUser {
 }
 
 export function mapVehicle(id: string, data: Record<string, unknown>): Vehicle {
+  const type = typeof data.type === 'string' ? data.type : 'truck';
   return {
     id: typeof data.id === 'string' ? data.id : id,
     plate: typeof data.plate === 'string' ? data.plate : id,
     model: typeof data.model === 'string' ? data.model : '',
+    fleetNumber:
+      typeof data.fleetNumber === 'string'
+        ? data.fleetNumber
+        : typeof data.frota === 'string'
+          ? data.frota
+          : '',
+    year: typeof data.year === 'number' ? data.year : null,
+    type:
+      type === 'mechanical_horse_trucado' || type === 'mechanical_horse_toco' || type === 'truck'
+        ? type
+        : 'truck',
     currentKm: typeof data.currentKm === 'number' ? data.currentKm : 0,
     status:
       data.status === 'in_transit' || data.status === 'maintenance'
