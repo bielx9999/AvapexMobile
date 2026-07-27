@@ -1,5 +1,16 @@
 import { type ReactNode, useMemo, useState } from 'react';
-import { CalendarDays, ClipboardCheck, Filter, Search, UserRound, X, XCircle } from 'lucide-react';
+import {
+  AlertTriangle,
+  BarChart3,
+  CheckCircle2,
+  ClipboardList,
+  Filter,
+  LineChart,
+  Search,
+  UsersRound,
+  X,
+  XCircle,
+} from 'lucide-react';
 import Chart from 'react-apexcharts';
 import type { ApexOptions } from 'apexcharts';
 import type { AppUser, Checklist, ChecklistType } from '../../shared/domain/models';
@@ -238,14 +249,14 @@ export function ChecklistsPage({ checklists, users, loading }: ChecklistsPagePro
       ) : null}
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard icon={<ClipboardCheck size={18} />} label="Total" value={loading ? '-' : stats.total} />
-        <StatCard icon={<UserRound size={18} />} label="Motoristas" value={loading ? '-' : stats.uniqueDrivers} />
-        <StatCard icon={<CalendarDays size={18} />} label="Aprovados" value={loading ? '-' : stats.approved} />
-        <StatCard icon={<XCircle size={18} />} label="Reprovados" value={loading ? '-' : stats.rejected} danger={stats.rejected > 0} />
+        <StatCard icon={<ClipboardList size={20} />} label="Total" tone="dark" value={loading ? '-' : stats.total} />
+        <StatCard icon={<UsersRound size={20} />} label="Motoristas" tone="yellow" value={loading ? '-' : stats.uniqueDrivers} />
+        <StatCard icon={<CheckCircle2 size={20} />} label="Aprovados" tone="success" value={loading ? '-' : stats.approved} />
+        <StatCard icon={<AlertTriangle size={20} />} label="Reprovados" tone="danger" value={loading ? '-' : stats.rejected} />
       </section>
 
       <section className="grid gap-4">
-        <ChartCard title="Evolucao de checklists">
+        <ChartCard icon={<LineChart size={18} />} title="Evolucao de checklists">
           {byDay.length > 0 ? (
             <ApexDatetimeChart data={byDay} />
           ) : (
@@ -255,7 +266,7 @@ export function ChecklistsPage({ checklists, users, loading }: ChecklistsPagePro
       </section>
 
       <section className="grid gap-4 xl:grid-cols-2">
-        <ChartCard title="Checklists por motorista">
+        <ChartCard icon={<UsersRound size={18} />} title="Checklists por motorista">
           {byDriver.length > 0 ? (
             <ApexBarChart
               categories={byDriver.map((item) => item.name)}
@@ -267,7 +278,7 @@ export function ChecklistsPage({ checklists, users, loading }: ChecklistsPagePro
             <EmptyText>Nenhum checklist encontrado no filtro.</EmptyText>
           )}
         </ChartCard>
-        <ChartCard title="Checklists por modelo">
+        <ChartCard icon={<BarChart3 size={18} />} title="Checklists por modelo">
           {byType.length > 0 ? (
             <ApexBarChart
               categories={byType.map((item) => item.label)}
@@ -331,32 +342,62 @@ type StatCardProps = {
   icon: ReactNode;
   label: string;
   value: number | string;
-  danger?: boolean;
+  tone: 'dark' | 'yellow' | 'success' | 'danger';
 };
 
-function StatCard({ icon, label, value, danger }: StatCardProps) {
+function StatCard({ icon, label, value, tone }: StatCardProps) {
+  const toneClassNames = {
+    danger: {
+      accent: 'bg-red-500',
+      icon: 'bg-red-50 text-red-700 ring-red-100',
+      value: 'text-red-700',
+    },
+    dark: {
+      accent: 'bg-avapex-black',
+      icon: 'bg-avapex-black text-white ring-zinc-200',
+      value: 'text-avapex-black',
+    },
+    success: {
+      accent: 'bg-emerald-500',
+      icon: 'bg-emerald-50 text-emerald-700 ring-emerald-100',
+      value: 'text-emerald-700',
+    },
+    yellow: {
+      accent: 'bg-avapex-yellow',
+      icon: 'bg-avapex-yellow text-avapex-black ring-yellow-100',
+      value: 'text-avapex-black',
+    },
+  }[tone];
+
   return (
-    <article className="ui-card p-4">
+    <article className="ui-card relative overflow-hidden p-4 transition duration-200 hover:-translate-y-0.5 hover:shadow-md">
+      <span className={`absolute inset-x-0 top-0 h-1 ${toneClassNames.accent}`} />
       <div className="mb-4 flex items-center justify-between">
-        <span className="text-sm font-medium text-zinc-500">{label}</span>
-        <span className={`flex h-9 w-9 items-center justify-center rounded-xl ${danger ? 'bg-red-600 text-white' : 'bg-avapex-black text-white'}`}>
+        <span className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{label}</span>
+        <span className={`flex h-11 w-11 items-center justify-center rounded-2xl ring-1 ${toneClassNames.icon}`}>
           {icon}
         </span>
       </div>
-      <strong className="text-3xl font-semibold">{value}</strong>
+      <strong className={`block text-3xl font-semibold leading-none ${toneClassNames.value}`}>{value}</strong>
     </article>
   );
 }
 
 type ChartCardProps = {
+  icon: ReactNode;
   title: string;
   children: ReactNode;
 };
 
-function ChartCard({ title, children }: ChartCardProps) {
+function ChartCard({ icon, title, children }: ChartCardProps) {
   return (
-    <section className="ui-card p-3">
-      <h2 className="mb-2 px-1 text-sm font-semibold">{title}</h2>
+    <section className="ui-card overflow-hidden p-3 transition duration-200 hover:shadow-md">
+      <div className="mb-2 flex items-center gap-2 px-1">
+        <span className="flex h-9 w-9 items-center justify-center rounded-2xl bg-zinc-100 text-avapex-black ring-1 ring-zinc-200">
+          {icon}
+        </span>
+        <h2 className="text-sm font-semibold">{title}</h2>
+      </div>
       {children}
     </section>
   );
