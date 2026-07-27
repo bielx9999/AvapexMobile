@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { logoutAdmin, type AdminSession } from '../../auth/data/authRepository';
 import { adminReadRepository } from '../../shared/data/firestoreCollections';
+import { UsersPage } from '../../users/presentation/UsersPage';
 import type {
   AppUser,
   Checklist,
@@ -46,10 +47,13 @@ type AdminDashboardProps = {
   session: AdminSession;
 };
 
+type AdminPage = 'dashboard' | 'users';
+
 export function AdminDashboard({ session }: AdminDashboardProps) {
   const [data, setData] = useState<DashboardData>(emptyData);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [activePage, setActivePage] = useState<AdminPage>('dashboard');
 
   async function loadData() {
     setLoading(true);
@@ -94,6 +98,20 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
 
   const recentChecklists = data.checklists.slice(0, 6);
   const recentFueling = data.fueling.slice(0, 5);
+  const pageTitle = activePage === 'users' ? 'Usuarios' : 'Dashboard';
+  const pageSubtitle =
+    activePage === 'users'
+      ? 'Cadastro, bloqueio e gestao de acesso'
+      : 'Integrado ao Firebase do app mobile';
+  const navItems: Array<{ key: AdminPage | 'placeholder'; label: string }> = [
+    { key: 'dashboard', label: 'Dashboard' },
+    { key: 'users', label: 'Usuarios' },
+    { key: 'placeholder', label: 'Veiculos' },
+    { key: 'placeholder', label: 'Viagens' },
+    { key: 'placeholder', label: 'Checklists' },
+    { key: 'placeholder', label: 'Comprovantes' },
+    { key: 'placeholder', label: 'Abastecimento' },
+  ];
 
   return (
     <main className="min-h-screen bg-avapex-paper text-avapex-ink">
@@ -109,27 +127,29 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
         </div>
 
         <nav className="space-y-1 text-sm">
-          {['Dashboard', 'Motoristas', 'Veiculos', 'Viagens', 'Checklists', 'Comprovantes', 'Abastecimento'].map(
-            (item, index) => (
+          {navItems.map((item) => (
               <button
                 className={`flex h-10 w-full items-center rounded px-3 text-left ${
-                  index === 0 ? 'bg-avapex-yellow font-semibold text-avapex-black' : 'text-zinc-200 hover:bg-white/10'
+                  activePage === item.key
+                    ? 'bg-avapex-yellow font-semibold text-avapex-black'
+                    : 'text-zinc-200 hover:bg-white/10'
                 }`}
-                key={item}
+                disabled={item.key === 'placeholder'}
+                key={item.label}
+                onClick={() => item.key !== 'placeholder' && setActivePage(item.key)}
                 type="button"
               >
-                {item}
+                {item.label}
               </button>
-            ),
-          )}
+            ))}
         </nav>
       </aside>
 
       <section className="lg:pl-64">
         <header className="flex min-h-20 flex-col justify-between gap-3 border-b border-zinc-200 bg-white px-4 py-4 sm:flex-row sm:items-center sm:px-6">
           <div>
-            <h1 className="text-2xl font-semibold tracking-normal">Dashboard</h1>
-            <p className="text-sm text-zinc-500">Integrado ao Firebase do app mobile</p>
+            <h1 className="text-2xl font-semibold tracking-normal">{pageTitle}</h1>
+            <p className="text-sm text-zinc-500">{pageSubtitle}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <span className="rounded border border-zinc-200 px-3 py-2 text-sm text-zinc-700">
@@ -156,6 +176,16 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
 
         <div className="px-4 py-6 sm:px-6">
           {error ? <p className="mb-4 rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
+
+          {activePage === 'users' ? (
+            <UsersPage
+              currentUid={session.firebaseUser.uid}
+              users={data.users}
+              loading={loading}
+              onChanged={loadData}
+            />
+          ) : (
+            <>
 
           <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {stats.map((stat) => {
@@ -241,6 +271,8 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
               </div>
             </div>
           </section>
+            </>
+          )}
         </div>
       </section>
     </main>

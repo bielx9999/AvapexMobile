@@ -33,9 +33,11 @@ function readFirebaseEnv(): FirebaseEnv {
   return requiredEnv as FirebaseEnv;
 }
 
+export const firebaseOptions = readFirebaseEnv();
+
 function initializeFirebaseApp() {
   try {
-    return initializeApp(readFirebaseEnv());
+    return initializeApp(firebaseOptions);
   } catch (error) {
     if (error instanceof FirebaseError) {
       throw new Error(`Falha ao inicializar Firebase Admin: ${error.code}`);
