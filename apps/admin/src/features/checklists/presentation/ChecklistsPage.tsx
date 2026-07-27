@@ -501,7 +501,7 @@ function ApexDatetimeChart({ data }: ApexDatetimeChartProps) {
 
   return (
     <Chart
-      height={280}
+      height={230}
       options={options}
       series={[
         {
