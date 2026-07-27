@@ -1,7 +1,7 @@
 import { FormEvent, type ReactNode, useMemo, useState } from 'react';
-import { Ban, KeyRound, Plus, Search, Trash2, UserCheck, X } from 'lucide-react';
+import { Ban, KeyRound, Pencil, Plus, Search, Trash2, UserCheck, X } from 'lucide-react';
 import { adminUserRepository } from '../data/adminUserRepository';
-import type { AppUser, UserRole } from '../../shared/domain/models';
+import type { AppUser, UserRole, UserStatus } from '../../shared/domain/models';
 
 type UsersPageProps = {
   users: AppUser[];
@@ -16,6 +16,7 @@ const initialForm = {
   phone: '',
   password: '',
   role: 'driver' as UserRole,
+  status: 'active' as UserStatus,
   cnhNumber: '',
   cnhCategory: '',
   cnhExpirationDate: '',
@@ -29,6 +30,7 @@ export function UsersPage({ users, loading, currentUid, onChanged }: UsersPagePr
   const [submitting, setSubmitting] = useState(false);
   const [busyUid, setBusyUid] = useState('');
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [editingUser, setEditingUser] = useState<AppUser | null>(null);
 
   const filteredUsers = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -43,20 +45,35 @@ export function UsersPage({ users, loading, currentUid, onChanged }: UsersPagePr
     );
   }, [query, users]);
 
-  async function handleCreateUser(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmitUser(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSubmitting(true);
     setError('');
     setMessage('');
 
     try {
-      await adminUserRepository.createUser(form);
+      if (editingUser) {
+        await adminUserRepository.updateUser({
+          uid: editingUser.uid,
+          name: form.name,
+          phone: form.phone,
+          role: form.role,
+          status: form.status,
+          cnhNumber: form.cnhNumber,
+          cnhCategory: form.cnhCategory,
+          cnhExpirationDate: form.cnhExpirationDate,
+        });
+        setMessage('Usuario atualizado com sucesso.');
+      } else {
+        await adminUserRepository.createUser(form);
+        setMessage('Usuario criado com sucesso.');
+      }
       setForm(initialForm);
       setShowCreateForm(false);
-      setMessage('Usuario criado com sucesso.');
+      setEditingUser(null);
       await onChanged();
     } catch (createError) {
-      setError(createError instanceof Error ? createError.message : 'Erro ao criar usuario.');
+      setError(createError instanceof Error ? createError.message : 'Erro ao salvar usuario.');
     } finally {
       setSubmitting(false);
     }
@@ -83,7 +100,30 @@ export function UsersPage({ users, loading, currentUid, onChanged }: UsersPagePr
       return;
     }
     setShowCreateForm(false);
+    setEditingUser(null);
     setForm(initialForm);
+  }
+
+  function openCreateForm() {
+    setForm(initialForm);
+    setEditingUser(null);
+    setShowCreateForm(true);
+  }
+
+  function openEditForm(user: AppUser) {
+    setForm({
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      password: '',
+      role: user.role,
+      status: user.status,
+      cnhNumber: user.cnh?.number ?? '',
+      cnhCategory: user.cnh?.category ?? '',
+      cnhExpirationDate: formatDateInput(user.cnh?.expirationDate ?? null),
+    });
+    setEditingUser(user);
+    setShowCreateForm(true);
   }
 
   return (
@@ -100,7 +140,7 @@ export function UsersPage({ users, loading, currentUid, onChanged }: UsersPagePr
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <button
               className="ui-button flex h-10 items-center justify-center gap-2 bg-avapex-yellow px-4 text-sm font-semibold text-avapex-black hover:bg-yellow-300"
-              onClick={() => setShowCreateForm(true)}
+              onClick={openCreateForm}
               type="button"
             >
               <Plus size={18} />
@@ -155,6 +195,13 @@ export function UsersPage({ users, loading, currentUid, onChanged }: UsersPagePr
                       {user.uid === currentUid ? (
                         <span className="ui-pill bg-zinc-100 text-zinc-600">Voce</span>
                       ) : null}
+                      <IconButton
+                        label="Editar usuario"
+                        disabled={busyUid === user.uid}
+                        onClick={() => openEditForm(user)}
+                      >
+                        <Pencil size={17} />
+                      </IconButton>
                       <IconButton
                         label="Enviar redefinicao de senha"
                         disabled={busyUid === user.uid}
@@ -223,8 +270,10 @@ export function UsersPage({ users, loading, currentUid, onChanged }: UsersPagePr
           <section className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-2xl">
             <header className="flex items-start justify-between gap-4 border-b border-zinc-200 px-5 py-4">
               <div>
-                <h2 className="text-lg font-semibold">Novo Usuario</h2>
-                <p className="mt-1 text-sm text-zinc-500">Cadastro por email e senha, sem acesso Google obrigatorio.</p>
+                <h2 className="text-lg font-semibold">{editingUser ? 'Editar Usuario' : 'Novo Usuario'}</h2>
+                <p className="mt-1 text-sm text-zinc-500">
+                  {editingUser ? 'Atualize dados operacionais do cadastro.' : 'Cadastro por email e senha, sem acesso Google obrigatorio.'}
+                </p>
               </div>
               <button
                 aria-label="Fechar cadastro"
@@ -236,7 +285,7 @@ export function UsersPage({ users, loading, currentUid, onChanged }: UsersPagePr
               </button>
             </header>
 
-            <form className="flex min-h-0 flex-1 flex-col" onSubmit={handleCreateUser}>
+            <form className="flex min-h-0 flex-1 flex-col" onSubmit={handleSubmitUser}>
               <div className="space-y-5 overflow-y-auto bg-zinc-50 p-5">
                 <FormTopic title="Dados pessoais">
                   <TextField
@@ -250,6 +299,7 @@ export function UsersPage({ users, loading, currentUid, onChanged }: UsersPagePr
                     type="email"
                     value={form.email}
                     onChange={(value) => setForm((current) => ({ ...current, email: value }))}
+                    readOnly={Boolean(editingUser)}
                     required
                   />
                   <TextField
@@ -271,14 +321,30 @@ export function UsersPage({ users, loading, currentUid, onChanged }: UsersPagePr
                       <option value="admin">Administrativo</option>
                     </select>
                   </label>
-                  <TextField
-                    label="Senha provisoria"
-                    type="password"
-                    minLength={6}
-                    value={form.password}
-                    onChange={(value) => setForm((current) => ({ ...current, password: value }))}
-                    required
-                  />
+                  {!editingUser ? (
+                    <TextField
+                      label="Senha provisoria"
+                      type="password"
+                      minLength={6}
+                      value={form.password}
+                      onChange={(value) => setForm((current) => ({ ...current, password: value }))}
+                      required
+                    />
+                  ) : null}
+                  {editingUser ? (
+                    <label className="block">
+                      <span className="mb-2 block text-sm font-medium text-zinc-700">Status</span>
+                      <select
+                        className="ui-input h-11 w-full px-3"
+                        disabled={editingUser.uid === currentUid}
+                        value={form.status}
+                        onChange={(event) => setForm((current) => ({ ...current, status: event.target.value as UserStatus }))}
+                      >
+                        <option value="active">Ativo</option>
+                        <option value="inactive">Bloqueado</option>
+                      </select>
+                    </label>
+                  ) : null}
                 </FormTopic>
 
                 {form.role === 'driver' ? (
@@ -321,7 +387,7 @@ export function UsersPage({ users, loading, currentUid, onChanged }: UsersPagePr
                   type="submit"
                 >
                   <Plus size={18} />
-                  {submitting ? 'Criando...' : 'Criar usuario'}
+                  {submitting ? 'Salvando...' : editingUser ? 'Salvar alteracoes' : 'Criar usuario'}
                 </button>
               </footer>
             </form>
@@ -339,9 +405,10 @@ type TextFieldProps = {
   type?: string;
   required?: boolean;
   minLength?: number;
+  readOnly?: boolean;
 };
 
-function TextField({ label, value, onChange, type = 'text', required, minLength }: TextFieldProps) {
+function TextField({ label, value, onChange, type = 'text', required, minLength, readOnly }: TextFieldProps) {
   return (
     <label className="block">
       <span className="mb-2 block text-sm font-medium text-zinc-700">{label}</span>
@@ -352,6 +419,7 @@ function TextField({ label, value, onChange, type = 'text', required, minLength 
         onChange={(event) => onChange(event.target.value)}
         required={required}
         minLength={minLength}
+        readOnly={readOnly}
       />
     </label>
   );
@@ -406,4 +474,11 @@ function formatDate(value: Date | null) {
     dateStyle: 'short',
     timeStyle: 'short',
   }).format(value);
+}
+
+function formatDateInput(value: Date | null) {
+  if (!value) {
+    return '';
+  }
+  return value.toISOString().slice(0, 10);
 }

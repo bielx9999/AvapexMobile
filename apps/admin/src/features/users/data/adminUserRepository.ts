@@ -5,7 +5,7 @@ import {
   sendPasswordResetEmail,
   signOut,
 } from 'firebase/auth';
-import { deleteDoc, doc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
+import { deleteDoc, deleteField, doc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { auth, firebaseOptions, firestore } from '../../../core/firebase/firebaseConfig';
 import { mapFirebaseError } from '../../../core/firebase/firebaseErrors';
 import type { AppUser, UserRole, UserStatus } from '../../shared/domain/models';
@@ -16,6 +16,17 @@ export type CreateAdminUserInput = {
   password: string;
   phone: string;
   role: UserRole;
+  cnhNumber?: string;
+  cnhCategory?: string;
+  cnhExpirationDate?: string;
+};
+
+export type UpdateAdminUserInput = {
+  uid: string;
+  name: string;
+  phone: string;
+  role: UserRole;
+  status: UserStatus;
   cnhNumber?: string;
   cnhCategory?: string;
   cnhExpirationDate?: string;
@@ -84,6 +95,38 @@ export const adminUserRepository = {
       await sendPasswordResetEmail(auth, user.email);
     } catch (error) {
       throw mapFirebaseError(error, 'Erro ao enviar redefinicao de senha.');
+    }
+  },
+
+  async updateUser(input: UpdateAdminUserInput) {
+    const name = input.name.trim();
+    const phone = input.phone.trim();
+
+    if (!name) {
+      throw new Error('Informe o nome do usuario.');
+    }
+
+    if (input.role === 'driver' && (!input.cnhNumber || !input.cnhCategory || !input.cnhExpirationDate)) {
+      throw new Error('Motorista precisa de numero, categoria e validade da CNH.');
+    }
+
+    try {
+      await updateDoc(doc(firestore, 'users', input.uid), {
+        name,
+        phone,
+        role: input.role,
+        status: input.status,
+        cnh:
+          input.role === 'driver'
+            ? {
+                number: input.cnhNumber?.trim(),
+                category: input.cnhCategory?.trim().toUpperCase(),
+                expirationDate: new Date(`${input.cnhExpirationDate}T12:00:00`),
+              }
+            : deleteField(),
+      });
+    } catch (error) {
+      throw mapFirebaseError(error, 'Erro ao atualizar usuario.');
     }
   },
 
