@@ -30,6 +30,9 @@ apps/mobile/ios/Runner/GoogleService-Info.plist
 /apps/mobile/*.log
 /apps/mobile/*.png
 /apps/mobile/*.xml
+apps/admin/node_modules/
+apps/admin/dist/
+apps/admin/*.log
 
 # OS
 .DS_Store

@@ -1,0 +1,269 @@
+import { useEffect, useMemo, useState } from 'react';
+import {
+  ClipboardCheck,
+  Fuel,
+  LogOut,
+  PackageCheck,
+  RefreshCw,
+  Route,
+  Truck,
+  Users,
+  Wrench,
+} from 'lucide-react';
+import { logoutAdmin, type AdminSession } from '../../auth/data/authRepository';
+import { adminReadRepository } from '../../shared/data/firestoreCollections';
+import type {
+  AppUser,
+  Checklist,
+  DeliveryReceipt,
+  DriverEquipment,
+  FuelingRecord,
+  Trip,
+  Vehicle,
+} from '../../shared/domain/models';
+
+type DashboardData = {
+  users: AppUser[];
+  vehicles: Vehicle[];
+  trips: Trip[];
+  checklists: Checklist[];
+  receipts: DeliveryReceipt[];
+  fueling: FuelingRecord[];
+  equipment: DriverEquipment[];
+};
+
+const emptyData: DashboardData = {
+  users: [],
+  vehicles: [],
+  trips: [],
+  checklists: [],
+  receipts: [],
+  fueling: [],
+  equipment: [],
+};
+
+type AdminDashboardProps = {
+  session: AdminSession;
+};
+
+export function AdminDashboard({ session }: AdminDashboardProps) {
+  const [data, setData] = useState<DashboardData>(emptyData);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  async function loadData() {
+    setLoading(true);
+    setError('');
+    try {
+      const [users, vehicles, trips, checklists, receipts, fueling, equipment] = await Promise.all([
+        adminReadRepository.users(),
+        adminReadRepository.vehicles(),
+        adminReadRepository.trips(),
+        adminReadRepository.checklists(),
+        adminReadRepository.deliveryReceipts(),
+        adminReadRepository.fuelingRecords(),
+        adminReadRepository.driverEquipments(),
+      ]);
+      setData({ users, vehicles, trips, checklists, receipts, fueling, equipment });
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : 'Erro ao carregar painel.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      void loadData();
+    }, 0);
+    return () => window.clearTimeout(timeoutId);
+  }, []);
+
+  const stats = useMemo(
+    () => [
+      { label: 'Motoristas', value: data.users.filter((user) => user.role === 'driver').length, icon: Users },
+      { label: 'Veiculos', value: data.vehicles.length, icon: Truck },
+      { label: 'Viagens', value: data.trips.length, icon: Route },
+      { label: 'Checklists', value: data.checklists.length, icon: ClipboardCheck },
+      { label: 'Comprovantes', value: data.receipts.length, icon: PackageCheck },
+      { label: 'Abastecimentos', value: data.fueling.length, icon: Fuel },
+      { label: 'Equipamentos', value: data.equipment.length, icon: Wrench },
+    ],
+    [data],
+  );
+
+  const recentChecklists = data.checklists.slice(0, 6);
+  const recentFueling = data.fueling.slice(0, 5);
+
+  return (
+    <main className="min-h-screen bg-avapex-paper text-avapex-ink">
+      <aside className="fixed left-0 top-0 hidden h-full w-64 bg-avapex-black px-5 py-6 text-white lg:block">
+        <div className="mb-10 flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded bg-avapex-yellow font-black text-avapex-black">
+            AV
+          </div>
+          <div>
+            <p className="font-semibold">Avapex</p>
+            <p className="text-xs text-zinc-400">Painel administrativo</p>
+          </div>
+        </div>
+
+        <nav className="space-y-1 text-sm">
+          {['Dashboard', 'Motoristas', 'Veiculos', 'Viagens', 'Checklists', 'Comprovantes', 'Abastecimento'].map(
+            (item, index) => (
+              <button
+                className={`flex h-10 w-full items-center rounded px-3 text-left ${
+                  index === 0 ? 'bg-avapex-yellow font-semibold text-avapex-black' : 'text-zinc-200 hover:bg-white/10'
+                }`}
+                key={item}
+                type="button"
+              >
+                {item}
+              </button>
+            ),
+          )}
+        </nav>
+      </aside>
+
+      <section className="lg:pl-64">
+        <header className="flex min-h-20 flex-col justify-between gap-3 border-b border-zinc-200 bg-white px-4 py-4 sm:flex-row sm:items-center sm:px-6">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-normal">Dashboard</h1>
+            <p className="text-sm text-zinc-500">Integrado ao Firebase do app mobile</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded border border-zinc-200 px-3 py-2 text-sm text-zinc-700">
+              {session.profile.name || session.firebaseUser.email}
+            </span>
+            <button
+              className="flex h-10 items-center gap-2 rounded border border-zinc-300 bg-white px-3 text-sm font-medium text-zinc-800 hover:bg-zinc-50"
+              onClick={() => void loadData()}
+              type="button"
+            >
+              <RefreshCw size={16} />
+              Atualizar
+            </button>
+            <button
+              className="flex h-10 items-center gap-2 rounded bg-avapex-black px-3 text-sm font-medium text-white hover:bg-black"
+              onClick={() => void logoutAdmin()}
+              type="button"
+            >
+              <LogOut size={16} />
+              Sair
+            </button>
+          </div>
+        </header>
+
+        <div className="px-4 py-6 sm:px-6">
+          {error ? <p className="mb-4 rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
+
+          <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {stats.map((stat) => {
+              const Icon = stat.icon;
+              return (
+                <article className="rounded border border-zinc-200 bg-white p-4" key={stat.label}>
+                  <div className="mb-4 flex items-center justify-between">
+                    <span className="text-sm font-medium text-zinc-500">{stat.label}</span>
+                    <span className="flex h-9 w-9 items-center justify-center rounded bg-avapex-black text-white">
+                      <Icon size={18} />
+                    </span>
+                  </div>
+                  <strong className="text-3xl font-semibold">{loading ? '-' : stat.value}</strong>
+                </article>
+              );
+            })}
+          </section>
+
+          <section className="mt-6 grid gap-4 xl:grid-cols-[1.4fr_1fr]">
+            <div className="rounded border border-zinc-200 bg-white">
+              <div className="border-b border-zinc-200 px-4 py-3">
+                <h2 className="font-semibold">Checklists recentes</h2>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[720px] text-left text-sm">
+                  <thead className="bg-zinc-50 text-xs uppercase text-zinc-500">
+                    <tr>
+                      <th className="px-4 py-3">Data</th>
+                      <th className="px-4 py-3">Motorista</th>
+                      <th className="px-4 py-3">Modelo</th>
+                      <th className="px-4 py-3">Veiculo</th>
+                      <th className="px-4 py-3">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recentChecklists.map((checklist) => (
+                      <tr className="border-t border-zinc-100" key={checklist.id}>
+                        <td className="px-4 py-3">{formatDate(checklist.createdAt)}</td>
+                        <td className="px-4 py-3">{checklist.driverName || checklist.driverId}</td>
+                        <td className="px-4 py-3">{checklistLabel(checklist.type)}</td>
+                        <td className="px-4 py-3">{checklist.vehiclePlate || checklist.vehicleId}</td>
+                        <td className="px-4 py-3">
+                          <span className={checklist.hasCriticalFailure ? 'text-red-700' : 'text-emerald-700'}>
+                            {checklist.hasCriticalFailure ? 'Reprovado' : 'Aprovado'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                    {!loading && recentChecklists.length === 0 ? (
+                      <tr>
+                        <td className="px-4 py-6 text-center text-zinc-500" colSpan={5}>
+                          Nenhum checklist encontrado.
+                        </td>
+                      </tr>
+                    ) : null}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="rounded border border-zinc-200 bg-white">
+              <div className="border-b border-zinc-200 px-4 py-3">
+                <h2 className="font-semibold">Abastecimentos recentes</h2>
+              </div>
+              <div className="divide-y divide-zinc-100">
+                {recentFueling.map((record) => (
+                  <article className="px-4 py-3" key={record.id}>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-medium">{record.vehiclePlate}</p>
+                      <span className="rounded bg-zinc-100 px-2 py-1 text-xs uppercase text-zinc-600">
+                        {record.fuelType}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-sm text-zinc-500">
+                      {record.driverName} - {record.kmRegistered} KM
+                    </p>
+                    <p className="mt-1 text-xs text-zinc-400">{formatDate(record.createdAt)}</p>
+                  </article>
+                ))}
+                {!loading && recentFueling.length === 0 ? (
+                  <p className="px-4 py-6 text-center text-sm text-zinc-500">Nenhum abastecimento encontrado.</p>
+                ) : null}
+              </div>
+            </div>
+          </section>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function formatDate(value: Date | null) {
+  if (!value) {
+    return '-';
+  }
+  return new Intl.DateTimeFormat('pt-BR', {
+    dateStyle: 'short',
+    timeStyle: 'short',
+  }).format(value);
+}
+
+function checklistLabel(type: Checklist['type']) {
+  const labels: Record<Checklist['type'], string> = {
+    departure: 'Saida',
+    arrival: 'Chegada',
+    vehicle_daily: 'Veiculo',
+    chain_tensioner: 'Corrente/Tensionador',
+    strap_ratchet: 'Cinta/Catraca',
+  };
+  return labels[type] ?? type;
+}
