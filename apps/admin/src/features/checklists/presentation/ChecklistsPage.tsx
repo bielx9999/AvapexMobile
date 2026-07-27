@@ -401,6 +401,7 @@ function ApexBarChart({ categories, data, color, seriesName }: ApexBarChartProps
     xaxis: {
       categories,
       labels: {
+        show: false,
         style: { colors: '#52525B' },
       },
     },
@@ -484,6 +485,7 @@ function ApexDatetimeChart({ data }: ApexDatetimeChartProps) {
       labels: {
         datetimeUTC: false,
         format: 'dd/MM',
+        show: false,
         style: { colors: '#52525B' },
       },
       type: 'datetime',
