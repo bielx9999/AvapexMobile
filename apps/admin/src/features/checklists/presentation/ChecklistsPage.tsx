@@ -1,5 +1,7 @@
 import { type ReactNode, useMemo, useState } from 'react';
 import { CalendarDays, ClipboardCheck, Filter, Search, UserRound, X, XCircle } from 'lucide-react';
+import Chart from 'react-apexcharts';
+import type { ApexOptions } from 'apexcharts';
 import type { AppUser, Checklist, ChecklistType } from '../../shared/domain/models';
 
 type ChecklistsPageProps = {
@@ -110,8 +112,20 @@ export function ChecklistsPage({ checklists, users, loading }: ChecklistsPagePro
       .sort((a, b) => b.total - a.total);
   }, [filteredChecklists]);
 
-  const maxDriverTotal = Math.max(...byDriver.map((item) => item.total), 1);
-  const maxTypeTotal = Math.max(...byType.map((item) => item.total), 1);
+  const byDay = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const checklist of filteredChecklists) {
+      if (!checklist.createdAt) {
+        continue;
+      }
+      const key = checklist.createdAt.toISOString().slice(0, 10);
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    return [...counts.entries()]
+      .map(([date, total]) => ({ date, total }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+  }, [filteredChecklists]);
+
   const activeFilterCount = [startDate, endDate, driverId, type !== 'all' ? type : '', query].filter(Boolean).length;
 
   function clearFilters() {
@@ -230,26 +244,37 @@ export function ChecklistsPage({ checklists, users, loading }: ChecklistsPagePro
         <StatCard icon={<XCircle size={18} />} label="Reprovados" value={loading ? '-' : stats.rejected} danger={stats.rejected > 0} />
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-2">
-        <ChartCard title="Checklists por motorista">
-          {byDriver.length > 0 ? (
-            <div className="space-y-3">
-              {byDriver.map((item) => (
-                <BarRow key={item.driverId} label={item.name} value={item.total} max={maxDriverTotal} />
-              ))}
-            </div>
+      <section className="grid gap-4">
+        <ChartCard title="Evolucao de checklists">
+          {byDay.length > 0 ? (
+            <ApexTimelineChart data={byDay} />
           ) : (
             <EmptyText>Nenhum checklist encontrado no filtro.</EmptyText>
           )}
         </ChartCard>
+      </section>
 
+      <section className="grid gap-4 xl:grid-cols-2">
+        <ChartCard title="Checklists por motorista">
+          {byDriver.length > 0 ? (
+            <ApexBarChart
+              categories={byDriver.map((item) => item.name)}
+              color="#FACC15"
+              data={byDriver.map((item) => item.total)}
+              seriesName="Checklists"
+            />
+          ) : (
+            <EmptyText>Nenhum checklist encontrado no filtro.</EmptyText>
+          )}
+        </ChartCard>
         <ChartCard title="Checklists por modelo">
           {byType.length > 0 ? (
-            <div className="space-y-3">
-              {byType.map((item) => (
-                <BarRow key={item.label} label={item.label} value={item.total} max={maxTypeTotal} />
-              ))}
-            </div>
+            <ApexBarChart
+              categories={byType.map((item) => item.label)}
+              color="#1F1C1C"
+              data={byType.map((item) => item.total)}
+              seriesName="Checklists"
+            />
           ) : (
             <EmptyText>Nenhum checklist encontrado no filtro.</EmptyText>
           )}
@@ -337,24 +362,122 @@ function ChartCard({ title, children }: ChartCardProps) {
   );
 }
 
-type BarRowProps = {
-  label: string;
-  value: number;
-  max: number;
+type ApexBarChartProps = {
+  categories: string[];
+  data: number[];
+  color: string;
+  seriesName: string;
 };
 
-function BarRow({ label, value, max }: BarRowProps) {
-  const width = Math.max(8, Math.round((value / max) * 100));
+function ApexBarChart({ categories, data, color, seriesName }: ApexBarChartProps) {
+  const options: ApexOptions = {
+    chart: {
+      fontFamily: 'Inter, system-ui, sans-serif',
+      toolbar: { show: false },
+    },
+    colors: [color],
+    dataLabels: {
+      enabled: true,
+      style: { colors: ['#111111'] },
+    },
+    grid: {
+      borderColor: '#E5E7EB',
+      strokeDashArray: 4,
+    },
+    plotOptions: {
+      bar: {
+        borderRadius: 8,
+        horizontal: true,
+      },
+    },
+    tooltip: {
+      theme: 'light',
+      y: {
+        formatter: (value) => `${value} checklists`,
+      },
+    },
+    xaxis: {
+      categories,
+      labels: {
+        style: { colors: '#52525B' },
+      },
+    },
+    yaxis: {
+      labels: {
+        maxWidth: 180,
+        style: { colors: '#52525B' },
+      },
+    },
+  };
+
   return (
-    <div>
-      <div className="mb-1 flex items-center justify-between gap-3 text-sm">
-        <span className="truncate font-medium text-zinc-700">{label}</span>
-        <span className="font-semibold text-zinc-900">{value}</span>
-      </div>
-      <div className="h-3 overflow-hidden rounded-full bg-zinc-100">
-        <div className="h-full rounded-full bg-avapex-yellow" style={{ width: `${width}%` }} />
-      </div>
-    </div>
+    <Chart height={320} options={options} series={[{ data, name: seriesName }]} type="bar" />
+  );
+}
+
+type ApexTimelineChartProps = {
+  data: Array<{ date: string; total: number }>;
+};
+
+function ApexTimelineChart({ data }: ApexTimelineChartProps) {
+  const options: ApexOptions = {
+    chart: {
+      fontFamily: 'Inter, system-ui, sans-serif',
+      toolbar: { show: false },
+      zoom: { enabled: false },
+    },
+    colors: ['#FACC15'],
+    dataLabels: { enabled: false },
+    fill: {
+      gradient: {
+        opacityFrom: 0.35,
+        opacityTo: 0.03,
+        shadeIntensity: 0.2,
+      },
+      type: 'gradient',
+    },
+    grid: {
+      borderColor: '#E5E7EB',
+      strokeDashArray: 4,
+    },
+    stroke: {
+      curve: 'smooth',
+      width: 3,
+    },
+    tooltip: {
+      theme: 'light',
+      x: { format: 'dd/MM/yyyy' },
+      y: {
+        formatter: (value) => `${value} checklists`,
+      },
+    },
+    xaxis: {
+      labels: {
+        datetimeUTC: false,
+        style: { colors: '#52525B' },
+      },
+      type: 'datetime',
+    },
+    yaxis: {
+      decimalsInFloat: 0,
+      labels: {
+        style: { colors: '#52525B' },
+      },
+    },
+  };
+
+  return (
+    <Chart
+      height={300}
+      options={options}
+      series={[
+        {
+          data: data.map((item) => [new Date(`${item.date}T12:00:00`).getTime(), item.total]),
+          name: 'Checklists',
+        },
+      ]}
+      type="area"
+    />
   );
 }
 
