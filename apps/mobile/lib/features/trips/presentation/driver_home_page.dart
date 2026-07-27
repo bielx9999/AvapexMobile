@@ -12,6 +12,46 @@ final class DriverHomePage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final profile = ref.watch(currentUserProfileProvider);
+
+    return DefaultTabController(
+      length: 2,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            child: profile.when(
+              data: (user) => _DriverHeader(
+                name: user?.name ?? 'Motorista',
+                email: user?.email ?? '',
+              ),
+              error: (_, _) => const _DriverHeader(
+                name: 'Motorista',
+                email: 'Perfil indisponivel no momento',
+              ),
+              loading: () =>
+                  const _DriverHeader(name: 'Carregando...', email: ''),
+            ),
+          ),
+          const TabBar(
+            tabs: [
+              Tab(icon: Icon(Icons.route_outlined), text: 'Ativas'),
+              Tab(icon: Icon(Icons.history_outlined), text: 'Historico'),
+            ],
+          ),
+          const Expanded(
+            child: TabBarView(children: [_ActiveTripsTab(), _TripHistoryTab()]),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+final class _ActiveTripsTab extends ConsumerWidget {
+  const _ActiveTripsTab();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
     final trips = ref.watch(currentDriverTripsProvider);
 
     return RefreshIndicator(
@@ -19,70 +59,182 @@ final class DriverHomePage extends ConsumerWidget {
         ref.invalidate(currentDriverTripsProvider);
         await ref.read(currentDriverTripsProvider.future);
       },
-      child: CustomScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        slivers: [
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-              child: profile.when(
-                data: (user) => _DriverHeader(
-                  name: user?.name ?? 'Motorista',
-                  email: user?.email ?? '',
-                ),
-                error: (_, _) => const _DriverHeader(
-                  name: 'Motorista',
-                  email: 'Perfil indisponivel no momento',
-                ),
-                loading: () =>
-                    const _DriverHeader(name: 'Carregando...', email: ''),
-              ),
-            ),
-          ),
-          trips.when(
-            data: (items) {
-              if (items.isEmpty) {
-                return const SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: _EmptyTrips(),
-                );
-              }
+      child: trips.when(
+        data: (items) {
+          final activeTrips = items
+              .where(
+                (trip) =>
+                    trip.status == TripStatus.pending ||
+                    trip.status == TripStatus.inProgress,
+              )
+              .toList(growable: false);
 
-              return SliverPadding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                sliver: SliverList.separated(
-                  itemCount: items.length,
-                  separatorBuilder: (_, _) => const SizedBox(height: 10),
-                  itemBuilder: (context, index) {
-                    return _TripCard(
-                      trip: items[index],
-                      onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => TripDetailPage(trip: items[index]),
-                          ),
-                        );
-                      },
-                    );
-                  },
-                ),
+          if (activeTrips.isEmpty) {
+            return ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              children: [SizedBox(height: 120), _EmptyTrips()],
+            );
+          }
+
+          return ListView.separated(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+            itemCount: activeTrips.length,
+            separatorBuilder: (_, _) => const SizedBox(height: 10),
+            itemBuilder: (context, index) {
+              final trip = activeTrips[index];
+              return _TripCard(
+                trip: trip,
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => TripDetailPage(trip: trip),
+                    ),
+                  );
+                },
               );
             },
-            error: (error, _) => SliverFillRemaining(
-              hasScrollBody: false,
-              child: Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Text('Falha ao carregar viagens: $error'),
-                ),
+          );
+        },
+        error: (error, _) => ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(24),
+          children: [Text('Falha ao carregar viagens: $error')],
+        ),
+        loading: () => const Center(child: CircularProgressIndicator()),
+      ),
+    );
+  }
+}
+
+final class _TripHistoryTab extends ConsumerStatefulWidget {
+  const _TripHistoryTab();
+
+  @override
+  ConsumerState<_TripHistoryTab> createState() => _TripHistoryTabState();
+}
+
+final class _TripHistoryTabState extends ConsumerState<_TripHistoryTab> {
+  DateTime? _startDate;
+  DateTime? _endDate;
+
+  Future<void> _pickStartDate() async {
+    final picked = await _pickDate(initialDate: _startDate ?? DateTime.now());
+    if (picked == null) {
+      return;
+    }
+    setState(() => _startDate = _dateOnly(picked));
+  }
+
+  Future<void> _pickEndDate() async {
+    final picked = await _pickDate(initialDate: _endDate ?? DateTime.now());
+    if (picked == null) {
+      return;
+    }
+    setState(() => _endDate = _dateOnly(picked));
+  }
+
+  Future<DateTime?> _pickDate({required DateTime initialDate}) {
+    return showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: DateTime(2024),
+      lastDate: DateTime.now(),
+    );
+  }
+
+  void _clearFilters() {
+    setState(() {
+      _startDate = null;
+      _endDate = null;
+    });
+  }
+
+  List<Trip> _filterHistory(List<Trip> trips) {
+    final start = _startDate;
+    final endExclusive = _endDate?.add(const Duration(days: 1));
+
+    final finishedTrips = trips.where(
+      (trip) =>
+          trip.status == TripStatus.completed ||
+          trip.status == TripStatus.cancelled,
+    );
+
+    return finishedTrips
+        .where((trip) {
+          final referenceDate =
+              (trip.completedAt ?? trip.startedAt ?? trip.scheduledAt)
+                  .toLocal();
+          if (start != null && referenceDate.isBefore(start)) {
+            return false;
+          }
+          if (endExclusive != null && !referenceDate.isBefore(endExclusive)) {
+            return false;
+          }
+          return true;
+        })
+        .toList(growable: false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final trips = ref.watch(currentDriverTripsProvider);
+
+    return RefreshIndicator(
+      onRefresh: () async {
+        ref.invalidate(currentDriverTripsProvider);
+        await ref.read(currentDriverTripsProvider.future);
+      },
+      child: trips.when(
+        data: (items) {
+          final filtered = _filterHistory(items);
+
+          return ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+            children: [
+              _TripHistoryFilters(
+                startDate: _startDate,
+                endDate: _endDate,
+                onPickStart: _pickStartDate,
+                onPickEnd: _pickEndDate,
+                onClear: _clearFilters,
               ),
-            ),
-            loading: () => const SliverFillRemaining(
-              hasScrollBody: false,
-              child: Center(child: CircularProgressIndicator()),
-            ),
-          ),
-        ],
+              const SizedBox(height: 12),
+              _TripHistorySummary(count: filtered.length),
+              const SizedBox(height: 12),
+              if (items.isEmpty)
+                const _EmptyTripHistory()
+              else if (filtered.isEmpty)
+                const Card(
+                  child: Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Text(
+                      'Nenhuma viagem encontrada para o periodo selecionado.',
+                    ),
+                  ),
+                )
+              else
+                for (final trip in filtered)
+                  _TripCard(
+                    trip: trip,
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => TripDetailPage(trip: trip),
+                        ),
+                      );
+                    },
+                  ),
+            ],
+          );
+        },
+        error: (error, _) => ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(24),
+          children: [Text('Falha ao carregar historico: $error')],
+        ),
+        loading: () => const Center(child: CircularProgressIndicator()),
       ),
     );
   }
@@ -129,6 +281,140 @@ final class _DriverHeader extends StatelessWidget {
                     ),
                   ],
                 ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+final class _TripHistoryFilters extends StatelessWidget {
+  const _TripHistoryFilters({
+    required this.startDate,
+    required this.endDate,
+    required this.onPickStart,
+    required this.onPickEnd,
+    required this.onClear,
+  });
+
+  final DateTime? startDate;
+  final DateTime? endDate;
+  final VoidCallback onPickStart;
+  final VoidCallback onPickEnd;
+  final VoidCallback onClear;
+
+  bool get hasFilters => startDate != null || endDate != null;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Filtrar historico',
+              style: Theme.of(
+                context,
+              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: _TripDateFilterButton(
+                    icon: Icons.event_outlined,
+                    label: startDate == null
+                        ? 'Data inicial'
+                        : _formatDate(startDate!),
+                    onPressed: onPickStart,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _TripDateFilterButton(
+                    icon: Icons.event_available_outlined,
+                    label: endDate == null
+                        ? 'Data final'
+                        : _formatDate(endDate!),
+                    onPressed: onPickEnd,
+                  ),
+                ),
+                if (hasFilters) ...[
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    height: 56,
+                    width: 48,
+                    child: IconButton.outlined(
+                      tooltip: 'Limpar filtros',
+                      onPressed: onClear,
+                      icon: const Icon(Icons.close),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+final class _TripDateFilterButton extends StatelessWidget {
+  const _TripDateFilterButton({
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 56,
+      child: OutlinedButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon),
+        label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+        style: OutlinedButton.styleFrom(
+          alignment: Alignment.centerLeft,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+        ),
+      ),
+    );
+  }
+}
+
+final class _TripHistorySummary extends StatelessWidget {
+  const _TripHistorySummary({required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = count == 1 ? 'viagem no periodo' : 'viagens no periodo';
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            const Icon(Icons.assessment_outlined),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                '$count $label',
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
               ),
             ),
           ],
@@ -278,4 +564,49 @@ final class _EmptyTrips extends StatelessWidget {
       ),
     );
   }
+}
+
+final class _EmptyTripHistory extends StatelessWidget {
+  const _EmptyTripHistory();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.history_outlined, size: 48, color: Colors.black),
+            const SizedBox(height: 14),
+            Text(
+              'Nenhuma viagem no historico',
+              textAlign: TextAlign.center,
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Viagens concluidas pelo administrativo ou pelo motorista aparecerao aqui.',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+DateTime _dateOnly(DateTime dateTime) {
+  return DateTime(dateTime.year, dateTime.month, dateTime.day);
+}
+
+String _formatDate(DateTime value) {
+  final local = value.toLocal();
+  final day = local.day.toString().padLeft(2, '0');
+  final month = local.month.toString().padLeft(2, '0');
+  final year = local.year.toString();
+  return '$day/$month/$year';
 }
