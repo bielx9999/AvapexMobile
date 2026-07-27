@@ -96,6 +96,10 @@ export function mapChecklist(id: string, data: Record<string, unknown>): Checkli
 }
 
 export function mapDeliveryReceipt(id: string, data: Record<string, unknown>): DeliveryReceipt {
+  const adminStatus = typeof data.adminStatus === 'string' ? data.adminStatus : 'pending';
+  const driverNotificationStatus =
+    typeof data.driverNotificationStatus === 'string' ? data.driverNotificationStatus : 'not_sent';
+
   return {
     id: typeof data.id === 'string' ? data.id : id,
     driverId: typeof data.driverId === 'string' ? data.driverId : '',
@@ -108,6 +112,12 @@ export function mapDeliveryReceipt(id: string, data: Record<string, unknown>): D
     physicalProofPhotoUrls: readStringList(data.physicalProofPhotoUrls),
     declaration: typeof data.declaration === 'string' ? data.declaration : '',
     createdAt: readDate(data.createdAt),
+    adminStatus: adminStatus as DeliveryReceipt['adminStatus'],
+    failureReason: typeof data.failureReason === 'string' ? data.failureReason : undefined,
+    driverNotificationMessage:
+      typeof data.driverNotificationMessage === 'string' ? data.driverNotificationMessage : undefined,
+    driverNotificationStatus: driverNotificationStatus as DeliveryReceipt['driverNotificationStatus'],
+    reviewedAt: readDate(data.reviewedAt),
   };
 }
 

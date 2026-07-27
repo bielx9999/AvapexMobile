@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { logoutAdmin, type AdminSession } from '../../auth/data/authRepository';
 import { ChecklistsPage } from '../../checklists/presentation/ChecklistsPage';
+import { ComprovantesPage } from '../../receipts/presentation/ComprovantesPage';
 import { adminReadRepository } from '../../shared/data/firestoreCollections';
 import { UsersPage } from '../../users/presentation/UsersPage';
 import { VehiclesPage } from '../../vehicles/presentation/VehiclesPage';
@@ -50,7 +51,7 @@ type AdminDashboardProps = {
   session: AdminSession;
 };
 
-type AdminPage = 'dashboard' | 'users' | 'vehicles' | 'checklists';
+type AdminPage = 'dashboard' | 'users' | 'vehicles' | 'checklists' | 'receipts';
 
 export function AdminDashboard({ session }: AdminDashboardProps) {
   const [data, setData] = useState<DashboardData>(emptyData);
@@ -110,14 +111,16 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
         ? 'Veiculos'
         : activePage === 'checklists'
           ? 'Checklists'
-        : 'Dashboard';
+          : activePage === 'receipts'
+            ? 'Comprovantes'
+            : 'Dashboard';
   const navItems: Array<{ key: AdminPage | 'placeholder'; label: string }> = [
     { key: 'dashboard', label: 'Dashboard' },
     { key: 'users', label: 'Usuarios' },
     { key: 'vehicles', label: 'Veiculos' },
     { key: 'placeholder', label: 'Viagens' },
     { key: 'checklists', label: 'Checklists' },
-    { key: 'placeholder', label: 'Comprovantes' },
+    { key: 'receipts', label: 'Comprovantes' },
     { key: 'placeholder', label: 'Abastecimento' },
   ];
 
@@ -225,6 +228,8 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
               showFilters={showChecklistFilters}
               users={data.users}
             />
+          ) : activePage === 'receipts' ? (
+            <ComprovantesPage loading={loading} onChanged={loadData} receipts={data.receipts} />
           ) : (
             <>
 

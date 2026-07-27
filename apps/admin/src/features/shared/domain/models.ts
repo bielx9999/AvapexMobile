@@ -80,6 +80,11 @@ export type DeliveryReceipt = {
   physicalProofPhotoUrls: string[];
   declaration: string;
   createdAt: Date | null;
+  adminStatus?: 'pending' | 'delivered' | 'failed';
+  failureReason?: string;
+  driverNotificationMessage?: string;
+  driverNotificationStatus?: 'not_sent' | 'queued' | 'sent';
+  reviewedAt?: Date | null;
 };
 
 export type FuelingRecord = {

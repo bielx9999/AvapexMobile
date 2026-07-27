@@ -81,6 +81,34 @@ export const adminReadRepository = {
 };
 
 export const adminWriteRepository = {
+  async markDeliveryReceiptDelivered(receiptId: string) {
+    try {
+      await updateDoc(doc(firestore, 'deliveryReceipts', receiptId), {
+        adminStatus: 'delivered',
+        failureReason: '',
+        driverNotificationMessage: '',
+        driverNotificationStatus: 'not_sent',
+        reviewedAt: serverTimestamp(),
+      });
+    } catch (error) {
+      throw mapFirebaseError(error, 'Erro ao registrar comprovante como entregue.');
+    }
+  },
+
+  async markDeliveryReceiptFailed(receiptId: string, reason: string, notificationMessage: string) {
+    try {
+      await updateDoc(doc(firestore, 'deliveryReceipts', receiptId), {
+        adminStatus: 'failed',
+        failureReason: reason.trim(),
+        driverNotificationMessage: notificationMessage.trim(),
+        driverNotificationStatus: notificationMessage.trim() ? 'queued' : 'not_sent',
+        reviewedAt: serverTimestamp(),
+      });
+    } catch (error) {
+      throw mapFirebaseError(error, 'Erro ao registrar falha no comprovante.');
+    }
+  },
+
   async saveVehicle(vehicle: Omit<Vehicle, 'id'> & { id?: string }) {
     try {
       const id = vehicle.id?.trim() || vehicle.plate.trim().toUpperCase();
