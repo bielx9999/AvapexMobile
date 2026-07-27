@@ -38,7 +38,7 @@ export const adminVehicleRepository = {
           type: input.type,
           status: input.status,
           model: vehicleTypeLabel(input.type),
-          currentKm: 0,
+          ...(!input.id ? { currentKm: 0 } : {}),
         },
         { merge: true },
       );
@@ -76,9 +76,8 @@ export function vehicleTypeLabel(type: VehicleType) {
 
 export function vehicleStatusLabel(status: VehicleStatus) {
   const labels: Record<VehicleStatus, string> = {
-    available: 'Disponivel',
-    in_transit: 'Em transito',
-    maintenance: 'Manutencao',
+    active: 'Ativo',
+    inactive: 'Desativado',
   };
   return labels[status];
 }

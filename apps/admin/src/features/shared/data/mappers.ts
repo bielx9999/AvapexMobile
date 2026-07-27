@@ -49,10 +49,7 @@ export function mapVehicle(id: string, data: Record<string, unknown>): Vehicle {
         ? type
         : 'truck',
     currentKm: typeof data.currentKm === 'number' ? data.currentKm : 0,
-    status:
-      data.status === 'in_transit' || data.status === 'maintenance'
-        ? data.status
-        : 'available',
+    status: data.status === 'inactive' || data.status === 'maintenance' ? 'inactive' : 'active',
     lastChecklistId: typeof data.lastChecklistId === 'string' ? data.lastChecklistId : undefined,
   };
 }

@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 enum VehicleStatus {
+  active('active'),
+  inactive('inactive'),
   available('available'),
   inTransit('in_transit'),
   maintenance('maintenance');

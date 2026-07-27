@@ -38,7 +38,10 @@ final class VehicleRepository {
 
   Stream<List<Vehicle>> watchAvailableVehicles() {
     return _vehicles
-        .where('status', isEqualTo: VehicleStatus.available.value)
+        .where(
+          'status',
+          whereIn: [VehicleStatus.active.value, VehicleStatus.available.value],
+        )
         .snapshots()
         .map(
           (snapshot) => snapshot.docs

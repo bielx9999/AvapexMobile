@@ -1,5 +1,5 @@
 import { FormEvent, type ReactNode, useMemo, useState } from 'react';
-import { Pencil, Plus, Search, Trash2, Wrench, X } from 'lucide-react';
+import { Ban, Pencil, Plus, Search, Trash2, UserCheck, X } from 'lucide-react';
 import {
   adminVehicleRepository,
   vehicleStatusLabel,
@@ -18,7 +18,7 @@ const initialForm = {
   fleetNumber: '',
   year: '',
   type: 'truck' as VehicleType,
-  status: 'available' as VehicleStatus,
+  status: 'active' as VehicleStatus,
 };
 
 export function VehiclesPage({ vehicles, loading, onChanged }: VehiclesPageProps) {
@@ -164,13 +164,16 @@ export function VehiclesPage({ vehicles, loading, onChanged }: VehiclesPageProps
                         <Pencil size={17} />
                       </IconButton>
                       <IconButton
-                        label="Enviar para manutencao"
+                        label={vehicle.status === 'active' ? 'Desativar veiculo' : 'Ativar veiculo'}
                         disabled={busyId === vehicle.id}
                         onClick={() =>
-                          void runVehicleAction(vehicle.id, () => adminVehicleRepository.setStatus(vehicle, 'maintenance'))
+                          void runVehicleAction(
+                            vehicle.id,
+                            () => adminVehicleRepository.setStatus(vehicle, vehicle.status === 'active' ? 'inactive' : 'active'),
+                          )
                         }
                       >
-                        <Wrench size={17} />
+                        {vehicle.status === 'active' ? <Ban size={17} /> : <UserCheck size={17} />}
                       </IconButton>
                       <IconButton
                         danger
@@ -268,9 +271,8 @@ export function VehiclesPage({ vehicles, loading, onChanged }: VehiclesPageProps
                         value={form.status}
                         onChange={(event) => setForm((current) => ({ ...current, status: event.target.value as VehicleStatus }))}
                       >
-                        <option value="available">Disponivel</option>
-                        <option value="in_transit">Em transito</option>
-                        <option value="maintenance">Manutencao</option>
+                        <option value="active">Ativo</option>
+                        <option value="inactive">Desativado</option>
                       </select>
                     </label>
                   </div>
@@ -357,11 +359,8 @@ function IconButton({ children, label, disabled, danger, onClick }: IconButtonPr
 
 function statusClass(status: VehicleStatus) {
   const base = 'ui-pill ';
-  if (status === 'maintenance') {
+  if (status === 'inactive') {
     return `${base}bg-red-50 text-red-700`;
-  }
-  if (status === 'in_transit') {
-    return `${base}bg-yellow-50 text-yellow-700`;
   }
   return `${base}bg-emerald-50 text-emerald-700`;
 }
