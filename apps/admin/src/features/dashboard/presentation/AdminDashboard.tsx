@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { logoutAdmin, type AdminSession } from '../../auth/data/authRepository';
 import { ChecklistsPage } from '../../checklists/presentation/ChecklistsPage';
+import { AbastecimentoPage } from '../../fueling/presentation/AbastecimentoPage';
 import { ComprovantesPage } from '../../receipts/presentation/ComprovantesPage';
 import { adminReadRepository } from '../../shared/data/firestoreCollections';
 import { UsersPage } from '../../users/presentation/UsersPage';
@@ -51,7 +52,7 @@ type AdminDashboardProps = {
   session: AdminSession;
 };
 
-type AdminPage = 'dashboard' | 'users' | 'vehicles' | 'checklists' | 'receipts';
+type AdminPage = 'dashboard' | 'users' | 'vehicles' | 'checklists' | 'receipts' | 'fueling';
 
 export function AdminDashboard({ session }: AdminDashboardProps) {
   const [data, setData] = useState<DashboardData>(emptyData);
@@ -113,7 +114,9 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
           ? 'Checklists'
           : activePage === 'receipts'
             ? 'Comprovantes'
-            : 'Dashboard';
+            : activePage === 'fueling'
+              ? 'Abastecimento'
+              : 'Dashboard';
   const navItems: Array<{ key: AdminPage | 'placeholder'; label: string }> = [
     { key: 'dashboard', label: 'Dashboard' },
     { key: 'users', label: 'Usuarios' },
@@ -121,7 +124,7 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
     { key: 'placeholder', label: 'Viagens' },
     { key: 'checklists', label: 'Checklists' },
     { key: 'receipts', label: 'Comprovantes' },
-    { key: 'placeholder', label: 'Abastecimento' },
+    { key: 'fueling', label: 'Abastecimento' },
   ];
 
   return (
@@ -230,6 +233,8 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
             />
           ) : activePage === 'receipts' ? (
             <ComprovantesPage loading={loading} onChanged={loadData} receipts={data.receipts} />
+          ) : activePage === 'fueling' ? (
+            <AbastecimentoPage fueling={data.fueling} loading={loading} onChanged={loadData} />
           ) : (
             <>
 

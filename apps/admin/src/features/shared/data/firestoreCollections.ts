@@ -109,6 +109,17 @@ export const adminWriteRepository = {
     }
   },
 
+  async updateFuelingNotificationStatus(recordId: string, status: string) {
+    try {
+      await updateDoc(doc(firestore, 'fuelingRecords', recordId), {
+        notificationStatus: status,
+        reviewedAt: serverTimestamp(),
+      });
+    } catch (error) {
+      throw mapFirebaseError(error, 'Erro ao atualizar abastecimento.');
+    }
+  },
+
   async saveVehicle(vehicle: Omit<Vehicle, 'id'> & { id?: string }) {
     try {
       const id = vehicle.id?.trim() || vehicle.plate.trim().toUpperCase();
