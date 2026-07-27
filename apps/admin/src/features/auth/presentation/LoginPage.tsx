@@ -57,7 +57,7 @@ export function LoginPage({ onSignedIn, message }: LoginPageProps) {
           <label className="relative block">
             <Mail className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-white" size={28} />
             <input
-              className="h-[54px] w-full rounded-[10px] border border-[#E8E1DF] bg-transparent pl-[58px] pr-4 text-sm text-white outline-none placeholder:text-white focus:border-white focus:ring-1 focus:ring-white"
+              className="h-[54px] w-full rounded-2xl border border-[#E8E1DF] bg-transparent pl-[58px] pr-4 text-sm text-white outline-none placeholder:text-white focus:border-white focus:ring-1 focus:ring-white"
               type="email"
               placeholder="Digite o email"
               value={email}
@@ -70,7 +70,7 @@ export function LoginPage({ onSignedIn, message }: LoginPageProps) {
           <label className="relative block">
             <Lock className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-white" size={28} />
             <input
-              className="h-[54px] w-full rounded-[10px] border border-[#E8E1DF] bg-transparent pl-[58px] pr-[94px] text-sm text-white outline-none placeholder:text-white focus:border-white focus:ring-1 focus:ring-white"
+              className="h-[54px] w-full rounded-2xl border border-[#E8E1DF] bg-transparent pl-[58px] pr-[94px] text-sm text-white outline-none placeholder:text-white focus:border-white focus:ring-1 focus:ring-white"
               type={showPassword ? 'text' : 'password'}
               placeholder="Digite a senha"
               value={password}
@@ -82,7 +82,7 @@ export function LoginPage({ onSignedIn, message }: LoginPageProps) {
               {password ? (
                 <button
                   aria-label="Limpar senha"
-                  className="flex h-10 w-10 items-center justify-center rounded text-white hover:bg-white/10"
+                  className="flex h-10 w-10 items-center justify-center rounded-xl text-white hover:bg-white/10"
                   onClick={() => setPassword('')}
                   type="button"
                 >
@@ -91,7 +91,7 @@ export function LoginPage({ onSignedIn, message }: LoginPageProps) {
               ) : null}
               <button
                 aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
-                className="flex h-10 w-10 items-center justify-center rounded text-white hover:bg-white/10"
+                className="flex h-10 w-10 items-center justify-center rounded-xl text-white hover:bg-white/10"
                 onClick={() => setShowPassword((current) => !current)}
                 type="button"
               >
@@ -107,13 +107,13 @@ export function LoginPage({ onSignedIn, message }: LoginPageProps) {
           </div>
 
           {error ? (
-            <p className="rounded-lg border border-[#B8B8B8] bg-white px-3 py-3 text-sm font-semibold text-black">
+            <p className="rounded-2xl border border-[#B8B8B8] bg-white px-3 py-3 text-sm font-semibold text-black">
               {error}
             </p>
           ) : null}
 
           <button
-            className="flex h-[54px] w-full items-center justify-center gap-2 rounded-[10px] bg-white font-medium text-black transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60"
+            className="flex h-[54px] w-full items-center justify-center gap-2 rounded-2xl bg-white font-medium text-black transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60"
             disabled={loading || googleLoading}
             type="submit"
           >
@@ -122,7 +122,7 @@ export function LoginPage({ onSignedIn, message }: LoginPageProps) {
           </button>
 
           <button
-            className="flex h-[52px] w-full items-center justify-center gap-3 rounded-[10px] bg-white font-medium text-black transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60"
+            className="flex h-[52px] w-full items-center justify-center gap-3 rounded-2xl bg-white font-medium text-black transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60"
             disabled={loading || googleLoading}
             onClick={() => void handleGoogleLogin()}
             type="button"

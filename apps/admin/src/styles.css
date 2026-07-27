@@ -22,3 +22,29 @@ select,
 textarea {
   font: inherit;
 }
+
+@layer components {
+  .ui-card {
+    @apply rounded-2xl border border-zinc-200 bg-white shadow-sm;
+  }
+
+  .ui-card-soft {
+    @apply rounded-2xl border border-zinc-200 bg-zinc-50 shadow-sm;
+  }
+
+  .ui-button {
+    @apply rounded-xl transition disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .ui-input {
+    @apply rounded-xl border border-zinc-300 bg-white outline-none focus:border-avapex-yellow focus:ring-2 focus:ring-avapex-yellow/30;
+  }
+
+  .ui-icon-button {
+    @apply rounded-xl border transition disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .ui-pill {
+    @apply rounded-full px-2.5 py-1 text-xs font-medium;
+  }
+}

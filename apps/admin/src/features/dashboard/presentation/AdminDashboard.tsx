@@ -117,7 +117,7 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
     <main className="min-h-screen bg-avapex-paper text-avapex-ink">
       <aside className="fixed left-0 top-0 hidden h-full w-64 bg-avapex-black px-5 py-6 text-white lg:block">
         <div className="mb-10 flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded bg-avapex-yellow font-black text-avapex-black">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-avapex-yellow font-black text-avapex-black">
             AV
           </div>
           <div>
@@ -129,7 +129,7 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
         <nav className="space-y-1 text-sm">
           {navItems.map((item) => (
               <button
-                className={`flex h-10 w-full items-center rounded px-3 text-left ${
+                className={`flex h-10 w-full items-center rounded-xl px-3 text-left ${
                   activePage === item.key
                     ? 'bg-avapex-yellow font-semibold text-avapex-black'
                     : 'text-zinc-200 hover:bg-white/10'
@@ -152,11 +152,11 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
             <p className="text-sm text-zinc-500">{pageSubtitle}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded border border-zinc-200 px-3 py-2 text-sm text-zinc-700">
+            <span className="rounded-2xl border border-zinc-200 px-3 py-2 text-sm text-zinc-700">
               {session.profile.name || session.firebaseUser.email}
             </span>
             <button
-              className="flex h-10 items-center gap-2 rounded border border-zinc-300 bg-white px-3 text-sm font-medium text-zinc-800 hover:bg-zinc-50"
+              className="ui-button flex h-10 items-center gap-2 border border-zinc-300 bg-white px-3 text-sm font-medium text-zinc-800 hover:bg-zinc-50"
               onClick={() => void loadData()}
               type="button"
             >
@@ -164,7 +164,7 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
               Atualizar
             </button>
             <button
-              className="flex h-10 items-center gap-2 rounded bg-avapex-black px-3 text-sm font-medium text-white hover:bg-black"
+              className="ui-button flex h-10 items-center gap-2 bg-avapex-black px-3 text-sm font-medium text-white hover:bg-black"
               onClick={() => void logoutAdmin()}
               type="button"
             >
@@ -175,7 +175,7 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
         </header>
 
         <div className="px-4 py-6 sm:px-6">
-          {error ? <p className="mb-4 rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
+          {error ? <p className="mb-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
 
           {activePage === 'users' ? (
             <UsersPage
@@ -191,10 +191,10 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
             {stats.map((stat) => {
               const Icon = stat.icon;
               return (
-                <article className="rounded border border-zinc-200 bg-white p-4" key={stat.label}>
+                <article className="ui-card p-4" key={stat.label}>
                   <div className="mb-4 flex items-center justify-between">
                     <span className="text-sm font-medium text-zinc-500">{stat.label}</span>
-                    <span className="flex h-9 w-9 items-center justify-center rounded bg-avapex-black text-white">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-avapex-black text-white">
                       <Icon size={18} />
                     </span>
                   </div>
@@ -205,7 +205,7 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
           </section>
 
           <section className="mt-6 grid gap-4 xl:grid-cols-[1.4fr_1fr]">
-            <div className="rounded border border-zinc-200 bg-white">
+            <div className="ui-card">
               <div className="border-b border-zinc-200 px-4 py-3">
                 <h2 className="font-semibold">Checklists recentes</h2>
               </div>
@@ -246,7 +246,7 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
               </div>
             </div>
 
-            <div className="rounded border border-zinc-200 bg-white">
+            <div className="ui-card">
               <div className="border-b border-zinc-200 px-4 py-3">
                 <h2 className="font-semibold">Abastecimentos recentes</h2>
               </div>
@@ -255,7 +255,7 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
                   <article className="px-4 py-3" key={record.id}>
                     <div className="flex items-center justify-between gap-2">
                       <p className="font-medium">{record.vehiclePlate}</p>
-                      <span className="rounded bg-zinc-100 px-2 py-1 text-xs uppercase text-zinc-600">
+                      <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-xs uppercase text-zinc-600">
                         {record.fuelType}
                       </span>
                     </div>
@@ -299,3 +299,4 @@ function checklistLabel(type: Checklist['type']) {
   };
   return labels[type] ?? type;
 }
+
