@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/errors/firebase_failure.dart';
 import '../../../core/providers/firebase_providers.dart';
 import '../../users/application/user_providers.dart';
+import '../../vehicles/data/models/vehicle_model.dart';
 import '../data/models/checklist_model.dart';
 import '../data/services/device_location_service.dart';
 
@@ -17,6 +18,10 @@ enum ChecklistAnswer {
   final String label;
 }
 
+final _vehicleChecklistVehiclesProvider = StreamProvider<List<Vehicle>>((ref) {
+  return ref.watch(vehicleRepositoryProvider).watchAllVehicles();
+});
+
 final class VehicleChecklistPage extends ConsumerStatefulWidget {
   const VehicleChecklistPage({super.key});
 
@@ -28,7 +33,6 @@ final class VehicleChecklistPage extends ConsumerStatefulWidget {
 final class _VehicleChecklistPageState
     extends ConsumerState<VehicleChecklistPage> {
   final _formKey = GlobalKey<FormState>();
-  final _plateController = TextEditingController();
   final _kmController = TextEditingController();
   final _notesController = TextEditingController();
   final _openedAt = DateTime.now();
@@ -37,6 +41,7 @@ final class _VehicleChecklistPageState
   };
 
   DeviceLocation? _location;
+  String? _selectedVehicleId;
   var _isLoadingLocation = true;
   var _isSaving = false;
   String? _locationMessage;
@@ -50,7 +55,6 @@ final class _VehicleChecklistPageState
 
   @override
   void dispose() {
-    _plateController.dispose();
     _kmController.dispose();
     _notesController.dispose();
     super.dispose();
@@ -170,7 +174,17 @@ final class _VehicleChecklistPageState
 
     try {
       final profile = ref.read(currentUserProfileProvider).asData?.value;
-      final plate = _normalizedPlate(_plateController.text);
+      final vehicles = ref
+          .read(_vehicleChecklistVehiclesProvider)
+          .asData
+          ?.value;
+      final selectedVehicle = vehicles == null
+          ? null
+          : _vehicleById(vehicles, _selectedVehicleId);
+      if (selectedVehicle == null) {
+        setState(() => _errorMessage = 'Selecione o veiculo inspecionado.');
+        return;
+      }
       final answers = {
         for (final item in _vehicleChecklistItems)
           item.id: {
@@ -184,7 +198,7 @@ final class _VehicleChecklistPageState
         id: 'vehicle_${uid}_${_openedAt.microsecondsSinceEpoch}',
         tripId: 'daily_vehicle',
         driverId: uid,
-        vehicleId: plate,
+        vehicleId: selectedVehicle.id,
         type: ChecklistType.vehicleDaily,
         kmRegistered: num.parse(_kmController.text),
         items: ChecklistItems(
@@ -201,7 +215,7 @@ final class _VehicleChecklistPageState
         signatureUrl: '',
         createdAt: _openedAt,
         category: 'vehicle_daily',
-        vehiclePlate: plate,
+        vehiclePlate: selectedVehicle.plate,
         driverName: profile?.name ?? authUser?.displayName ?? authUser?.email,
         location: _location?.toFirestore(),
         answers: answers,
@@ -242,6 +256,7 @@ final class _VehicleChecklistPageState
   @override
   Widget build(BuildContext context) {
     final profile = ref.watch(currentUserProfileProvider);
+    final vehicles = ref.watch(_vehicleChecklistVehiclesProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Checklist de Veiculo')),
@@ -250,19 +265,32 @@ final class _VehicleChecklistPageState
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
           children: [
-            _HeaderCard(
-              plateController: _plateController,
-              kmController: _kmController,
-              openedAt: _openedAt,
-              locationText: _isLoadingLocation
-                  ? 'Obtendo localizacao...'
-                  : _locationMessage ?? 'Localizacao indisponivel',
-              onReloadLocation: _isLoadingLocation ? null : _loadLocation,
-              driverText: profile.when(
-                data: (user) => user?.name ?? 'Usuario logado',
-                error: (_, _) => 'Usuario logado',
-                loading: () => 'Carregando usuario...',
+            vehicles.when(
+              data: (items) => _HeaderCard(
+                vehicles: items,
+                selectedVehicleId: _selectedVehicleId,
+                onVehicleChanged: _isSaving
+                    ? null
+                    : (value) => setState(() {
+                        _selectedVehicleId = value;
+                        _errorMessage = null;
+                      }),
+                kmController: _kmController,
+                openedAt: _openedAt,
+                locationText: _isLoadingLocation
+                    ? 'Obtendo localizacao...'
+                    : _locationMessage ?? 'Localizacao indisponivel',
+                onReloadLocation: _isLoadingLocation ? null : _loadLocation,
+                driverText: profile.when(
+                  data: (user) => user?.name ?? 'Usuario logado',
+                  error: (_, _) => 'Usuario logado',
+                  loading: () => 'Carregando usuario...',
+                ),
               ),
+              error: (error, _) => _HeaderLoadError(
+                message: 'Falha ao carregar veiculos: $error',
+              ),
+              loading: () => const _HeaderLoadingCard(),
             ),
             const SizedBox(height: 12),
             for (final section in _vehicleChecklistSections) ...[
@@ -324,7 +352,9 @@ final class _VehicleChecklistPageState
 
 final class _HeaderCard extends StatelessWidget {
   const _HeaderCard({
-    required this.plateController,
+    required this.vehicles,
+    required this.selectedVehicleId,
+    required this.onVehicleChanged,
     required this.kmController,
     required this.openedAt,
     required this.locationText,
@@ -332,7 +362,9 @@ final class _HeaderCard extends StatelessWidget {
     required this.onReloadLocation,
   });
 
-  final TextEditingController plateController;
+  final List<Vehicle> vehicles;
+  final String? selectedVehicleId;
+  final ValueChanged<String?>? onVehicleChanged;
   final TextEditingController kmController;
   final DateTime openedAt;
   final String locationText;
@@ -354,23 +386,36 @@ final class _HeaderCard extends StatelessWidget {
               ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 12),
-            TextFormField(
-              controller: plateController,
-              textCapitalization: TextCapitalization.characters,
+            DropdownButtonFormField<String>(
+              initialValue: selectedVehicleId,
+              isExpanded: true,
               decoration: const InputDecoration(
-                labelText: 'Placa do veiculo',
-                prefixIcon: Icon(Icons.pin_outlined),
+                labelText: 'Veiculo inspecionado',
+                prefixIcon: Icon(Icons.local_shipping_outlined),
               ),
-              validator: (value) {
-                final plate = _normalizedPlate(value ?? '');
-                final isValid = RegExp(
-                  r'^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$',
-                ).hasMatch(plate);
-                return isValid
-                    ? null
-                    : 'Informe uma placa valida: ABC-1234 ou ABC1D23.';
-              },
+              items: [
+                for (final vehicle in vehicles)
+                  DropdownMenuItem(
+                    value: vehicle.id,
+                    child: Text(
+                      '${vehicle.plate} - ${vehicle.model}',
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+              ],
+              onChanged: vehicles.isEmpty ? null : onVehicleChanged,
+              validator: (value) =>
+                  value == null ? 'Selecione o veiculo.' : null,
             ),
+            if (vehicles.isEmpty) ...[
+              const SizedBox(height: 8),
+              const _InfoBanner(
+                icon: Icons.info_outline,
+                label: 'Veiculos',
+                value:
+                    'Nenhum veiculo cadastrado. O painel administrativo fara esse cadastro.',
+              ),
+            ],
             const SizedBox(height: 10),
             TextFormField(
               controller: kmController,
@@ -407,6 +452,89 @@ final class _HeaderCard extends StatelessWidget {
               icon: Icons.person_outline,
               label: 'Motorista',
               value: driverText,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+final class _HeaderLoadingCard extends StatelessWidget {
+  const _HeaderLoadingCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Card(
+      child: Padding(
+        padding: EdgeInsets.all(18),
+        child: Center(child: CircularProgressIndicator()),
+      ),
+    );
+  }
+}
+
+final class _HeaderLoadError extends StatelessWidget {
+  const _HeaderLoadError({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            const Icon(Icons.error_outline),
+            const SizedBox(width: 10),
+            Expanded(child: Text(message)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+final class _InfoBanner extends StatelessWidget {
+  const _InfoBanner({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: const Color(0xFFF6F6F6),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            Icon(icon),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(value),
+                ],
+              ),
             ),
           ],
         ),
@@ -682,8 +810,16 @@ _VehicleChecklistItem _itemById(String id) {
   return _vehicleChecklistItems.firstWhere((item) => item.id == id);
 }
 
-String _normalizedPlate(String value) {
-  return value.toUpperCase().replaceAll(RegExp(r'[^A-Z0-9]'), '');
+Vehicle? _vehicleById(List<Vehicle> vehicles, String? vehicleId) {
+  if (vehicleId == null) {
+    return null;
+  }
+  for (final vehicle in vehicles) {
+    if (vehicle.id == vehicleId) {
+      return vehicle;
+    }
+  }
+  return null;
 }
 
 String _formatDateTime(DateTime dateTime) {
