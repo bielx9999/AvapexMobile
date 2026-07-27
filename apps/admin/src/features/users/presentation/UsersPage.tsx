@@ -128,7 +128,6 @@ export function UsersPage({ users, loading, currentUid, onChanged }: UsersPagePr
         <div className="flex flex-col gap-3 border-b border-zinc-200 px-4 py-3 md:flex-row md:items-center md:justify-between">
           <div>
             <h2 className="font-semibold">Gerenciar usuarios</h2>
-            <p className="mt-1 text-sm text-zinc-500">Bloqueio, redefinicao de senha e exclusao de cadastro.</p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <button

@@ -99,10 +99,6 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
   const recentChecklists = data.checklists.slice(0, 6);
   const recentFueling = data.fueling.slice(0, 5);
   const pageTitle = activePage === 'users' ? 'Usuarios' : 'Dashboard';
-  const pageSubtitle =
-    activePage === 'users'
-      ? 'Cadastro, bloqueio e gestao de acesso'
-      : 'Integrado ao Firebase do app mobile';
   const navItems: Array<{ key: AdminPage | 'placeholder'; label: string }> = [
     { key: 'dashboard', label: 'Dashboard' },
     { key: 'users', label: 'Usuarios' },
@@ -149,7 +145,6 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
         <header className="flex min-h-20 flex-col justify-between gap-3 border-b border-zinc-200 bg-white px-4 py-4 sm:flex-row sm:items-center sm:px-6">
           <div>
             <h1 className="text-2xl font-semibold tracking-normal">{pageTitle}</h1>
-            <p className="text-sm text-zinc-500">{pageSubtitle}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <span className="rounded-2xl border border-zinc-200 px-3 py-2 text-sm text-zinc-700">
