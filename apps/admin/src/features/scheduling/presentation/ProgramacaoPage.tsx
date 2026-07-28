@@ -236,7 +236,7 @@ export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: 
       }
       const scheduledAt = new Date(form.scheduledAt);
       const expectedArrivalAt = form.expectedArrivalAt ? new Date(form.expectedArrivalAt) : null;
-      const savedTripId = await adminWriteRepository.saveTrip({
+      await adminWriteRepository.saveTrip({
         additionalInfo: form.additionalInfo,
         customerRequestNumber: form.customerRequestNumber,
         destination: form.destination,
@@ -256,41 +256,6 @@ export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: 
         vehicleModel: vehicle.model,
         vehiclePlate: vehicle.plate,
       });
-      if (selectedStatus.programmingStatus === 'released') {
-        const result = await adminWriteRepository.updateTripProgrammingStatus(
-          {
-            additionalInfo: form.additionalInfo,
-            completedAt: editingTrip?.completedAt ?? null,
-            customerRequestNumber: form.customerRequestNumber,
-            deliveryDocs: editingTrip?.deliveryDocs ?? [],
-            destination: form.destination,
-            driverId: form.driverId,
-            driverName: driver.name || driver.email,
-            expectedArrivalAt,
-            id: savedTripId,
-            operationType: form.operationType,
-            operationalStatus: selectedStatus.operationalStatus,
-            origin: form.origin,
-            programmedVehicleType: form.programmedVehicleType,
-            programmingStatus: selectedStatus.programmingStatus,
-            returnGeneratedTripId: editingTrip?.returnGeneratedTripId,
-            returnSourceTripId: editingTrip?.returnSourceTripId,
-            returnTrip: form.returnTrip,
-            scheduledAt,
-            startedAt: editingTrip?.startedAt ?? null,
-            status: 'completed',
-            unloadingGeneratedTripId: editingTrip?.unloadingGeneratedTripId,
-            unloadingSourceTripId: editingTrip?.unloadingSourceTripId,
-            vehicleId: form.vehicleId,
-            vehicleModel: vehicle.model,
-            vehiclePlate: vehicle.plate,
-          },
-          selectedStatus.programmingStatus,
-          selectedStatus.operationalStatus,
-          form.operationType,
-        );
-        revealGeneratedScheduling(result);
-      }
       closeForm();
       await onChanged();
     } catch (submitError) {
@@ -308,28 +273,18 @@ export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: 
     setBusyTripId(trip.id);
     setError('');
     try {
-      const result = await adminWriteRepository.updateTripProgrammingStatus(
+      await adminWriteRepository.updateTripProgrammingStatus(
         trip,
         selected.programmingStatus,
         selected.operationalStatus,
         selected.operationType ?? trip.operationType,
       );
-      revealGeneratedScheduling(result);
       await onChanged();
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : 'Erro ao atualizar programacao.');
     } finally {
       setBusyTripId('');
     }
-  }
-
-  function revealGeneratedScheduling(result: Awaited<ReturnType<typeof adminWriteRepository.updateTripProgrammingStatus>>) {
-    if (!result) {
-      return;
-    }
-    const generatedDate = formatDateInput(result.generatedDate);
-    setStatusFilter('all');
-    setEndDate((current) => (!current || current < generatedDate ? generatedDate : current));
   }
 
   return (
@@ -348,31 +303,31 @@ export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: 
         ))}
       </section>
 
-      <section className="ui-card overflow-hidden">
-        <div className="border-b border-zinc-200 bg-white px-4 py-3">
+      <section className="overflow-hidden rounded-[28px] border border-zinc-200 bg-white shadow-sm">
+        <div className="border-b border-zinc-200 bg-gradient-to-r from-zinc-950 via-zinc-900 to-zinc-800 px-5 py-4 text-white">
           <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
             <div>
-              <h2 className="font-semibold">Programacao diaria</h2>
+              <h2 className="text-lg font-semibold">Programacao diaria</h2>
             </div>
             <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[140px_140px_230px_190px_260px_auto]">
-              <input className="ui-input h-10 px-3 text-sm" type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
-              <input className="ui-input h-10 px-3 text-sm" type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
-              <select className="ui-input h-10 px-3 text-sm" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as 'all' | DailyStatusValue)}>
+              <input className="h-10 rounded-2xl border border-white/15 bg-white/10 px-3 text-sm text-white outline-none focus:border-avapex-yellow" type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
+              <input className="h-10 rounded-2xl border border-white/15 bg-white/10 px-3 text-sm text-white outline-none focus:border-avapex-yellow" type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
+              <select className="h-10 rounded-2xl border border-white/15 bg-white/10 px-3 text-sm text-white outline-none focus:border-avapex-yellow" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as 'all' | DailyStatusValue)}>
                 <option value="all">Todos status</option>
                 {dailyStatusOptions.map((option) => (
                   <option key={option.value} value={option.value}>{option.label}</option>
                 ))}
               </select>
-              <select className="ui-input h-10 px-3 text-sm" value={driverId} onChange={(event) => setDriverId(event.target.value)}>
+              <select className="h-10 rounded-2xl border border-white/15 bg-white/10 px-3 text-sm text-white outline-none focus:border-avapex-yellow" value={driverId} onChange={(event) => setDriverId(event.target.value)}>
                 <option value="">Todos motoristas</option>
                 {drivers.map((driver) => (
                   <option key={driver.uid} value={driver.uid}>{driver.name || driver.email}</option>
                 ))}
               </select>
               <label className="relative block">
-                <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" size={18} />
+                <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-white/55" size={18} />
                 <input
-                  className="ui-input h-10 w-full pl-10 pr-3 text-sm"
+                  className="h-10 w-full rounded-2xl border border-white/15 bg-white/10 pl-10 pr-3 text-sm text-white outline-none placeholder:text-white/50 focus:border-avapex-yellow"
                   placeholder="Buscar solicitacao, rota, placa"
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
@@ -390,92 +345,88 @@ export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: 
           </div>
         </div>
 
-        <div className="overflow-x-auto bg-white">
-          <div className="min-w-[1680px]">
-            <div className="grid grid-cols-[120px_120px_150px_150px_220px_240px_110px_135px_95px_150px_220px_140px_240px_72px] border-b-2 border-avapex-black text-center text-sm font-semibold">
-              <div className="border-r border-zinc-400 bg-zinc-900 px-3 py-3 text-white">{formatDateOnly(new Date())}</div>
-              <div className="border-r border-zinc-400 bg-white px-3 py-3">{filteredTrips.length} linhas</div>
-              <div className="col-span-2 border-r border-zinc-400 bg-zinc-900 px-3 py-3 text-white">PROGRAMACAO</div>
-              <div className="col-span-9 border-r border-zinc-400 bg-white px-3 py-3 text-avapex-black">AVAPEX - CARGA/DESCARGA</div>
-              <div className="bg-avapex-yellow px-3 py-3 text-avapex-black">ADM</div>
-            </div>
+        <div className="bg-zinc-50/80 p-4">
+          <div className="mb-3 grid gap-3 md:grid-cols-4">
+            <SummaryStrip label="Hoje" value={formatDateOnly(new Date())} />
+            <SummaryStrip label="Exibindo" value={`${filteredTrips.length} registros`} />
+            <SummaryStrip label="Periodo" value={`${formatFilterDate(startDate)} ate ${formatFilterDate(endDate)}`} />
+            <SummaryStrip label="Modelo" value="Carga / Descarga" highlighted />
+          </div>
 
-            <table className="w-full border-separate border-spacing-0 text-left text-xs">
-              <thead className="sticky top-0 z-10 text-[11px] uppercase text-avapex-black">
-                <tr>
-                  <SpreadsheetHeader className="w-[120px] bg-white">Data - sol</SpreadsheetHeader>
-                  <SpreadsheetHeader className="w-[120px] bg-white">Horario sol</SpreadsheetHeader>
-                  <SpreadsheetHeader className="w-[150px] bg-zinc-900 text-white">Previsao de chegada</SpreadsheetHeader>
-                  <SpreadsheetHeader className="w-[150px] bg-white">Carga / descarga</SpreadsheetHeader>
-                  <SpreadsheetHeader className="w-[220px] bg-avapex-yellow">Origem</SpreadsheetHeader>
-                  <SpreadsheetHeader className="w-[240px] bg-avapex-yellow">Destino</SpreadsheetHeader>
-                  <SpreadsheetHeader className="w-[110px] bg-zinc-800 text-white">Inf. adicional</SpreadsheetHeader>
-                  <SpreadsheetHeader className="w-[135px] bg-avapex-yellow">Solicitacao</SpreadsheetHeader>
-                  <SpreadsheetHeader className="w-[95px] bg-avapex-yellow">Retorno</SpreadsheetHeader>
-                  <SpreadsheetHeader className="w-[150px] bg-zinc-900 text-white">Veiculo</SpreadsheetHeader>
-                  <SpreadsheetHeader className="w-[220px] bg-zinc-900 text-white">Motorista</SpreadsheetHeader>
-                  <SpreadsheetHeader className="w-[140px] bg-zinc-900 text-white">Placa</SpreadsheetHeader>
-                  <SpreadsheetHeader className="w-[240px] bg-avapex-yellow">Status</SpreadsheetHeader>
-                  <SpreadsheetHeader className="w-[72px] bg-zinc-100 text-right">Acoes</SpreadsheetHeader>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredTrips.map((trip, index) => {
-                  const currentStatus = findDailyStatusOption(trip);
-                  return (
-                    <tr className={index % 2 === 0 ? 'bg-white' : 'bg-zinc-50/70'} key={trip.id}>
-                      <SpreadsheetCell>{formatDateOnly(trip.scheduledAt)}</SpreadsheetCell>
-                      <SpreadsheetCell>{formatTimeOnly(trip.scheduledAt)}</SpreadsheetCell>
-                      <SpreadsheetCell>{formatDateTimeShort(trip.expectedArrivalAt ?? null)}</SpreadsheetCell>
-                      <SpreadsheetCell>
-                        <span className="rounded-lg bg-zinc-100 px-2 py-1 font-semibold text-zinc-800">{operationTypeLabel(trip.operationType)}</span>
-                      </SpreadsheetCell>
-                      <SpreadsheetCell className="font-medium">{trip.origin || '-'}</SpreadsheetCell>
-                      <SpreadsheetCell className="font-medium">{trip.destination || '-'}</SpreadsheetCell>
-                      <SpreadsheetCell>
-                        <div className="flex flex-col gap-1">
-                          <span>{trip.additionalInfo || '-'}</span>
-                          <GeneratedBadges trip={trip} />
-                        </div>
-                      </SpreadsheetCell>
-                      <SpreadsheetCell className="font-semibold">{trip.customerRequestNumber || '-'}</SpreadsheetCell>
-                      <SpreadsheetCell>
-                        <span className={`rounded-lg px-2 py-1 font-semibold ${trip.returnTrip ? 'bg-avapex-yellow text-avapex-black' : 'bg-zinc-100 text-zinc-700'}`}>
-                          {trip.returnTrip ? 'SIM' : 'NAO'}
-                        </span>
-                      </SpreadsheetCell>
-                      <SpreadsheetCell>{programmedVehicleTypeLabel(trip.programmedVehicleType).toUpperCase()}</SpreadsheetCell>
-                      <SpreadsheetCell>{trip.driverName || driverNames.get(trip.driverId) || trip.driverId}</SpreadsheetCell>
-                      <SpreadsheetCell className="font-semibold">{trip.vehiclePlate || vehicleNames.get(trip.vehicleId) || trip.vehicleId}</SpreadsheetCell>
-                      <SpreadsheetCell>
-                        <select
-                          className="h-9 w-full rounded-lg border border-zinc-300 bg-white px-2 text-xs font-semibold uppercase outline-none focus:border-avapex-yellow focus:ring-2 focus:ring-avapex-yellow/30"
-                          disabled={busyTripId === trip.id}
-                          value={currentStatus.value}
-                          onChange={(event) => void updateDailyStatus(trip, event.target.value as DailyStatusValue)}
-                        >
-                          {dailyStatusOptions.map((option) => (
-                            <option key={option.value} value={option.value}>{option.label}</option>
-                          ))}
-                        </select>
-                      </SpreadsheetCell>
-                      <SpreadsheetCell className="text-right">
-                        <button className="ui-icon-button inline-flex h-8 w-8 items-center justify-center border-zinc-300 text-zinc-700 hover:bg-white" disabled={busyTripId === trip.id} onClick={() => openEditForm(trip)} title="Editar programacao" type="button">
-                          <Pencil size={15} />
-                        </button>
-                      </SpreadsheetCell>
-                    </tr>
-                  );
-                })}
-                {!loading && filteredTrips.length === 0 ? (
+          <div className="overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1580px] border-separate border-spacing-0 text-left text-xs">
+                <thead className="sticky top-0 z-10 bg-zinc-950 text-[11px] uppercase text-white">
                   <tr>
-                    <td className="px-4 py-8 text-center text-sm text-zinc-500" colSpan={14}>
-                      Nenhuma programacao encontrada.
-                    </td>
+                    <SpreadsheetHeader>Data sol</SpreadsheetHeader>
+                    <SpreadsheetHeader>Horario</SpreadsheetHeader>
+                    <SpreadsheetHeader>Previsao</SpreadsheetHeader>
+                    <SpreadsheetHeader>Tipo</SpreadsheetHeader>
+                    <SpreadsheetHeader>Origem</SpreadsheetHeader>
+                    <SpreadsheetHeader>Destino</SpreadsheetHeader>
+                    <SpreadsheetHeader>Inf. adicional</SpreadsheetHeader>
+                    <SpreadsheetHeader>Solicitacao</SpreadsheetHeader>
+                    <SpreadsheetHeader>Retorno</SpreadsheetHeader>
+                    <SpreadsheetHeader>Veiculo</SpreadsheetHeader>
+                    <SpreadsheetHeader>Motorista</SpreadsheetHeader>
+                    <SpreadsheetHeader>Placa</SpreadsheetHeader>
+                    <SpreadsheetHeader>Status</SpreadsheetHeader>
+                    <SpreadsheetHeader className="text-right">Acoes</SpreadsheetHeader>
                   </tr>
-                ) : null}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {filteredTrips.map((trip) => {
+                    const currentStatus = findDailyStatusOption(trip);
+                    return (
+                      <tr className="group bg-white transition hover:bg-yellow-50/55" key={trip.id}>
+                        <SpreadsheetCell>{formatDateOnly(trip.scheduledAt)}</SpreadsheetCell>
+                        <SpreadsheetCell>{formatTimeOnly(trip.scheduledAt)}</SpreadsheetCell>
+                        <SpreadsheetCell>{formatDateTimeShort(trip.expectedArrivalAt ?? null)}</SpreadsheetCell>
+                        <SpreadsheetCell>
+                          <span className={operationTypeChipClass(trip.operationType)}>{operationTypeLabel(trip.operationType)}</span>
+                        </SpreadsheetCell>
+                        <SpreadsheetCell className="font-medium">{trip.origin || '-'}</SpreadsheetCell>
+                        <SpreadsheetCell className="font-medium">{trip.destination || '-'}</SpreadsheetCell>
+                        <SpreadsheetCell className="max-w-[210px] truncate" title={trip.additionalInfo || ''}>{trip.additionalInfo || '-'}</SpreadsheetCell>
+                        <SpreadsheetCell className="font-semibold">{trip.customerRequestNumber || '-'}</SpreadsheetCell>
+                        <SpreadsheetCell>
+                          <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${trip.returnTrip ? 'bg-avapex-yellow text-avapex-black' : 'bg-zinc-100 text-zinc-600'}`}>
+                            {trip.returnTrip ? 'SIM' : 'NAO'}
+                          </span>
+                        </SpreadsheetCell>
+                        <SpreadsheetCell>{programmedVehicleTypeLabel(trip.programmedVehicleType)}</SpreadsheetCell>
+                        <SpreadsheetCell>{trip.driverName || driverNames.get(trip.driverId) || trip.driverId}</SpreadsheetCell>
+                        <SpreadsheetCell className="font-semibold">{trip.vehiclePlate || vehicleNames.get(trip.vehicleId) || trip.vehicleId}</SpreadsheetCell>
+                        <SpreadsheetCell>
+                          <select
+                            className="h-9 w-full rounded-full border border-zinc-200 bg-zinc-50 px-3 text-xs font-semibold uppercase text-zinc-800 outline-none transition focus:border-avapex-yellow focus:bg-white focus:ring-2 focus:ring-avapex-yellow/30"
+                            disabled={busyTripId === trip.id}
+                            value={currentStatus.value}
+                            onChange={(event) => void updateDailyStatus(trip, event.target.value as DailyStatusValue)}
+                          >
+                            {dailyStatusOptions.map((option) => (
+                              <option key={option.value} value={option.value}>{option.label}</option>
+                            ))}
+                          </select>
+                        </SpreadsheetCell>
+                        <SpreadsheetCell className="text-right">
+                          <button className="ui-icon-button inline-flex h-9 w-9 items-center justify-center border-zinc-200 bg-white text-zinc-700 shadow-sm hover:border-avapex-yellow hover:bg-avapex-yellow" disabled={busyTripId === trip.id} onClick={() => openEditForm(trip)} title="Editar programacao" type="button">
+                            <Pencil size={15} />
+                          </button>
+                        </SpreadsheetCell>
+                      </tr>
+                    );
+                  })}
+                  {!loading && filteredTrips.length === 0 ? (
+                    <tr>
+                      <td className="px-4 py-8 text-center text-sm text-zinc-500" colSpan={14}>
+                        Nenhuma programacao encontrada.
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       </section>
@@ -611,30 +562,28 @@ export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: 
   );
 }
 
-function GeneratedBadges({ trip }: { trip: Trip }) {
-  return (
-    <div className="flex flex-wrap gap-1">
-      {trip.returnGeneratedTripId ? <span className="rounded-md bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">Retorno gerado</span> : null}
-      {trip.returnSourceTripId ? <span className="rounded-md bg-sky-50 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700">Retorno</span> : null}
-      {trip.unloadingGeneratedTripId ? <span className="rounded-md bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">Descarga gerada</span> : null}
-      {trip.unloadingSourceTripId ? <span className="rounded-md bg-zinc-100 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-700">Descarga</span> : null}
-    </div>
-  );
-}
-
 function SpreadsheetHeader({ children, className = '' }: { children: ReactNode; className?: string }) {
   return (
-    <th className={`border-b-2 border-r border-avapex-black px-3 py-3 text-center font-semibold ${className}`}>
+    <th className={`border-b border-r border-white/10 px-3 py-3 text-left font-semibold last:border-r-0 ${className}`}>
       {children}
     </th>
   );
 }
 
-function SpreadsheetCell({ children, className = '' }: { children: ReactNode; className?: string }) {
+function SpreadsheetCell({ children, className = '', title }: { children: ReactNode; className?: string; title?: string }) {
   return (
-    <td className={`border-b border-r border-zinc-300 px-3 py-2 align-middle text-zinc-800 ${className}`}>
+    <td className={`border-b border-zinc-100 px-3 py-3 align-middle text-zinc-800 ${className}`} title={title}>
       {children}
     </td>
+  );
+}
+
+function SummaryStrip({ highlighted, label, value }: { highlighted?: boolean; label: string; value: string }) {
+  return (
+    <div className={`rounded-2xl border px-4 py-3 ${highlighted ? 'border-yellow-200 bg-avapex-yellow text-avapex-black' : 'border-zinc-200 bg-white text-zinc-900'}`}>
+      <span className="block text-[11px] font-semibold uppercase text-zinc-500">{label}</span>
+      <strong className="mt-1 block text-sm">{value}</strong>
+    </div>
   );
 }
 
@@ -736,8 +685,21 @@ function operationTypeLabel(type?: ProgrammingOperationType) {
   return type === 'unloading' ? 'DESCARGA' : 'CARGA';
 }
 
+function operationTypeChipClass(type?: ProgrammingOperationType) {
+  return type === 'unloading'
+    ? 'rounded-full bg-zinc-900 px-2.5 py-1 text-[11px] font-semibold text-white'
+    : 'rounded-full bg-avapex-yellow px-2.5 py-1 text-[11px] font-semibold text-avapex-black';
+}
+
 function programmedVehicleTypeLabel(type?: ProgrammedVehicleType) {
   return programmedVehicleOptions.find((option) => option.value === type)?.label ?? '-';
+}
+
+function formatFilterDate(value: string) {
+  if (!value) {
+    return '-';
+  }
+  return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short' }).format(new Date(`${value}T00:00:00`));
 }
 
 function formatDateOnly(value: Date | null) {
@@ -777,9 +739,4 @@ function formatDateTimeInput(value: Date | null) {
   }
   const offset = value.getTimezoneOffset() * 60_000;
   return new Date(value.getTime() - offset).toISOString().slice(0, 16);
-}
-
-function formatDateInput(value: Date) {
-  const offset = value.getTimezoneOffset() * 60_000;
-  return new Date(value.getTime() - offset).toISOString().slice(0, 10);
 }

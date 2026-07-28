@@ -10,7 +10,6 @@ import {
   setDoc,
   updateDoc,
   where,
-  writeBatch,
   type DocumentData,
   type QueryConstraint,
 } from 'firebase/firestore';
@@ -73,12 +72,6 @@ function tripStatusFromProgrammingStatus(programmingStatus: NonNullable<Trip['pr
   return 'in_progress';
 }
 
-function nextDaySameTime(value: Date | null) {
-  const nextDate = value ? new Date(value) : new Date();
-  nextDate.setDate(nextDate.getDate() + 1);
-  return nextDate;
-}
-
 function defaultOperationalStatus(programmingStatus: NonNullable<Trip['programmingStatus']>): Trip['operationalStatus'] {
   if (programmingStatus === 'in_transit') {
     return 'transit_to_loading';
@@ -94,12 +87,6 @@ function defaultOperationalStatus(programmingStatus: NonNullable<Trip['programmi
   }
   return undefined;
 }
-
-type GeneratedSchedulingResult = {
-  generatedDate: Date;
-  generatedTripId: string;
-  type: 'return' | 'unloading';
-};
 
 export const adminReadRepository = {
   users: () => listCollection<AppUser>('users', [orderBy('createdAt', 'desc'), limit(200)], 'Erro ao listar usuarios.'),
@@ -224,7 +211,7 @@ export const adminWriteRepository = {
     programmingStatus: NonNullable<Trip['programmingStatus']>,
     operationalStatus?: Trip['operationalStatus'],
     operationType?: Trip['operationType'],
-  ): Promise<GeneratedSchedulingResult | null> {
+  ) {
     try {
       const status = tripStatusFromProgrammingStatus(programmingStatus);
       const data: DocumentData = {
@@ -241,67 +228,7 @@ export const adminWriteRepository = {
         data.completedAt = serverTimestamp();
       }
 
-      const tripRef = doc(firestore, 'trips', trip.id);
-      const shouldCreateReturnTrip =
-        programmingStatus === 'released' &&
-        trip.returnTrip === true &&
-        !trip.returnGeneratedTripId &&
-        !trip.returnSourceTripId &&
-        !trip.unloadingSourceTripId;
-      const shouldCreateNextDayUnloading =
-        programmingStatus === 'released' &&
-        trip.returnTrip !== true &&
-        !trip.unloadingGeneratedTripId &&
-        !trip.returnSourceTripId &&
-        !trip.unloadingSourceTripId;
-
-      if (!shouldCreateReturnTrip && !shouldCreateNextDayUnloading) {
-        await updateDoc(tripRef, data);
-        return null;
-      }
-
-      const generatedRef = doc(collection(firestore, 'trips'));
-      const generatedDate = nextDaySameTime(trip.scheduledAt);
-      const batch = writeBatch(firestore);
-      batch.update(tripRef, shouldCreateReturnTrip
-        ? {
-            ...data,
-            returnGeneratedTripId: generatedRef.id,
-          }
-        : {
-            ...data,
-            unloadingGeneratedTripId: generatedRef.id,
-          });
-      batch.set(generatedRef, {
-        id: generatedRef.id,
-        driverId: trip.driverId,
-        vehicleId: trip.vehicleId,
-        origin: shouldCreateReturnTrip ? trip.destination : trip.origin,
-        destination: shouldCreateReturnTrip ? trip.origin : trip.destination,
-        status: shouldCreateReturnTrip ? 'pending' : 'in_progress',
-        scheduledAt: generatedDate,
-        startedAt: null,
-        completedAt: null,
-        deliveryDocs: [],
-        driverName: trip.driverName ?? '',
-        vehiclePlate: trip.vehiclePlate ?? '',
-        vehicleModel: trip.vehicleModel ?? '',
-        programmingStatus: shouldCreateReturnTrip ? 'loading' : 'unloading',
-        operationalStatus: shouldCreateReturnTrip ? 'waiting_loading' : 'waiting_unloading',
-        returnTrip: false,
-        customerRequestNumber: trip.customerRequestNumber ?? '',
-        programmedVehicleType: trip.programmedVehicleType ?? 'truck',
-        operationType: shouldCreateReturnTrip ? 'loading' : 'unloading',
-        expectedArrivalAt: null,
-        additionalInfo: trip.additionalInfo ?? '',
-        ...(shouldCreateReturnTrip ? { returnSourceTripId: trip.id } : { unloadingSourceTripId: trip.id }),
-      });
-      await batch.commit();
-      return {
-        generatedDate,
-        generatedTripId: generatedRef.id,
-        type: shouldCreateReturnTrip ? 'return' : 'unloading',
-      };
+      await updateDoc(doc(firestore, 'trips', trip.id), data);
     } catch (error) {
       throw mapFirebaseError(error, 'Erro ao atualizar etapa da programacao.');
     }
