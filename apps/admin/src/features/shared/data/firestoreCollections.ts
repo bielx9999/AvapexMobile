@@ -185,7 +185,9 @@ export const adminWriteRepository = {
         const tripRef = doc(collection(firestore, 'trips'));
         const unloadingRef = doc(collection(firestore, 'trips'));
         const returnRef = trip.returnTrip === true ? doc(collection(firestore, 'trips')) : null;
+        const returnUnloadingRef = returnRef ? doc(collection(firestore, 'trips')) : null;
         const scheduledGeneratedAt = nextDaySameTime(trip.scheduledAt);
+        const scheduledReturnUnloadingAt = nextDaySameTime(scheduledGeneratedAt);
         const batch = writeBatch(firestore);
 
         batch.set(tripRef, {
@@ -212,7 +214,7 @@ export const adminWriteRepository = {
           expectedArrivalAt: null,
           unloadingSourceTripId: tripRef.id,
         });
-        if (returnRef) {
+        if (returnRef && returnUnloadingRef) {
           batch.set(returnRef, {
             ...data,
             id: returnRef.id,
@@ -220,6 +222,7 @@ export const adminWriteRepository = {
             destination: data.origin,
             status: 'pending',
             scheduledAt: scheduledGeneratedAt,
+            unloadingGeneratedTripId: returnUnloadingRef.id,
             startedAt: null,
             completedAt: null,
             deliveryDocs: [],
@@ -229,6 +232,25 @@ export const adminWriteRepository = {
             returnTrip: false,
             expectedArrivalAt: null,
             returnSourceTripId: tripRef.id,
+          });
+        }
+        if (returnRef && returnUnloadingRef) {
+          batch.set(returnUnloadingRef, {
+            ...data,
+            id: returnUnloadingRef.id,
+            origin: data.destination,
+            destination: data.origin,
+            status: 'in_progress',
+            scheduledAt: scheduledReturnUnloadingAt,
+            startedAt: null,
+            completedAt: null,
+            deliveryDocs: [],
+            programmingStatus: 'unloading',
+            operationalStatus: 'waiting_unloading',
+            operationType: 'unloading',
+            returnTrip: false,
+            expectedArrivalAt: null,
+            unloadingSourceTripId: returnRef.id,
           });
         }
         await batch.commit();

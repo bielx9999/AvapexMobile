@@ -295,7 +295,8 @@ export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: 
         vehiclePlate: vehicle.plate,
       });
       if (shouldRevealGeneratedUnloading) {
-        const generatedDate = formatDateInput(addDays(scheduledAt, 1));
+        const daysToReveal = form.returnTrip ? 2 : 1;
+        const generatedDate = formatDateInput(addDays(scheduledAt, daysToReveal));
         setEndDate((current) => (!current || current < generatedDate ? generatedDate : current));
       }
       closeForm();
