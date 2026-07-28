@@ -15,6 +15,7 @@ import { logoutAdmin, type AdminSession } from '../../auth/data/authRepository';
 import { ChecklistsPage } from '../../checklists/presentation/ChecklistsPage';
 import { AbastecimentoPage } from '../../fueling/presentation/AbastecimentoPage';
 import { ComprovantesPage } from '../../receipts/presentation/ComprovantesPage';
+import { ProgramacaoPage } from '../../scheduling/presentation/ProgramacaoPage';
 import { adminReadRepository } from '../../shared/data/firestoreCollections';
 import { UsersPage } from '../../users/presentation/UsersPage';
 import { VehiclesPage } from '../../vehicles/presentation/VehiclesPage';
@@ -52,7 +53,7 @@ type AdminDashboardProps = {
   session: AdminSession;
 };
 
-type AdminPage = 'dashboard' | 'users' | 'vehicles' | 'checklists' | 'receipts' | 'fueling';
+type AdminPage = 'dashboard' | 'users' | 'vehicles' | 'checklists' | 'receipts' | 'fueling' | 'scheduling';
 
 export function AdminDashboard({ session }: AdminDashboardProps) {
   const [data, setData] = useState<DashboardData>(emptyData);
@@ -94,7 +95,7 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
     () => [
       { label: 'Motoristas', value: data.users.filter((user) => user.role === 'driver').length, icon: Users },
       { label: 'Veiculos', value: data.vehicles.length, icon: Truck },
-      { label: 'Viagens', value: data.trips.length, icon: Route },
+      { label: 'Programacao', value: data.trips.length, icon: Route },
       { label: 'Checklists', value: data.checklists.length, icon: ClipboardCheck },
       { label: 'Comprovantes', value: data.receipts.length, icon: PackageCheck },
       { label: 'Abastecimentos', value: data.fueling.length, icon: Fuel },
@@ -116,12 +117,14 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
             ? 'Comprovantes'
             : activePage === 'fueling'
               ? 'Abastecimento'
-              : 'Dashboard';
+              : activePage === 'scheduling'
+                ? 'Programacao'
+                : 'Dashboard';
   const navItems: Array<{ key: AdminPage | 'placeholder'; label: string }> = [
     { key: 'dashboard', label: 'Dashboard' },
     { key: 'users', label: 'Usuarios' },
     { key: 'vehicles', label: 'Veiculos' },
-    { key: 'placeholder', label: 'Viagens' },
+    { key: 'scheduling', label: 'Programacao' },
     { key: 'checklists', label: 'Checklists' },
     { key: 'receipts', label: 'Comprovantes' },
     { key: 'fueling', label: 'Abastecimento' },
@@ -235,6 +238,14 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
             <ComprovantesPage loading={loading} onChanged={loadData} receipts={data.receipts} />
           ) : activePage === 'fueling' ? (
             <AbastecimentoPage fueling={data.fueling} loading={loading} onChanged={loadData} />
+          ) : activePage === 'scheduling' ? (
+            <ProgramacaoPage
+              loading={loading}
+              onChanged={loadData}
+              trips={data.trips}
+              users={data.users}
+              vehicles={data.vehicles}
+            />
           ) : (
             <>
 

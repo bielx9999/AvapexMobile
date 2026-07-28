@@ -69,6 +69,9 @@ export function mapTrip(id: string, data: Record<string, unknown>): Trip {
     startedAt: readDate(data.startedAt),
     completedAt: readDate(data.completedAt),
     deliveryDocs: readStringList(data.deliveryDocs),
+    driverName: typeof data.driverName === 'string' ? data.driverName : undefined,
+    vehiclePlate: typeof data.vehiclePlate === 'string' ? data.vehiclePlate : undefined,
+    vehicleModel: typeof data.vehicleModel === 'string' ? data.vehicleModel : undefined,
   };
 }
 

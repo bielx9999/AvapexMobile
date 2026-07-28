@@ -120,6 +120,58 @@ export const adminWriteRepository = {
     }
   },
 
+  async saveTrip(trip: Omit<Trip, 'id' | 'startedAt' | 'completedAt' | 'deliveryDocs'> & { id?: string }) {
+    try {
+      const data: DocumentData = {
+        driverId: trip.driverId,
+        vehicleId: trip.vehicleId,
+        origin: trip.origin.trim(),
+        destination: trip.destination.trim(),
+        status: trip.status,
+        scheduledAt: trip.scheduledAt,
+        driverName: trip.driverName ?? '',
+        vehiclePlate: trip.vehiclePlate ?? '',
+        vehicleModel: trip.vehicleModel ?? '',
+      };
+
+      if (trip.id) {
+        await updateDoc(doc(firestore, 'trips', trip.id), data);
+        return trip.id;
+      }
+
+      const created = await addDoc(collection(firestore, 'trips'), {
+        ...data,
+        startedAt: null,
+        completedAt: null,
+        deliveryDocs: [],
+      });
+      await updateDoc(created, { id: created.id });
+      return created.id;
+    } catch (error) {
+      throw mapFirebaseError(error, 'Erro ao salvar programacao.');
+    }
+  },
+
+  async updateTripStatus(tripId: string, status: Trip['status']) {
+    try {
+      const data: DocumentData = { status };
+      if (status === 'in_progress') {
+        data.startedAt = serverTimestamp();
+        data.completedAt = null;
+      }
+      if (status === 'completed' || status === 'cancelled') {
+        data.completedAt = serverTimestamp();
+      }
+      if (status === 'pending') {
+        data.startedAt = null;
+        data.completedAt = null;
+      }
+      await updateDoc(doc(firestore, 'trips', tripId), data);
+    } catch (error) {
+      throw mapFirebaseError(error, 'Erro ao atualizar status da programacao.');
+    }
+  },
+
   async saveVehicle(vehicle: Omit<Vehicle, 'id'> & { id?: string }) {
     try {
       const id = vehicle.id?.trim() || vehicle.plate.trim().toUpperCase();

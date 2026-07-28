@@ -46,6 +46,9 @@ export type Trip = {
   startedAt: Date | null;
   completedAt: Date | null;
   deliveryDocs: string[];
+  driverName?: string;
+  vehiclePlate?: string;
+  vehicleModel?: string;
 };
 
 export type Checklist = {
