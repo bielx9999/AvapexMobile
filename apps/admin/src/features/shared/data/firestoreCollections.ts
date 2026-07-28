@@ -183,32 +183,39 @@ export const adminWriteRepository = {
 
       if ((trip.operationType ?? 'loading') === 'loading') {
         const tripRef = doc(collection(firestore, 'trips'));
-        const unloadingRef = doc(collection(firestore, 'trips'));
-        const scheduledUnloadingAt = nextDaySameTime(trip.scheduledAt);
+        const generatedRef = doc(collection(firestore, 'trips'));
+        const scheduledGeneratedAt = nextDaySameTime(trip.scheduledAt);
+        const shouldGenerateReturnLoad = trip.returnTrip === true;
         const batch = writeBatch(firestore);
 
         batch.set(tripRef, {
           ...data,
           id: tripRef.id,
-          unloadingGeneratedTripId: unloadingRef.id,
+          ...(shouldGenerateReturnLoad
+            ? { returnGeneratedTripId: generatedRef.id }
+            : { unloadingGeneratedTripId: generatedRef.id }),
           startedAt: null,
           completedAt: null,
           deliveryDocs: [],
         });
-        batch.set(unloadingRef, {
+        batch.set(generatedRef, {
           ...data,
-          id: unloadingRef.id,
-          status: 'in_progress',
-          scheduledAt: scheduledUnloadingAt,
+          id: generatedRef.id,
+          origin: shouldGenerateReturnLoad ? data.destination : data.origin,
+          destination: shouldGenerateReturnLoad ? data.origin : data.destination,
+          status: shouldGenerateReturnLoad ? 'pending' : 'in_progress',
+          scheduledAt: scheduledGeneratedAt,
           startedAt: null,
           completedAt: null,
           deliveryDocs: [],
-          programmingStatus: 'unloading',
-          operationalStatus: 'waiting_unloading',
-          operationType: 'unloading',
+          programmingStatus: shouldGenerateReturnLoad ? 'loading' : 'unloading',
+          operationalStatus: shouldGenerateReturnLoad ? 'waiting_loading' : 'waiting_unloading',
+          operationType: shouldGenerateReturnLoad ? 'loading' : 'unloading',
           returnTrip: false,
           expectedArrivalAt: null,
-          unloadingSourceTripId: tripRef.id,
+          ...(shouldGenerateReturnLoad
+            ? { returnSourceTripId: tripRef.id }
+            : { unloadingSourceTripId: tripRef.id }),
         });
         await batch.commit();
         return tripRef.id;
