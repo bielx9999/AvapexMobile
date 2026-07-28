@@ -10,6 +10,7 @@ import {
   setDoc,
   updateDoc,
   where,
+  writeBatch,
   type DocumentData,
   type QueryConstraint,
 } from 'firebase/firestore';
@@ -70,6 +71,12 @@ function tripStatusFromProgrammingStatus(programmingStatus: NonNullable<Trip['pr
     return 'pending';
   }
   return 'in_progress';
+}
+
+function nextDaySameTime(value: Date | null) {
+  const nextDate = value ? new Date(value) : new Date();
+  nextDate.setDate(nextDate.getDate() + 1);
+  return nextDate;
 }
 
 function defaultOperationalStatus(programmingStatus: NonNullable<Trip['programmingStatus']>): Trip['operationalStatus'] {
@@ -171,6 +178,39 @@ export const adminWriteRepository = {
       if (trip.id) {
         await updateDoc(doc(firestore, 'trips', trip.id), data);
         return trip.id;
+      }
+
+      if ((trip.operationType ?? 'loading') === 'loading') {
+        const tripRef = doc(collection(firestore, 'trips'));
+        const unloadingRef = doc(collection(firestore, 'trips'));
+        const scheduledUnloadingAt = nextDaySameTime(trip.scheduledAt);
+        const batch = writeBatch(firestore);
+
+        batch.set(tripRef, {
+          ...data,
+          id: tripRef.id,
+          unloadingGeneratedTripId: unloadingRef.id,
+          startedAt: null,
+          completedAt: null,
+          deliveryDocs: [],
+        });
+        batch.set(unloadingRef, {
+          ...data,
+          id: unloadingRef.id,
+          status: 'in_progress',
+          scheduledAt: scheduledUnloadingAt,
+          startedAt: null,
+          completedAt: null,
+          deliveryDocs: [],
+          programmingStatus: 'unloading',
+          operationalStatus: 'waiting_unloading',
+          operationType: 'unloading',
+          returnTrip: false,
+          expectedArrivalAt: null,
+          unloadingSourceTripId: tripRef.id,
+        });
+        await batch.commit();
+        return tripRef.id;
       }
 
       const created = await addDoc(collection(firestore, 'trips'), {

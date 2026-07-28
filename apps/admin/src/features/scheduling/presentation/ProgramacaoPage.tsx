@@ -236,6 +236,7 @@ export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: 
       }
       const scheduledAt = new Date(form.scheduledAt);
       const expectedArrivalAt = form.expectedArrivalAt ? new Date(form.expectedArrivalAt) : null;
+      const shouldRevealGeneratedUnloading = !editingTrip && form.operationType === 'loading';
       await adminWriteRepository.saveTrip({
         additionalInfo: form.additionalInfo,
         customerRequestNumber: form.customerRequestNumber,
@@ -256,6 +257,10 @@ export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: 
         vehicleModel: vehicle.model,
         vehiclePlate: vehicle.plate,
       });
+      if (shouldRevealGeneratedUnloading) {
+        const generatedDate = formatDateInput(addDays(scheduledAt, 1));
+        setEndDate((current) => (!current || current < generatedDate ? generatedDate : current));
+      }
       closeForm();
       await onChanged();
     } catch (submitError) {
@@ -739,4 +744,15 @@ function formatDateTimeInput(value: Date | null) {
   }
   const offset = value.getTimezoneOffset() * 60_000;
   return new Date(value.getTime() - offset).toISOString().slice(0, 16);
+}
+
+function addDays(value: Date, days: number) {
+  const nextDate = new Date(value);
+  nextDate.setDate(nextDate.getDate() + days);
+  return nextDate;
+}
+
+function formatDateInput(value: Date) {
+  const offset = value.getTimezoneOffset() * 60_000;
+  return new Date(value.getTime() - offset).toISOString().slice(0, 10);
 }
