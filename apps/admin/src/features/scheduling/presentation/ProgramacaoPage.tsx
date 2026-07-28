@@ -1,4 +1,4 @@
-import { FormEvent, type ReactNode, useMemo, useState } from 'react';
+import { type DragEvent, FormEvent, type ReactNode, useMemo, useState } from 'react';
 import {
   ClipboardList,
   Clock3,
@@ -72,6 +72,8 @@ export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: 
   const [editingTrip, setEditingTrip] = useState<Trip | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [busyTripId, setBusyTripId] = useState('');
+  const [draggedTripId, setDraggedTripId] = useState('');
+  const [dragOverStatus, setDragOverStatus] = useState<ProgrammingStatus | ''>('');
   const [error, setError] = useState('');
 
   const drivers = useMemo(
@@ -200,6 +202,9 @@ export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: 
   }
 
   async function updateProgrammingStatus(trip: Trip, nextStatus: ProgrammingStatus) {
+    if ((trip.programmingStatus ?? 'loading') === nextStatus) {
+      return;
+    }
     setBusyTripId(trip.id);
     setError('');
     try {
@@ -210,6 +215,36 @@ export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: 
     } finally {
       setBusyTripId('');
     }
+  }
+
+  function handleDragStart(event: DragEvent<HTMLElement>, trip: Trip) {
+    setDraggedTripId(trip.id);
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', trip.id);
+  }
+
+  function handleDragEnd() {
+    setDraggedTripId('');
+    setDragOverStatus('');
+  }
+
+  function handleColumnDragOver(event: DragEvent<HTMLElement>, statusToDrop: ProgrammingStatus) {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+    setDragOverStatus(statusToDrop);
+  }
+
+  function handleColumnDrop(event: DragEvent<HTMLElement>, statusToDrop: ProgrammingStatus) {
+    event.preventDefault();
+    const tripId = event.dataTransfer.getData('text/plain') || draggedTripId;
+    const trip = filteredTrips.find((item) => item.id === tripId) ?? trips.find((item) => item.id === tripId);
+    setDraggedTripId('');
+    setDragOverStatus('');
+
+    if (!trip || busyTripId === trip.id) {
+      return;
+    }
+    void updateProgrammingStatus(trip, statusToDrop);
   }
 
   return (
@@ -269,23 +304,38 @@ export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: 
         <div className="grid gap-3 overflow-x-auto bg-zinc-50 p-3 xl:grid-cols-4">
           {kanbanColumns.map((column) => {
             const columnTrips = filteredTrips.filter((trip) => (trip.programmingStatus ?? 'loading') === column.status);
+            const isDropTarget = dragOverStatus === column.status;
             return (
-              <section className="min-h-[420px] min-w-[280px] rounded-2xl border border-zinc-200 bg-white" key={column.status}>
-                <header className="flex items-center justify-between border-b border-zinc-200 px-3 py-3">
+              <section
+                className={`min-h-[460px] min-w-[290px] rounded-3xl border bg-white shadow-sm transition duration-200 ${
+                  isDropTarget ? 'border-avapex-yellow ring-2 ring-avapex-yellow/40' : 'border-zinc-200'
+                }`}
+                key={column.status}
+                onDragLeave={() => setDragOverStatus((current) => (current === column.status ? '' : current))}
+                onDragOver={(event) => handleColumnDragOver(event, column.status)}
+                onDrop={(event) => handleColumnDrop(event, column.status)}
+              >
+                <header className={`flex items-center justify-between border-b px-3 py-3 ${columnHeaderClass(column.tone)}`}>
                   <div className="flex items-center gap-2">
                     <span className={`flex h-9 w-9 items-center justify-center rounded-2xl ring-1 ${columnIconClass(column.tone)}`}>
                       {statusIcon(column.status)}
                     </span>
-                    <h3 className="text-sm font-semibold">{column.label}</h3>
+                    <div>
+                      <h3 className="text-sm font-semibold">{column.label}</h3>
+                      <p className="text-xs text-zinc-500">Arraste os cards para esta etapa</p>
+                    </div>
                   </div>
                   <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-semibold text-zinc-600">{columnTrips.length}</span>
                 </header>
-                <div className="space-y-3 p-3">
+                <div className={`space-y-3 p-3 transition ${isDropTarget ? 'bg-yellow-50/50' : ''}`}>
                   {columnTrips.map((trip) => (
                     <KanbanCard
                       busy={busyTripId === trip.id}
+                      dragging={draggedTripId === trip.id}
                       driverName={trip.driverName || driverNames.get(trip.driverId) || trip.driverId}
                       key={trip.id}
+                      onDragEnd={handleDragEnd}
+                      onDragStart={(event) => handleDragStart(event, trip)}
                       onEdit={() => openEditForm(trip)}
                       onMove={(nextStatus) => void updateProgrammingStatus(trip, nextStatus)}
                       trip={trip}
@@ -412,21 +462,34 @@ export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: 
 
 function KanbanCard({
   busy,
+  dragging,
   driverName,
+  onDragEnd,
+  onDragStart,
   onEdit,
   onMove,
   trip,
   vehicleName,
 }: {
   busy: boolean;
+  dragging: boolean;
   driverName: string;
+  onDragEnd: () => void;
+  onDragStart: (event: DragEvent<HTMLElement>) => void;
   onEdit: () => void;
   onMove: (status: ProgrammingStatus) => void;
   trip: Trip;
   vehicleName: string;
 }) {
   return (
-    <article className="rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-md">
+    <article
+      className={`cursor-grab rounded-3xl border bg-white p-3 shadow-sm transition duration-200 active:cursor-grabbing ${
+        dragging ? 'scale-[0.98] border-avapex-yellow opacity-60 ring-2 ring-avapex-yellow/40' : 'border-zinc-200 hover:-translate-y-0.5 hover:shadow-md'
+      } ${busy ? 'pointer-events-none opacity-60' : ''}`}
+      draggable={!busy}
+      onDragEnd={onDragEnd}
+      onDragStart={onDragStart}
+    >
       <div className="mb-3 flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Solicitacao</p>
@@ -444,9 +507,10 @@ function KanbanCard({
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
         <span className="ui-pill bg-zinc-100 text-zinc-700">{trip.returnTrip ? 'Retorno: Sim' : 'Retorno: Nao'}</span>
+        <span className="ui-pill bg-yellow-50 text-yellow-800">{programmingStatusLabel(trip.programmingStatus ?? 'loading')}</span>
       </div>
-      <label className="mt-3 block">
-        <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-500">Mover para</span>
+      <label className="mt-3 block border-t border-zinc-100 pt-3">
+        <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-500">Mover manualmente</span>
         <select
           className="ui-input h-9 w-full px-2 text-sm"
           disabled={busy}
@@ -536,6 +600,16 @@ function columnIconClass(tone: 'dark' | 'yellow' | 'info' | 'success') {
     info: 'bg-sky-50 text-sky-700 ring-sky-100',
     success: 'bg-emerald-50 text-emerald-700 ring-emerald-100',
     yellow: 'bg-avapex-yellow text-avapex-black ring-yellow-100',
+  };
+  return classes[tone];
+}
+
+function columnHeaderClass(tone: 'dark' | 'yellow' | 'info' | 'success') {
+  const classes = {
+    dark: 'border-zinc-200 bg-zinc-100/80',
+    info: 'border-sky-100 bg-sky-50/80',
+    success: 'border-emerald-100 bg-emerald-50/80',
+    yellow: 'border-yellow-100 bg-yellow-50/90',
   };
   return classes[tone];
 }
