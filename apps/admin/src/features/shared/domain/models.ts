@@ -4,6 +4,15 @@ export type VehicleStatus = 'active' | 'inactive';
 export type VehicleType = 'mechanical_horse_trucado' | 'mechanical_horse_toco' | 'truck';
 export type TripStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled';
 export type ProgrammingStatus = 'loading' | 'in_transit' | 'unloading' | 'awaiting_invoice' | 'released';
+export type ProgrammingOperationalStatus =
+  | 'transit_to_loading'
+  | 'transit_to_unloading'
+  | 'waiting_loading'
+  | 'loading'
+  | 'waiting_unloading'
+  | 'unloading'
+  | 'released_unloading'
+  | 'released_loading';
 export type ProgrammedVehicleType =
   | 'vanderleia'
   | 'carreta'
@@ -61,6 +70,7 @@ export type Trip = {
   vehiclePlate?: string;
   vehicleModel?: string;
   programmingStatus?: ProgrammingStatus;
+  operationalStatus?: ProgrammingOperationalStatus;
   returnTrip?: boolean;
   customerRequestNumber?: string;
   programmedVehicleType?: ProgrammedVehicleType;

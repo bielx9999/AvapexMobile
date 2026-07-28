@@ -79,6 +79,22 @@ function nextDaySameTime(value: Date | null) {
   return nextDate;
 }
 
+function defaultOperationalStatus(programmingStatus: NonNullable<Trip['programmingStatus']>): Trip['operationalStatus'] {
+  if (programmingStatus === 'in_transit') {
+    return 'transit_to_loading';
+  }
+  if (programmingStatus === 'loading') {
+    return 'waiting_loading';
+  }
+  if (programmingStatus === 'unloading') {
+    return 'waiting_unloading';
+  }
+  if (programmingStatus === 'released') {
+    return 'released_unloading';
+  }
+  return undefined;
+}
+
 type GeneratedSchedulingResult = {
   generatedDate: Date;
   generatedTripId: string;
@@ -156,6 +172,7 @@ export const adminWriteRepository = {
         vehiclePlate: trip.vehiclePlate ?? '',
         vehicleModel: trip.vehicleModel ?? '',
         programmingStatus: trip.programmingStatus ?? 'loading',
+        operationalStatus: trip.operationalStatus ?? defaultOperationalStatus(trip.programmingStatus ?? 'loading'),
         returnTrip: trip.returnTrip ?? false,
         customerRequestNumber: trip.customerRequestNumber?.trim() ?? '',
         programmedVehicleType: trip.programmedVehicleType ?? 'truck',
@@ -205,7 +222,11 @@ export const adminWriteRepository = {
   ): Promise<GeneratedSchedulingResult | null> {
     try {
       const status = tripStatusFromProgrammingStatus(programmingStatus);
-      const data: DocumentData = { programmingStatus, status };
+      const data: DocumentData = {
+        operationalStatus: defaultOperationalStatus(programmingStatus) ?? null,
+        programmingStatus,
+        status,
+      };
       if (status === 'in_progress') {
         data.startedAt = serverTimestamp();
         data.completedAt = null;
@@ -260,6 +281,7 @@ export const adminWriteRepository = {
         vehiclePlate: trip.vehiclePlate ?? '',
         vehicleModel: trip.vehicleModel ?? '',
         programmingStatus: shouldCreateReturnTrip ? 'loading' : 'unloading',
+        operationalStatus: shouldCreateReturnTrip ? 'waiting_loading' : 'waiting_unloading',
         returnTrip: false,
         customerRequestNumber: trip.customerRequestNumber ?? '',
         programmedVehicleType: trip.programmedVehicleType ?? 'truck',
@@ -273,6 +295,14 @@ export const adminWriteRepository = {
       };
     } catch (error) {
       throw mapFirebaseError(error, 'Erro ao atualizar etapa da programacao.');
+    }
+  },
+
+  async updateTripOperationalStatus(tripId: string, operationalStatus: NonNullable<Trip['operationalStatus']>) {
+    try {
+      await updateDoc(doc(firestore, 'trips', tripId), { operationalStatus });
+    } catch (error) {
+      throw mapFirebaseError(error, 'Erro ao atualizar status operacional.');
     }
   },
 

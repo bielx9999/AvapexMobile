@@ -16,6 +16,7 @@ import {
 import { adminWriteRepository } from '../../shared/data/firestoreCollections';
 import type {
   AppUser,
+  ProgrammingOperationalStatus,
   ProgrammedVehicleType,
   ProgrammingStatus,
   Trip,
@@ -205,6 +206,7 @@ export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: 
             driverName: driver.name || driver.email,
             id: savedTripId,
             origin: form.origin,
+            operationalStatus: undefined,
             programmedVehicleType: form.programmedVehicleType,
             programmingStatus: form.programmingStatus,
             returnGeneratedTripId: editingTrip?.returnGeneratedTripId,
@@ -244,6 +246,19 @@ export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: 
       await onChanged();
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : 'Erro ao atualizar programacao.');
+    } finally {
+      setBusyTripId('');
+    }
+  }
+
+  async function updateOperationalStatus(trip: Trip, nextStatus: ProgrammingOperationalStatus) {
+    setBusyTripId(trip.id);
+    setError('');
+    try {
+      await adminWriteRepository.updateTripOperationalStatus(trip.id, nextStatus);
+      await onChanged();
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : 'Erro ao atualizar status operacional.');
     } finally {
       setBusyTripId('');
     }
@@ -379,7 +394,7 @@ export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: 
                       onDragEnd={handleDragEnd}
                       onDragStart={(event) => handleDragStart(event, trip)}
                       onEdit={() => openEditForm(trip)}
-                      onMove={(nextStatus) => void updateProgrammingStatus(trip, nextStatus)}
+                      onStatusChange={(nextStatus) => void updateOperationalStatus(trip, nextStatus)}
                       trip={trip}
                       vehicleName={trip.vehiclePlate || vehicleNames.get(trip.vehicleId) || trip.vehicleId}
                     />
@@ -510,7 +525,7 @@ function KanbanCard({
   onDragEnd,
   onDragStart,
   onEdit,
-  onMove,
+  onStatusChange,
   trip,
   vehicleName,
 }: {
@@ -520,7 +535,7 @@ function KanbanCard({
   onDragEnd: () => void;
   onDragStart: (event: DragEvent<HTMLElement>) => void;
   onEdit: () => void;
-  onMove: (status: ProgrammingStatus) => void;
+  onStatusChange: (status: ProgrammingOperationalStatus) => void;
   trip: Trip;
   vehicleName: string;
 }) {
@@ -556,23 +571,54 @@ function KanbanCard({
         {trip.unloadingGeneratedTripId ? <span className="ui-pill bg-emerald-50 text-emerald-700">Descarga gerada</span> : null}
         {trip.unloadingSourceTripId ? <span className="ui-pill bg-zinc-100 text-zinc-700">Descarga</span> : null}
       </div>
-      <label className="mt-2 block border-t border-zinc-100 pt-2">
+      <OperationalStatusField busy={busy} onChange={onStatusChange} trip={trip} />
+    </article>
+  );
+}
+
+function OperationalStatusField({
+  busy,
+  onChange,
+  trip,
+}: {
+  busy: boolean;
+  onChange: (status: ProgrammingOperationalStatus) => void;
+  trip: Trip;
+}) {
+  const options = operationalStatusOptions(trip.programmingStatus ?? 'loading');
+  if (options.length === 0) {
+    return (
+      <div className="mt-2 border-t border-zinc-100 pt-2">
         <span className="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
           <MoveRight size={12} />
-          Mover
+          Status
         </span>
-        <select
-          className="ui-input h-8 w-full px-2 text-xs"
-          disabled={busy}
-          value={trip.programmingStatus ?? 'loading'}
-          onChange={(event) => onMove(event.target.value as ProgrammingStatus)}
-        >
-          {kanbanColumns.map((column) => (
-            <option key={column.status} value={column.status}>{column.label}</option>
-          ))}
-        </select>
-      </label>
-    </article>
+        <p className="rounded-xl bg-zinc-50 px-2 py-2 text-xs text-zinc-500">Sem status operacional</p>
+      </div>
+    );
+  }
+
+  const currentStatus = trip.operationalStatus && options.some((option) => option.value === trip.operationalStatus)
+    ? trip.operationalStatus
+    : options[0].value;
+
+  return (
+    <label className="mt-2 block border-t border-zinc-100 pt-2">
+      <span className="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+        <MoveRight size={12} />
+        Status
+      </span>
+      <select
+        className="ui-input h-8 w-full px-2 text-xs"
+        disabled={busy}
+        value={currentStatus}
+        onChange={(event) => onChange(event.target.value as ProgrammingOperationalStatus)}
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>{option.label}</option>
+        ))}
+      </select>
+    </label>
   );
 }
 
@@ -672,6 +718,28 @@ function columnHeaderClass(tone: 'dark' | 'yellow' | 'info' | 'success' | 'neutr
 
 function programmingStatusLabel(status: ProgrammingStatus) {
   return kanbanColumns.find((column) => column.status === status)?.label ?? status;
+}
+
+function operationalStatusOptions(programmingStatus: ProgrammingStatus) {
+  const options: Partial<Record<ProgrammingStatus, Array<{ value: ProgrammingOperationalStatus; label: string }>>> = {
+    in_transit: [
+      { value: 'transit_to_loading', label: 'Transito para Carga' },
+      { value: 'transit_to_unloading', label: 'Transito para descarga' },
+    ],
+    loading: [
+      { value: 'waiting_loading', label: 'Aguardando Carregar' },
+      { value: 'loading', label: 'Carregando' },
+    ],
+    released: [
+      { value: 'released_unloading', label: 'Liberado da descarga' },
+      { value: 'released_loading', label: 'Liberado da carga' },
+    ],
+    unloading: [
+      { value: 'waiting_unloading', label: 'Aguardando descarga' },
+      { value: 'unloading', label: 'Descarregando' },
+    ],
+  };
+  return options[programmingStatus] ?? [];
 }
 
 function programmedVehicleTypeLabel(type?: ProgrammedVehicleType) {

@@ -67,6 +67,17 @@ export function mapTrip(id: string, data: Record<string, unknown>): Trip {
       : 'loading';
   const programmedVehicleType =
     typeof data.programmedVehicleType === 'string' ? data.programmedVehicleType : undefined;
+  const operationalStatus =
+    data.operationalStatus === 'transit_to_loading' ||
+    data.operationalStatus === 'transit_to_unloading' ||
+    data.operationalStatus === 'waiting_loading' ||
+    data.operationalStatus === 'loading' ||
+    data.operationalStatus === 'waiting_unloading' ||
+    data.operationalStatus === 'unloading' ||
+    data.operationalStatus === 'released_unloading' ||
+    data.operationalStatus === 'released_loading'
+      ? data.operationalStatus
+      : defaultOperationalStatus(programmingStatus as Trip['programmingStatus']);
 
   return {
     id: typeof data.id === 'string' ? data.id : id,
@@ -86,6 +97,7 @@ export function mapTrip(id: string, data: Record<string, unknown>): Trip {
     vehiclePlate: typeof data.vehiclePlate === 'string' ? data.vehiclePlate : undefined,
     vehicleModel: typeof data.vehicleModel === 'string' ? data.vehicleModel : undefined,
     programmingStatus: programmingStatus as Trip['programmingStatus'],
+    operationalStatus,
     returnTrip: typeof data.returnTrip === 'boolean' ? data.returnTrip : false,
     customerRequestNumber:
       typeof data.customerRequestNumber === 'string' ? data.customerRequestNumber : undefined,
@@ -98,6 +110,22 @@ export function mapTrip(id: string, data: Record<string, unknown>): Trip {
     unloadingSourceTripId:
       typeof data.unloadingSourceTripId === 'string' ? data.unloadingSourceTripId : undefined,
   };
+}
+
+function defaultOperationalStatus(programmingStatus: Trip['programmingStatus']): Trip['operationalStatus'] {
+  if (programmingStatus === 'in_transit') {
+    return 'transit_to_loading';
+  }
+  if (programmingStatus === 'unloading') {
+    return 'waiting_unloading';
+  }
+  if (programmingStatus === 'released') {
+    return 'released_unloading';
+  }
+  if (programmingStatus === 'loading') {
+    return 'waiting_loading';
+  }
+  return undefined;
 }
 
 export function mapChecklist(id: string, data: Record<string, unknown>): Checklist {
