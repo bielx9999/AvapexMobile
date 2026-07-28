@@ -4,6 +4,7 @@ import {
   Clock3,
   FileText,
   MapPin,
+  MoveRight,
   Pencil,
   Plus,
   Route,
@@ -29,9 +30,10 @@ type ProgramacaoPageProps = {
   vehicles: Vehicle[];
 };
 
-const kanbanColumns: Array<{ status: ProgrammingStatus; label: string; tone: 'dark' | 'yellow' | 'info' | 'success' }> = [
+const kanbanColumns: Array<{ status: ProgrammingStatus; label: string; tone: 'dark' | 'yellow' | 'info' | 'success' | 'neutral' }> = [
   { status: 'loading', label: 'Carregando', tone: 'yellow' },
-  { status: 'unloading_in_transit', label: 'Descarregando em transito', tone: 'info' },
+  { status: 'in_transit', label: 'Em transito', tone: 'info' },
+  { status: 'unloading', label: 'Descarregando', tone: 'neutral' },
   { status: 'awaiting_invoice', label: 'Aguardando NF', tone: 'dark' },
   { status: 'released', label: 'Liberado', tone: 'success' },
 ];
@@ -251,7 +253,7 @@ export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: 
     <div className="space-y-5">
       {error ? <p className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
 
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         {stats.map((item) => (
           <StatusCard
             icon={statusIcon(item.status)}
@@ -301,13 +303,14 @@ export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: 
           </div>
         </div>
 
-        <div className="grid gap-3 overflow-x-auto bg-zinc-50 p-3 xl:grid-cols-4">
+        <div className="overflow-x-auto bg-zinc-50 p-3">
+          <div className="grid min-w-[1320px] gap-3 xl:grid-cols-5">
           {kanbanColumns.map((column) => {
             const columnTrips = filteredTrips.filter((trip) => (trip.programmingStatus ?? 'loading') === column.status);
             const isDropTarget = dragOverStatus === column.status;
             return (
               <section
-                className={`min-h-[460px] min-w-[290px] rounded-3xl border bg-white shadow-sm transition duration-200 ${
+                className={`min-h-[500px] rounded-3xl border bg-white shadow-sm transition duration-200 ${
                   isDropTarget ? 'border-avapex-yellow ring-2 ring-avapex-yellow/40' : 'border-zinc-200'
                 }`}
                 key={column.status}
@@ -317,12 +320,12 @@ export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: 
               >
                 <header className={`flex items-center justify-between border-b px-3 py-3 ${columnHeaderClass(column.tone)}`}>
                   <div className="flex items-center gap-2">
-                    <span className={`flex h-9 w-9 items-center justify-center rounded-2xl ring-1 ${columnIconClass(column.tone)}`}>
+                    <span className={`flex h-8 w-8 items-center justify-center rounded-2xl ring-1 ${columnIconClass(column.tone)}`}>
                       {statusIcon(column.status)}
                     </span>
                     <div>
                       <h3 className="text-sm font-semibold">{column.label}</h3>
-                      <p className="text-xs text-zinc-500">Arraste os cards para esta etapa</p>
+                      <p className="text-[11px] text-zinc-500">Solte aqui para mover</p>
                     </div>
                   </div>
                   <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-semibold text-zinc-600">{columnTrips.length}</span>
@@ -351,6 +354,7 @@ export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: 
               </section>
             );
           })}
+          </div>
         </div>
       </section>
 
@@ -483,36 +487,39 @@ function KanbanCard({
 }) {
   return (
     <article
-      className={`cursor-grab rounded-3xl border bg-white p-3 shadow-sm transition duration-200 active:cursor-grabbing ${
+      className={`cursor-grab rounded-2xl border bg-white p-2.5 shadow-sm transition duration-200 active:cursor-grabbing ${
         dragging ? 'scale-[0.98] border-avapex-yellow opacity-60 ring-2 ring-avapex-yellow/40' : 'border-zinc-200 hover:-translate-y-0.5 hover:shadow-md'
       } ${busy ? 'pointer-events-none opacity-60' : ''}`}
       draggable={!busy}
       onDragEnd={onDragEnd}
       onDragStart={onDragStart}
     >
-      <div className="mb-3 flex items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Solicitacao</p>
-          <h4 className="mt-1 font-semibold">{trip.customerRequestNumber || '-'}</h4>
+      <div className="mb-2 flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">Solicitacao</p>
+          <h4 className="mt-0.5 truncate text-sm font-semibold">{trip.customerRequestNumber || '-'}</h4>
         </div>
-        <button className="ui-icon-button flex h-9 w-9 items-center justify-center text-zinc-700 hover:bg-zinc-50" disabled={busy} onClick={onEdit} title="Editar programacao" type="button">
-          <Pencil size={17} />
+        <button className="ui-icon-button flex h-8 w-8 shrink-0 items-center justify-center text-zinc-700 hover:bg-zinc-50" disabled={busy} onClick={onEdit} title="Editar programacao" type="button">
+          <Pencil size={15} />
         </button>
       </div>
-      <div className="space-y-2 text-sm">
-        <InfoLine icon={<UserRound size={15} />} text={driverName} />
-        <InfoLine icon={<Truck size={15} />} text={`${programmedVehicleTypeLabel(trip.programmedVehicleType)} - ${vehicleName}`} />
-        <InfoLine icon={<MapPin size={15} />} text={`${trip.origin || '-'} -> ${trip.destination || '-'}`} />
-        <InfoLine icon={<Clock3 size={15} />} text={formatDate(trip.scheduledAt)} />
+      <div className="space-y-1.5 text-xs">
+        <InfoLine icon={<UserRound size={14} />} text={driverName} />
+        <InfoLine icon={<Truck size={14} />} text={`${programmedVehicleTypeLabel(trip.programmedVehicleType)} - ${vehicleName}`} />
+        <InfoLine icon={<MapPin size={14} />} text={`${trip.origin || '-'} -> ${trip.destination || '-'}`} />
+        <InfoLine icon={<Clock3 size={14} />} text={formatDate(trip.scheduledAt)} />
       </div>
-      <div className="mt-3 flex flex-wrap gap-2">
+      <div className="mt-2 flex flex-wrap gap-1.5">
         <span className="ui-pill bg-zinc-100 text-zinc-700">{trip.returnTrip ? 'Retorno: Sim' : 'Retorno: Nao'}</span>
         <span className="ui-pill bg-yellow-50 text-yellow-800">{programmingStatusLabel(trip.programmingStatus ?? 'loading')}</span>
       </div>
-      <label className="mt-3 block border-t border-zinc-100 pt-3">
-        <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-500">Mover manualmente</span>
+      <label className="mt-2 block border-t border-zinc-100 pt-2">
+        <span className="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+          <MoveRight size={12} />
+          Mover
+        </span>
         <select
-          className="ui-input h-9 w-full px-2 text-sm"
+          className="ui-input h-8 w-full px-2 text-xs"
           disabled={busy}
           value={trip.programmingStatus ?? 'loading'}
           onChange={(event) => onMove(event.target.value as ProgrammingStatus)}
@@ -526,10 +533,11 @@ function KanbanCard({
   );
 }
 
-function StatusCard({ icon, label, tone, value }: { icon: ReactNode; label: string; tone: 'dark' | 'yellow' | 'success' | 'info'; value: number | string }) {
+function StatusCard({ icon, label, tone, value }: { icon: ReactNode; label: string; tone: 'dark' | 'yellow' | 'success' | 'info' | 'neutral'; value: number | string }) {
   const toneClassNames = {
     dark: { accent: 'bg-avapex-black', icon: 'bg-avapex-black text-white ring-zinc-200', value: 'text-avapex-black' },
     info: { accent: 'bg-sky-500', icon: 'bg-sky-50 text-sky-700 ring-sky-100', value: 'text-sky-700' },
+    neutral: { accent: 'bg-zinc-400', icon: 'bg-zinc-100 text-zinc-700 ring-zinc-200', value: 'text-zinc-800' },
     success: { accent: 'bg-emerald-500', icon: 'bg-emerald-50 text-emerald-700 ring-emerald-100', value: 'text-emerald-700' },
     yellow: { accent: 'bg-avapex-yellow', icon: 'bg-avapex-yellow text-avapex-black ring-yellow-100', value: 'text-avapex-black' },
   }[tone];
@@ -588,26 +596,31 @@ function statusIcon(status: ProgrammingStatus) {
   if (status === 'awaiting_invoice') {
     return <FileText size={20} />;
   }
-  if (status === 'unloading_in_transit') {
+  if (status === 'unloading') {
     return <Truck size={20} />;
+  }
+  if (status === 'in_transit') {
+    return <MoveRight size={20} />;
   }
   return <ClipboardList size={20} />;
 }
 
-function columnIconClass(tone: 'dark' | 'yellow' | 'info' | 'success') {
+function columnIconClass(tone: 'dark' | 'yellow' | 'info' | 'success' | 'neutral') {
   const classes = {
     dark: 'bg-avapex-black text-white ring-zinc-200',
     info: 'bg-sky-50 text-sky-700 ring-sky-100',
+    neutral: 'bg-zinc-100 text-zinc-700 ring-zinc-200',
     success: 'bg-emerald-50 text-emerald-700 ring-emerald-100',
     yellow: 'bg-avapex-yellow text-avapex-black ring-yellow-100',
   };
   return classes[tone];
 }
 
-function columnHeaderClass(tone: 'dark' | 'yellow' | 'info' | 'success') {
+function columnHeaderClass(tone: 'dark' | 'yellow' | 'info' | 'success' | 'neutral') {
   const classes = {
     dark: 'border-zinc-200 bg-zinc-100/80',
     info: 'border-sky-100 bg-sky-50/80',
+    neutral: 'border-zinc-200 bg-zinc-50',
     success: 'border-emerald-100 bg-emerald-50/80',
     yellow: 'border-yellow-100 bg-yellow-50/90',
   };

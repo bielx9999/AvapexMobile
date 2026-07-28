@@ -3,7 +3,7 @@ export type UserStatus = 'active' | 'inactive';
 export type VehicleStatus = 'active' | 'inactive';
 export type VehicleType = 'mechanical_horse_trucado' | 'mechanical_horse_toco' | 'truck';
 export type TripStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled';
-export type ProgrammingStatus = 'loading' | 'unloading_in_transit' | 'awaiting_invoice' | 'released';
+export type ProgrammingStatus = 'loading' | 'in_transit' | 'unloading' | 'awaiting_invoice' | 'released';
 export type ProgrammedVehicleType =
   | 'vanderleia'
   | 'carreta'

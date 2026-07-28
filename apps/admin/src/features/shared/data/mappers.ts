@@ -56,10 +56,14 @@ export function mapVehicle(id: string, data: Record<string, unknown>): Vehicle {
 
 export function mapTrip(id: string, data: Record<string, unknown>): Trip {
   const programmingStatus =
+    data.programmingStatus === 'in_transit' ||
+    data.programmingStatus === 'unloading' ||
     data.programmingStatus === 'unloading_in_transit' ||
     data.programmingStatus === 'awaiting_invoice' ||
     data.programmingStatus === 'released'
-      ? data.programmingStatus
+      ? data.programmingStatus === 'unloading_in_transit'
+        ? 'unloading'
+        : data.programmingStatus
       : 'loading';
   const programmedVehicleType =
     typeof data.programmedVehicleType === 'string' ? data.programmedVehicleType : undefined;
