@@ -178,7 +178,7 @@ export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: 
       if (!driver || !vehicle) {
         throw new Error('Selecione motorista e placa cadastrada validos.');
       }
-      await adminWriteRepository.saveTrip({
+      const savedTripId = await adminWriteRepository.saveTrip({
         customerRequestNumber: form.customerRequestNumber,
         destination: form.destination,
         driverId: form.driverId,
@@ -194,6 +194,35 @@ export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: 
         vehicleModel: vehicle.model,
         vehiclePlate: vehicle.plate,
       });
+      if (form.programmingStatus === 'released') {
+        const result = await adminWriteRepository.updateTripProgrammingStatus(
+          {
+            completedAt: editingTrip?.completedAt ?? null,
+            customerRequestNumber: form.customerRequestNumber,
+            deliveryDocs: editingTrip?.deliveryDocs ?? [],
+            destination: form.destination,
+            driverId: form.driverId,
+            driverName: driver.name || driver.email,
+            id: savedTripId,
+            origin: form.origin,
+            programmedVehicleType: form.programmedVehicleType,
+            programmingStatus: form.programmingStatus,
+            returnGeneratedTripId: editingTrip?.returnGeneratedTripId,
+            returnSourceTripId: editingTrip?.returnSourceTripId,
+            returnTrip: form.returnTrip,
+            scheduledAt: new Date(form.scheduledAt),
+            startedAt: editingTrip?.startedAt ?? null,
+            status: 'completed',
+            unloadingGeneratedTripId: editingTrip?.unloadingGeneratedTripId,
+            unloadingSourceTripId: editingTrip?.unloadingSourceTripId,
+            vehicleId: form.vehicleId,
+            vehicleModel: vehicle.model,
+            vehiclePlate: vehicle.plate,
+          },
+          'released',
+        );
+        revealGeneratedScheduling(result);
+      }
       closeForm();
       await onChanged();
     } catch (submitError) {
@@ -210,13 +239,23 @@ export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: 
     setBusyTripId(trip.id);
     setError('');
     try {
-      await adminWriteRepository.updateTripProgrammingStatus(trip, nextStatus);
+      const result = await adminWriteRepository.updateTripProgrammingStatus(trip, nextStatus);
+      revealGeneratedScheduling(result);
       await onChanged();
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : 'Erro ao atualizar programacao.');
     } finally {
       setBusyTripId('');
     }
+  }
+
+  function revealGeneratedScheduling(result: Awaited<ReturnType<typeof adminWriteRepository.updateTripProgrammingStatus>>) {
+    if (!result) {
+      return;
+    }
+    const generatedDate = formatDateInput(result.generatedDate);
+    setStatus('all');
+    setEndDate((current) => (!current || current < generatedDate ? generatedDate : current));
   }
 
   function handleDragStart(event: DragEvent<HTMLElement>, trip: Trip) {
@@ -655,4 +694,9 @@ function formatDateTimeInput(value: Date | null) {
   }
   const offset = value.getTimezoneOffset() * 60_000;
   return new Date(value.getTime() - offset).toISOString().slice(0, 16);
+}
+
+function formatDateInput(value: Date) {
+  const offset = value.getTimezoneOffset() * 60_000;
+  return new Date(value.getTime() - offset).toISOString().slice(0, 10);
 }

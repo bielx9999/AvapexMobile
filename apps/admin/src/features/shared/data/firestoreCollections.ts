@@ -79,6 +79,12 @@ function nextDaySameTime(value: Date | null) {
   return nextDate;
 }
 
+type GeneratedSchedulingResult = {
+  generatedDate: Date;
+  generatedTripId: string;
+  type: 'return' | 'unloading';
+};
+
 export const adminReadRepository = {
   users: () => listCollection<AppUser>('users', [orderBy('createdAt', 'desc'), limit(200)], 'Erro ao listar usuarios.'),
   vehicles: () => listCollection<Vehicle>('vehicles', [orderBy('plate', 'asc'), limit(200)], 'Erro ao listar veiculos.'),
@@ -193,7 +199,10 @@ export const adminWriteRepository = {
     }
   },
 
-  async updateTripProgrammingStatus(trip: Trip, programmingStatus: NonNullable<Trip['programmingStatus']>) {
+  async updateTripProgrammingStatus(
+    trip: Trip,
+    programmingStatus: NonNullable<Trip['programmingStatus']>,
+  ): Promise<GeneratedSchedulingResult | null> {
     try {
       const status = tripStatusFromProgrammingStatus(programmingStatus);
       const data: DocumentData = { programmingStatus, status };
@@ -221,10 +230,11 @@ export const adminWriteRepository = {
 
       if (!shouldCreateReturnTrip && !shouldCreateNextDayUnloading) {
         await updateDoc(tripRef, data);
-        return;
+        return null;
       }
 
       const generatedRef = doc(collection(firestore, 'trips'));
+      const generatedDate = nextDaySameTime(trip.scheduledAt);
       const batch = writeBatch(firestore);
       batch.update(tripRef, shouldCreateReturnTrip
         ? {
@@ -242,7 +252,7 @@ export const adminWriteRepository = {
         origin: shouldCreateReturnTrip ? trip.destination : trip.origin,
         destination: shouldCreateReturnTrip ? trip.origin : trip.destination,
         status: shouldCreateReturnTrip ? 'pending' : 'in_progress',
-        scheduledAt: nextDaySameTime(trip.scheduledAt),
+        scheduledAt: generatedDate,
         startedAt: null,
         completedAt: null,
         deliveryDocs: [],
@@ -256,6 +266,11 @@ export const adminWriteRepository = {
         ...(shouldCreateReturnTrip ? { returnSourceTripId: trip.id } : { unloadingSourceTripId: trip.id }),
       });
       await batch.commit();
+      return {
+        generatedDate,
+        generatedTripId: generatedRef.id,
+        type: shouldCreateReturnTrip ? 'return' : 'unloading',
+      };
     } catch (error) {
       throw mapFirebaseError(error, 'Erro ao atualizar etapa da programacao.');
     }
