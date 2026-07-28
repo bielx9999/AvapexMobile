@@ -514,6 +514,8 @@ function KanbanCard({
         <span className="ui-pill bg-yellow-50 text-yellow-800">{programmingStatusLabel(trip.programmingStatus ?? 'loading')}</span>
         {trip.returnGeneratedTripId ? <span className="ui-pill bg-emerald-50 text-emerald-700">Retorno gerado</span> : null}
         {trip.returnSourceTripId ? <span className="ui-pill bg-sky-50 text-sky-700">Retorno</span> : null}
+        {trip.unloadingGeneratedTripId ? <span className="ui-pill bg-emerald-50 text-emerald-700">Descarga gerada</span> : null}
+        {trip.unloadingSourceTripId ? <span className="ui-pill bg-zinc-100 text-zinc-700">Descarga</span> : null}
       </div>
       <label className="mt-2 block border-t border-zinc-100 pt-2">
         <span className="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">

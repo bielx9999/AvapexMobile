@@ -93,6 +93,10 @@ export function mapTrip(id: string, data: Record<string, unknown>): Trip {
     returnGeneratedTripId:
       typeof data.returnGeneratedTripId === 'string' ? data.returnGeneratedTripId : undefined,
     returnSourceTripId: typeof data.returnSourceTripId === 'string' ? data.returnSourceTripId : undefined,
+    unloadingGeneratedTripId:
+      typeof data.unloadingGeneratedTripId === 'string' ? data.unloadingGeneratedTripId : undefined,
+    unloadingSourceTripId:
+      typeof data.unloadingSourceTripId === 'string' ? data.unloadingSourceTripId : undefined,
   };
 }
 

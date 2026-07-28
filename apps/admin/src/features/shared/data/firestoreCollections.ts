@@ -210,26 +210,38 @@ export const adminWriteRepository = {
         programmingStatus === 'released' &&
         trip.returnTrip === true &&
         !trip.returnGeneratedTripId &&
-        !trip.returnSourceTripId;
+        !trip.returnSourceTripId &&
+        !trip.unloadingSourceTripId;
+      const shouldCreateNextDayUnloading =
+        programmingStatus === 'released' &&
+        trip.returnTrip !== true &&
+        !trip.unloadingGeneratedTripId &&
+        !trip.returnSourceTripId &&
+        !trip.unloadingSourceTripId;
 
-      if (!shouldCreateReturnTrip) {
+      if (!shouldCreateReturnTrip && !shouldCreateNextDayUnloading) {
         await updateDoc(tripRef, data);
         return;
       }
 
-      const returnRef = doc(collection(firestore, 'trips'));
+      const generatedRef = doc(collection(firestore, 'trips'));
       const batch = writeBatch(firestore);
-      batch.update(tripRef, {
-        ...data,
-        returnGeneratedTripId: returnRef.id,
-      });
-      batch.set(returnRef, {
-        id: returnRef.id,
+      batch.update(tripRef, shouldCreateReturnTrip
+        ? {
+            ...data,
+            returnGeneratedTripId: generatedRef.id,
+          }
+        : {
+            ...data,
+            unloadingGeneratedTripId: generatedRef.id,
+          });
+      batch.set(generatedRef, {
+        id: generatedRef.id,
         driverId: trip.driverId,
         vehicleId: trip.vehicleId,
-        origin: trip.destination,
-        destination: trip.origin,
-        status: 'pending',
+        origin: shouldCreateReturnTrip ? trip.destination : trip.origin,
+        destination: shouldCreateReturnTrip ? trip.origin : trip.destination,
+        status: shouldCreateReturnTrip ? 'pending' : 'in_progress',
         scheduledAt: nextDaySameTime(trip.scheduledAt),
         startedAt: null,
         completedAt: null,
@@ -237,11 +249,11 @@ export const adminWriteRepository = {
         driverName: trip.driverName ?? '',
         vehiclePlate: trip.vehiclePlate ?? '',
         vehicleModel: trip.vehicleModel ?? '',
-        programmingStatus: 'loading',
+        programmingStatus: shouldCreateReturnTrip ? 'loading' : 'unloading',
         returnTrip: false,
         customerRequestNumber: trip.customerRequestNumber ?? '',
         programmedVehicleType: trip.programmedVehicleType ?? 'truck',
-        returnSourceTripId: trip.id,
+        ...(shouldCreateReturnTrip ? { returnSourceTripId: trip.id } : { unloadingSourceTripId: trip.id }),
       });
       await batch.commit();
     } catch (error) {

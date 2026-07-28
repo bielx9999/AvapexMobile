@@ -66,6 +66,8 @@ export type Trip = {
   programmedVehicleType?: ProgrammedVehicleType;
   returnGeneratedTripId?: string;
   returnSourceTripId?: string;
+  unloadingGeneratedTripId?: string;
+  unloadingSourceTripId?: string;
 };
 
 export type Checklist = {
