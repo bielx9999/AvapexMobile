@@ -1,6 +1,7 @@
 import {
   addDoc,
   collection,
+  deleteField,
   doc,
   getDocs,
   limit,
@@ -271,6 +272,28 @@ export const adminWriteRepository = {
       await updateDoc(doc(firestore, 'trips', trip.id), data);
     } catch (error) {
       throw mapFirebaseError(error, 'Erro ao atualizar etapa da programacao.');
+    }
+  },
+
+  async deleteTrip(trip: Trip) {
+    try {
+      const batch = writeBatch(firestore);
+      batch.delete(doc(firestore, 'trips', trip.id));
+
+      if (trip.unloadingGeneratedTripId) {
+        batch.update(doc(firestore, 'trips', trip.unloadingGeneratedTripId), {
+          unloadingSourceTripId: deleteField(),
+        });
+      }
+      if (trip.unloadingSourceTripId) {
+        batch.update(doc(firestore, 'trips', trip.unloadingSourceTripId), {
+          unloadingGeneratedTripId: deleteField(),
+        });
+      }
+
+      await batch.commit();
+    } catch (error) {
+      throw mapFirebaseError(error, 'Erro ao excluir programacao.');
     }
   },
 

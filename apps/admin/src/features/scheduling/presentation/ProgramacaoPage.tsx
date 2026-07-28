@@ -9,6 +9,7 @@ import {
   Plus,
   Route,
   Search,
+  Trash2,
   Truck,
   UserRound,
   X,
@@ -292,6 +293,24 @@ export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: 
     }
   }
 
+  async function deleteTrip(trip: Trip) {
+    const confirmed = window.confirm('Excluir esta programacao? Esta acao nao pode ser desfeita.');
+    if (!confirmed) {
+      return;
+    }
+
+    setBusyTripId(trip.id);
+    setError('');
+    try {
+      await adminWriteRepository.deleteTrip(trip);
+      await onChanged();
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : 'Erro ao excluir programacao.');
+    } finally {
+      setBusyTripId('');
+    }
+  }
+
   return (
     <div className="space-y-4">
       {error ? <p className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
@@ -415,9 +434,14 @@ export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: 
                           </select>
                         </SpreadsheetCell>
                         <SpreadsheetCell className="text-right">
-                          <button className="ui-icon-button inline-flex h-9 w-9 items-center justify-center border-zinc-200 bg-white text-zinc-700 shadow-sm hover:border-avapex-yellow hover:bg-avapex-yellow" disabled={busyTripId === trip.id} onClick={() => openEditForm(trip)} title="Editar programacao" type="button">
-                            <Pencil size={15} />
-                          </button>
+                          <div className="flex justify-end gap-2">
+                            <button className="ui-icon-button inline-flex h-9 w-9 items-center justify-center border-zinc-200 bg-white text-zinc-700 shadow-sm hover:border-avapex-yellow hover:bg-avapex-yellow" disabled={busyTripId === trip.id} onClick={() => openEditForm(trip)} title="Editar programacao" type="button">
+                              <Pencil size={15} />
+                            </button>
+                            <button className="ui-icon-button inline-flex h-9 w-9 items-center justify-center border-red-100 bg-white text-red-600 shadow-sm hover:border-red-200 hover:bg-red-50" disabled={busyTripId === trip.id} onClick={() => void deleteTrip(trip)} title="Excluir programacao" type="button">
+                              <Trash2 size={15} />
+                            </button>
+                          </div>
                         </SpreadsheetCell>
                       </tr>
                     );
