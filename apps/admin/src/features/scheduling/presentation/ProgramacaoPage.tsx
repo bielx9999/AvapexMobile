@@ -31,8 +31,8 @@ type ProgramacaoPageProps = {
 };
 
 const kanbanColumns: Array<{ status: ProgrammingStatus; label: string; tone: 'dark' | 'yellow' | 'info' | 'success' | 'neutral' }> = [
-  { status: 'loading', label: 'Carregando', tone: 'yellow' },
   { status: 'in_transit', label: 'Em transito', tone: 'info' },
+  { status: 'loading', label: 'Carregando', tone: 'yellow' },
   { status: 'unloading', label: 'Descarregando', tone: 'neutral' },
   { status: 'awaiting_invoice', label: 'Aguardando NF', tone: 'dark' },
   { status: 'released', label: 'Liberado', tone: 'success' },
