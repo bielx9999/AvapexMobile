@@ -1,5 +1,6 @@
 import { FormEvent, type ReactNode, useMemo, useState } from 'react';
 import {
+  CalendarClock,
   ClipboardList,
   Clock3,
   FileText,
@@ -15,6 +16,7 @@ import {
 import { adminWriteRepository } from '../../shared/data/firestoreCollections';
 import type {
   AppUser,
+  ProgrammingOperationType,
   ProgrammingOperationalStatus,
   ProgrammedVehicleType,
   ProgrammingStatus,
@@ -30,12 +32,34 @@ type ProgramacaoPageProps = {
   vehicles: Vehicle[];
 };
 
-const kanbanColumns: Array<{ status: ProgrammingStatus; label: string; tone: 'dark' | 'yellow' | 'info' | 'success' | 'neutral' }> = [
+type DailyStatusValue = ProgrammingOperationalStatus | 'awaiting_invoice';
+
+type DailyStatusOption = {
+  label: string;
+  operationType?: ProgrammingOperationType;
+  operationalStatus?: ProgrammingOperationalStatus;
+  programmingStatus: ProgrammingStatus;
+  value: DailyStatusValue;
+};
+
+const stageCards: Array<{ status: ProgrammingStatus; label: string; tone: 'dark' | 'yellow' | 'info' | 'success' | 'neutral' }> = [
   { status: 'in_transit', label: 'Em transito', tone: 'info' },
   { status: 'loading', label: 'Carregando', tone: 'yellow' },
   { status: 'unloading', label: 'Descarregando', tone: 'neutral' },
   { status: 'awaiting_invoice', label: 'Aguardando NF', tone: 'dark' },
   { status: 'released', label: 'Liberado', tone: 'success' },
+];
+
+const dailyStatusOptions: DailyStatusOption[] = [
+  { value: 'transit_to_loading', label: 'EM TRANSITO PARA CARGA', programmingStatus: 'in_transit', operationalStatus: 'transit_to_loading', operationType: 'loading' },
+  { value: 'transit_to_unloading', label: 'EM TRANSITO PARA DESCARGA', programmingStatus: 'in_transit', operationalStatus: 'transit_to_unloading', operationType: 'unloading' },
+  { value: 'waiting_loading', label: 'AGUARDANDO CARREGAR', programmingStatus: 'loading', operationalStatus: 'waiting_loading', operationType: 'loading' },
+  { value: 'loading', label: 'CARREGANDO', programmingStatus: 'loading', operationalStatus: 'loading', operationType: 'loading' },
+  { value: 'waiting_unloading', label: 'AGUARDANDO DESCARGA', programmingStatus: 'unloading', operationalStatus: 'waiting_unloading', operationType: 'unloading' },
+  { value: 'unloading', label: 'DESCARREGANDO', programmingStatus: 'unloading', operationalStatus: 'unloading', operationType: 'unloading' },
+  { value: 'awaiting_invoice', label: 'AGUARDANDO NF', programmingStatus: 'awaiting_invoice' },
+  { value: 'released_unloading', label: 'LIBERADO DA DESCARGA', programmingStatus: 'released', operationalStatus: 'released_unloading', operationType: 'unloading' },
+  { value: 'released_loading', label: 'LIBERADO DA CARGA', programmingStatus: 'released', operationalStatus: 'released_loading', operationType: 'loading' },
 ];
 
 const programmedVehicleOptions: Array<{ value: ProgrammedVehicleType; label: string }> = [
@@ -51,14 +75,18 @@ const programmedVehicleOptions: Array<{ value: ProgrammedVehicleType; label: str
 ];
 
 const initialForm = {
+  additionalInfo: '',
   customerRequestNumber: '',
   destination: '',
   driverId: '',
+  expectedArrivalAt: '',
+  operationType: 'loading' as ProgrammingOperationType,
   origin: '',
   programmedVehicleType: 'truck' as ProgrammedVehicleType,
   programmingStatus: 'loading' as ProgrammingStatus,
   returnTrip: false,
   scheduledAt: '',
+  statusValue: 'waiting_loading' as DailyStatusValue,
   vehicleId: '',
 };
 
@@ -66,7 +94,7 @@ export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: 
   const today = new Date().toISOString().slice(0, 10);
   const [form, setForm] = useState(initialForm);
   const [query, setQuery] = useState('');
-  const [status, setStatus] = useState<'all' | ProgrammingStatus>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | DailyStatusValue>('all');
   const [driverId, setDriverId] = useState('');
   const [startDate, setStartDate] = useState(today);
   const [endDate, setEndDate] = useState(today);
@@ -92,64 +120,73 @@ export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: 
     const start = startDate ? new Date(`${startDate}T00:00:00`) : null;
     const end = endDate ? new Date(`${endDate}T23:59:59`) : null;
 
-    return trips.filter((trip) => {
-      const tripProgrammingStatus = trip.programmingStatus ?? 'loading';
-      if (status !== 'all' && tripProgrammingStatus !== status) {
-        return false;
-      }
-      if (driverId && trip.driverId !== driverId) {
-        return false;
-      }
-      if (start && (!trip.scheduledAt || trip.scheduledAt < start)) {
-        return false;
-      }
-      if (end && (!trip.scheduledAt || trip.scheduledAt > end)) {
-        return false;
-      }
-      if (!normalizedQuery) {
-        return true;
-      }
+    return trips
+      .filter((trip) => {
+        const currentDailyStatus = findDailyStatusOption(trip);
+        if (statusFilter !== 'all' && currentDailyStatus.value !== statusFilter) {
+          return false;
+        }
+        if (driverId && trip.driverId !== driverId) {
+          return false;
+        }
+        if (start && (!trip.scheduledAt || trip.scheduledAt < start)) {
+          return false;
+        }
+        if (end && (!trip.scheduledAt || trip.scheduledAt > end)) {
+          return false;
+        }
+        if (!normalizedQuery) {
+          return true;
+        }
 
-      return [
-        trip.customerRequestNumber,
-        trip.origin,
-        trip.destination,
-        trip.driverName,
-        driverNames.get(trip.driverId),
-        trip.vehiclePlate,
-        vehicleNames.get(trip.vehicleId),
-        programmedVehicleTypeLabel(trip.programmedVehicleType),
-        programmingStatusLabel(tripProgrammingStatus),
-      ]
-        .join(' ')
-        .toLowerCase()
-        .includes(normalizedQuery);
-    });
-  }, [driverId, driverNames, endDate, query, startDate, status, trips, vehicleNames]);
+        return [
+          trip.additionalInfo,
+          trip.customerRequestNumber,
+          trip.origin,
+          trip.destination,
+          trip.driverName,
+          driverNames.get(trip.driverId),
+          trip.vehiclePlate,
+          vehicleNames.get(trip.vehicleId),
+          operationTypeLabel(trip.operationType),
+          programmedVehicleTypeLabel(trip.programmedVehicleType),
+          currentDailyStatus.label,
+        ]
+          .join(' ')
+          .toLowerCase()
+          .includes(normalizedQuery);
+      })
+      .sort((a, b) => (a.scheduledAt?.getTime() ?? 0) - (b.scheduledAt?.getTime() ?? 0));
+  }, [driverId, driverNames, endDate, query, startDate, statusFilter, trips, vehicleNames]);
 
   const stats = useMemo(() => {
-    return kanbanColumns.map((column) => ({
+    return stageCards.map((column) => ({
       ...column,
       total: trips.filter((trip) => (trip.programmingStatus ?? 'loading') === column.status).length,
     }));
   }, [trips]);
 
   function openCreateForm() {
-    setForm(initialForm);
+    setForm({ ...initialForm, scheduledAt: formatDateTimeInput(new Date()) });
     setEditingTrip(null);
     setShowForm(true);
   }
 
   function openEditForm(trip: Trip) {
+    const currentStatus = findDailyStatusOption(trip);
     setForm({
+      additionalInfo: trip.additionalInfo ?? '',
       customerRequestNumber: trip.customerRequestNumber ?? '',
       destination: trip.destination,
       driverId: trip.driverId,
+      expectedArrivalAt: formatDateTimeInput(trip.expectedArrivalAt ?? null),
+      operationType: trip.operationType ?? currentStatus.operationType ?? 'loading',
       origin: trip.origin,
       programmedVehicleType: trip.programmedVehicleType ?? 'truck',
-      programmingStatus: trip.programmingStatus ?? 'loading',
+      programmingStatus: currentStatus.programmingStatus,
       returnTrip: trip.returnTrip ?? false,
       scheduledAt: formatDateTimeInput(trip.scheduledAt),
+      statusValue: currentStatus.value,
       vehicleId: trip.vehicleId,
     });
     setEditingTrip(trip);
@@ -165,6 +202,26 @@ export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: 
     setShowForm(false);
   }
 
+  function updateFormStatus(value: DailyStatusValue) {
+    const selected = dailyStatusOptions.find((option) => option.value === value) ?? dailyStatusOptions[2];
+    setForm((current) => ({
+      ...current,
+      operationType: selected.operationType ?? current.operationType,
+      programmingStatus: selected.programmingStatus,
+      statusValue: selected.value,
+    }));
+  }
+
+  function updateFormOperationType(value: ProgrammingOperationType) {
+    const fallback = value === 'unloading' ? dailyStatusOptions[4] : dailyStatusOptions[2];
+    setForm((current) => ({
+      ...current,
+      operationType: value,
+      programmingStatus: fallback.programmingStatus,
+      statusValue: fallback.value,
+    }));
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSubmitting(true);
@@ -173,43 +230,53 @@ export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: 
     try {
       const driver = drivers.find((item) => item.uid === form.driverId);
       const vehicle = vehicles.find((item) => item.id === form.vehicleId);
+      const selectedStatus = dailyStatusOptions.find((option) => option.value === form.statusValue) ?? dailyStatusOptions[2];
       if (!driver || !vehicle) {
         throw new Error('Selecione motorista e placa cadastrada validos.');
       }
+      const scheduledAt = new Date(form.scheduledAt);
+      const expectedArrivalAt = form.expectedArrivalAt ? new Date(form.expectedArrivalAt) : null;
       const savedTripId = await adminWriteRepository.saveTrip({
+        additionalInfo: form.additionalInfo,
         customerRequestNumber: form.customerRequestNumber,
         destination: form.destination,
         driverId: form.driverId,
         driverName: driver.name || driver.email,
+        expectedArrivalAt,
         id: editingTrip?.id,
+        operationType: form.operationType,
+        operationalStatus: selectedStatus.operationalStatus,
         origin: form.origin,
         programmedVehicleType: form.programmedVehicleType,
-        programmingStatus: form.programmingStatus,
+        programmingStatus: selectedStatus.programmingStatus,
         returnTrip: form.returnTrip,
-        scheduledAt: new Date(form.scheduledAt),
-        status: form.programmingStatus === 'released' ? 'completed' : form.programmingStatus === 'loading' ? 'pending' : 'in_progress',
+        scheduledAt,
+        status: selectedStatus.programmingStatus === 'released' ? 'completed' : selectedStatus.programmingStatus === 'loading' ? 'pending' : 'in_progress',
         vehicleId: form.vehicleId,
         vehicleModel: vehicle.model,
         vehiclePlate: vehicle.plate,
       });
-      if (form.programmingStatus === 'released') {
+      if (selectedStatus.programmingStatus === 'released') {
         const result = await adminWriteRepository.updateTripProgrammingStatus(
           {
+            additionalInfo: form.additionalInfo,
             completedAt: editingTrip?.completedAt ?? null,
             customerRequestNumber: form.customerRequestNumber,
             deliveryDocs: editingTrip?.deliveryDocs ?? [],
             destination: form.destination,
             driverId: form.driverId,
             driverName: driver.name || driver.email,
+            expectedArrivalAt,
             id: savedTripId,
+            operationType: form.operationType,
+            operationalStatus: selectedStatus.operationalStatus,
             origin: form.origin,
-            operationalStatus: undefined,
             programmedVehicleType: form.programmedVehicleType,
-            programmingStatus: form.programmingStatus,
+            programmingStatus: selectedStatus.programmingStatus,
             returnGeneratedTripId: editingTrip?.returnGeneratedTripId,
             returnSourceTripId: editingTrip?.returnSourceTripId,
             returnTrip: form.returnTrip,
-            scheduledAt: new Date(form.scheduledAt),
+            scheduledAt,
             startedAt: editingTrip?.startedAt ?? null,
             status: 'completed',
             unloadingGeneratedTripId: editingTrip?.unloadingGeneratedTripId,
@@ -218,7 +285,9 @@ export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: 
             vehicleModel: vehicle.model,
             vehiclePlate: vehicle.plate,
           },
-          'released',
+          selectedStatus.programmingStatus,
+          selectedStatus.operationalStatus,
+          form.operationType,
         );
         revealGeneratedScheduling(result);
       }
@@ -231,31 +300,24 @@ export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: 
     }
   }
 
-  async function updateProgrammingStatus(trip: Trip, nextStatus: ProgrammingStatus) {
-    if ((trip.programmingStatus ?? 'loading') === nextStatus) {
+  async function updateDailyStatus(trip: Trip, value: DailyStatusValue) {
+    const selected = dailyStatusOptions.find((option) => option.value === value);
+    if (!selected || findDailyStatusOption(trip).value === value) {
       return;
     }
     setBusyTripId(trip.id);
     setError('');
     try {
-      const result = await adminWriteRepository.updateTripProgrammingStatus(trip, nextStatus);
+      const result = await adminWriteRepository.updateTripProgrammingStatus(
+        trip,
+        selected.programmingStatus,
+        selected.operationalStatus,
+        selected.operationType ?? trip.operationType,
+      );
       revealGeneratedScheduling(result);
       await onChanged();
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : 'Erro ao atualizar programacao.');
-    } finally {
-      setBusyTripId('');
-    }
-  }
-
-  async function updateOperationalStatus(trip: Trip, nextStatus: ProgrammingOperationalStatus) {
-    setBusyTripId(trip.id);
-    setError('');
-    try {
-      await adminWriteRepository.updateTripOperationalStatus(trip.id, nextStatus);
-      await onChanged();
-    } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : 'Erro ao atualizar status operacional.');
     } finally {
       setBusyTripId('');
     }
@@ -266,12 +328,12 @@ export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: 
       return;
     }
     const generatedDate = formatDateInput(result.generatedDate);
-    setStatus('all');
+    setStatusFilter('all');
     setEndDate((current) => (!current || current < generatedDate ? generatedDate : current));
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {error ? <p className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
@@ -287,112 +349,134 @@ export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: 
       </section>
 
       <section className="ui-card overflow-hidden">
-        <div className="flex flex-col gap-3 border-b border-zinc-200 px-4 py-3 xl:flex-row xl:items-end xl:justify-between">
-          <h2 className="font-semibold">Planilha de programacao</h2>
-          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[140px_140px_190px_190px_260px_auto]">
-            <input className="ui-input h-10 px-3 text-sm" type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
-            <input className="ui-input h-10 px-3 text-sm" type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
-            <select className="ui-input h-10 px-3 text-sm" value={status} onChange={(event) => setStatus(event.target.value as 'all' | ProgrammingStatus)}>
-              <option value="all">Todas etapas</option>
-              {kanbanColumns.map((column) => (
-                <option key={column.status} value={column.status}>{column.label}</option>
-              ))}
-            </select>
-            <select className="ui-input h-10 px-3 text-sm" value={driverId} onChange={(event) => setDriverId(event.target.value)}>
-              <option value="">Todos motoristas</option>
-              {drivers.map((driver) => (
-                <option key={driver.uid} value={driver.uid}>{driver.name || driver.email}</option>
-              ))}
-            </select>
-            <label className="relative block">
-              <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" size={18} />
-              <input
-                className="ui-input h-10 w-full pl-10 pr-3 text-sm"
-                placeholder="Buscar solicitacao, rota, placa"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-              />
-            </label>
-            <button
-              className="ui-button flex h-10 items-center justify-center gap-2 bg-avapex-yellow px-4 text-sm font-semibold text-avapex-black hover:bg-yellow-300"
-              onClick={openCreateForm}
-              type="button"
-            >
-              <Plus size={18} />
-              Nova Programacao
-            </button>
+        <div className="border-b border-zinc-200 bg-white px-4 py-3">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
+            <div>
+              <h2 className="font-semibold">Programacao diaria</h2>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[140px_140px_230px_190px_260px_auto]">
+              <input className="ui-input h-10 px-3 text-sm" type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
+              <input className="ui-input h-10 px-3 text-sm" type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
+              <select className="ui-input h-10 px-3 text-sm" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as 'all' | DailyStatusValue)}>
+                <option value="all">Todos status</option>
+                {dailyStatusOptions.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+              <select className="ui-input h-10 px-3 text-sm" value={driverId} onChange={(event) => setDriverId(event.target.value)}>
+                <option value="">Todos motoristas</option>
+                {drivers.map((driver) => (
+                  <option key={driver.uid} value={driver.uid}>{driver.name || driver.email}</option>
+                ))}
+              </select>
+              <label className="relative block">
+                <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" size={18} />
+                <input
+                  className="ui-input h-10 w-full pl-10 pr-3 text-sm"
+                  placeholder="Buscar solicitacao, rota, placa"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                />
+              </label>
+              <button
+                className="ui-button flex h-10 items-center justify-center gap-2 bg-avapex-yellow px-4 text-sm font-semibold text-avapex-black hover:bg-yellow-300"
+                onClick={openCreateForm}
+                type="button"
+              >
+                <Plus size={18} />
+                Nova Programacao
+              </button>
+            </div>
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[1500px] border-separate border-spacing-0 text-left text-xs">
-            <thead className="sticky top-0 z-10 bg-zinc-50 text-[11px] uppercase text-zinc-500">
-              <tr>
-                <th className="border-b border-zinc-200 px-3 py-3">Data</th>
-                <th className="border-b border-zinc-200 px-3 py-3">Solicitacao</th>
-                <th className="border-b border-zinc-200 px-3 py-3">Motorista</th>
-                <th className="border-b border-zinc-200 px-3 py-3">Placa</th>
-                <th className="border-b border-zinc-200 px-3 py-3">Veiculo</th>
-                <th className="border-b border-zinc-200 px-3 py-3">Origem</th>
-                <th className="border-b border-zinc-200 px-3 py-3">Destino</th>
-                <th className="border-b border-zinc-200 px-3 py-3">Retorno</th>
-                <th className="border-b border-zinc-200 px-3 py-3">Etapa</th>
-                <th className="border-b border-zinc-200 px-3 py-3">Status</th>
-                <th className="border-b border-zinc-200 px-3 py-3">Observacao</th>
-                <th className="border-b border-zinc-200 px-3 py-3 text-right">Acoes</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredTrips.map((trip) => (
-                <tr className="group" key={trip.id}>
-                  <td className="border-b border-zinc-100 px-3 py-2 align-middle">{formatDate(trip.scheduledAt)}</td>
-                  <td className="border-b border-zinc-100 px-3 py-2 align-middle font-semibold">{trip.customerRequestNumber || '-'}</td>
-                  <td className="border-b border-zinc-100 px-3 py-2 align-middle">{trip.driverName || driverNames.get(trip.driverId) || trip.driverId}</td>
-                  <td className="border-b border-zinc-100 px-3 py-2 align-middle">{trip.vehiclePlate || vehicleNames.get(trip.vehicleId) || trip.vehicleId}</td>
-                  <td className="border-b border-zinc-100 px-3 py-2 align-middle">{programmedVehicleTypeLabel(trip.programmedVehicleType)}</td>
-                  <td className="border-b border-zinc-100 px-3 py-2 align-middle">{trip.origin || '-'}</td>
-                  <td className="border-b border-zinc-100 px-3 py-2 align-middle">{trip.destination || '-'}</td>
-                  <td className="border-b border-zinc-100 px-3 py-2 align-middle">
-                    <span className="ui-pill bg-zinc-100 text-zinc-700">{trip.returnTrip ? 'Sim' : 'Nao'}</span>
-                  </td>
-                  <td className="border-b border-zinc-100 px-3 py-2 align-middle">
-                    <select
-                      className="ui-input h-8 w-44 px-2 text-xs"
-                      disabled={busyTripId === trip.id}
-                      value={trip.programmingStatus ?? 'loading'}
-                      onChange={(event) => void updateProgrammingStatus(trip, event.target.value as ProgrammingStatus)}
-                    >
-                      {kanbanColumns.map((column) => (
-                        <option key={column.status} value={column.status}>{column.label}</option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="border-b border-zinc-100 px-3 py-2 align-middle">
-                    <SpreadsheetOperationalStatusField
-                      busy={busyTripId === trip.id}
-                      onChange={(nextStatus) => void updateOperationalStatus(trip, nextStatus)}
-                      trip={trip}
-                    />
-                  </td>
-                  <td className="border-b border-zinc-100 px-3 py-2 align-middle">
-                    <GeneratedBadges trip={trip} />
-                  </td>
-                  <td className="border-b border-zinc-100 px-3 py-2 text-right align-middle">
-                    <button className="ui-icon-button inline-flex h-8 w-8 items-center justify-center text-zinc-700 hover:bg-zinc-50" disabled={busyTripId === trip.id} onClick={() => openEditForm(trip)} title="Editar programacao" type="button">
-                      <Pencil size={15} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {!loading && filteredTrips.length === 0 ? (
+        <div className="overflow-x-auto bg-white">
+          <div className="min-w-[1680px]">
+            <div className="grid grid-cols-[120px_120px_150px_150px_220px_240px_110px_135px_95px_150px_220px_140px_240px_72px] border-b-2 border-avapex-black text-center text-sm font-semibold">
+              <div className="border-r border-zinc-400 bg-zinc-900 px-3 py-3 text-white">{formatDateOnly(new Date())}</div>
+              <div className="border-r border-zinc-400 bg-white px-3 py-3">{filteredTrips.length} linhas</div>
+              <div className="col-span-2 border-r border-zinc-400 bg-zinc-900 px-3 py-3 text-white">PROGRAMACAO</div>
+              <div className="col-span-9 border-r border-zinc-400 bg-white px-3 py-3 text-avapex-black">AVAPEX - CARGA/DESCARGA</div>
+              <div className="bg-avapex-yellow px-3 py-3 text-avapex-black">ADM</div>
+            </div>
+
+            <table className="w-full border-separate border-spacing-0 text-left text-xs">
+              <thead className="sticky top-0 z-10 text-[11px] uppercase text-avapex-black">
                 <tr>
-                  <td className="px-4 py-8 text-center text-sm text-zinc-500" colSpan={12}>
-                    Nenhuma programacao encontrada.
-                  </td>
+                  <SpreadsheetHeader className="w-[120px] bg-white">Data - sol</SpreadsheetHeader>
+                  <SpreadsheetHeader className="w-[120px] bg-white">Horario sol</SpreadsheetHeader>
+                  <SpreadsheetHeader className="w-[150px] bg-zinc-900 text-white">Previsao de chegada</SpreadsheetHeader>
+                  <SpreadsheetHeader className="w-[150px] bg-white">Carga / descarga</SpreadsheetHeader>
+                  <SpreadsheetHeader className="w-[220px] bg-avapex-yellow">Origem</SpreadsheetHeader>
+                  <SpreadsheetHeader className="w-[240px] bg-avapex-yellow">Destino</SpreadsheetHeader>
+                  <SpreadsheetHeader className="w-[110px] bg-zinc-800 text-white">Inf. adicional</SpreadsheetHeader>
+                  <SpreadsheetHeader className="w-[135px] bg-avapex-yellow">Solicitacao</SpreadsheetHeader>
+                  <SpreadsheetHeader className="w-[95px] bg-avapex-yellow">Retorno</SpreadsheetHeader>
+                  <SpreadsheetHeader className="w-[150px] bg-zinc-900 text-white">Veiculo</SpreadsheetHeader>
+                  <SpreadsheetHeader className="w-[220px] bg-zinc-900 text-white">Motorista</SpreadsheetHeader>
+                  <SpreadsheetHeader className="w-[140px] bg-zinc-900 text-white">Placa</SpreadsheetHeader>
+                  <SpreadsheetHeader className="w-[240px] bg-avapex-yellow">Status</SpreadsheetHeader>
+                  <SpreadsheetHeader className="w-[72px] bg-zinc-100 text-right">Acoes</SpreadsheetHeader>
                 </tr>
-              ) : null}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {filteredTrips.map((trip, index) => {
+                  const currentStatus = findDailyStatusOption(trip);
+                  return (
+                    <tr className={index % 2 === 0 ? 'bg-white' : 'bg-zinc-50/70'} key={trip.id}>
+                      <SpreadsheetCell>{formatDateOnly(trip.scheduledAt)}</SpreadsheetCell>
+                      <SpreadsheetCell>{formatTimeOnly(trip.scheduledAt)}</SpreadsheetCell>
+                      <SpreadsheetCell>{formatDateTimeShort(trip.expectedArrivalAt ?? null)}</SpreadsheetCell>
+                      <SpreadsheetCell>
+                        <span className="rounded-lg bg-zinc-100 px-2 py-1 font-semibold text-zinc-800">{operationTypeLabel(trip.operationType)}</span>
+                      </SpreadsheetCell>
+                      <SpreadsheetCell className="font-medium">{trip.origin || '-'}</SpreadsheetCell>
+                      <SpreadsheetCell className="font-medium">{trip.destination || '-'}</SpreadsheetCell>
+                      <SpreadsheetCell>
+                        <div className="flex flex-col gap-1">
+                          <span>{trip.additionalInfo || '-'}</span>
+                          <GeneratedBadges trip={trip} />
+                        </div>
+                      </SpreadsheetCell>
+                      <SpreadsheetCell className="font-semibold">{trip.customerRequestNumber || '-'}</SpreadsheetCell>
+                      <SpreadsheetCell>
+                        <span className={`rounded-lg px-2 py-1 font-semibold ${trip.returnTrip ? 'bg-avapex-yellow text-avapex-black' : 'bg-zinc-100 text-zinc-700'}`}>
+                          {trip.returnTrip ? 'SIM' : 'NAO'}
+                        </span>
+                      </SpreadsheetCell>
+                      <SpreadsheetCell>{programmedVehicleTypeLabel(trip.programmedVehicleType).toUpperCase()}</SpreadsheetCell>
+                      <SpreadsheetCell>{trip.driverName || driverNames.get(trip.driverId) || trip.driverId}</SpreadsheetCell>
+                      <SpreadsheetCell className="font-semibold">{trip.vehiclePlate || vehicleNames.get(trip.vehicleId) || trip.vehicleId}</SpreadsheetCell>
+                      <SpreadsheetCell>
+                        <select
+                          className="h-9 w-full rounded-lg border border-zinc-300 bg-white px-2 text-xs font-semibold uppercase outline-none focus:border-avapex-yellow focus:ring-2 focus:ring-avapex-yellow/30"
+                          disabled={busyTripId === trip.id}
+                          value={currentStatus.value}
+                          onChange={(event) => void updateDailyStatus(trip, event.target.value as DailyStatusValue)}
+                        >
+                          {dailyStatusOptions.map((option) => (
+                            <option key={option.value} value={option.value}>{option.label}</option>
+                          ))}
+                        </select>
+                      </SpreadsheetCell>
+                      <SpreadsheetCell className="text-right">
+                        <button className="ui-icon-button inline-flex h-8 w-8 items-center justify-center border-zinc-300 text-zinc-700 hover:bg-white" disabled={busyTripId === trip.id} onClick={() => openEditForm(trip)} title="Editar programacao" type="button">
+                          <Pencil size={15} />
+                        </button>
+                      </SpreadsheetCell>
+                    </tr>
+                  );
+                })}
+                {!loading && filteredTrips.length === 0 ? (
+                  <tr>
+                    <td className="px-4 py-8 text-center text-sm text-zinc-500" colSpan={14}>
+                      Nenhuma programacao encontrada.
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
         </div>
       </section>
 
@@ -418,27 +502,43 @@ export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: 
                   <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                     <TextField
                       icon={<FileText size={15} />}
-                      label="N° solicitacao do cliente"
+                      label="Numero da solicitacao do cliente"
                       onChange={(value) => setForm((current) => ({ ...current, customerRequestNumber: value }))}
                       required
                       value={form.customerRequestNumber}
                     />
                     <TextField
                       icon={<Clock3 size={15} />}
-                      label="Data e horario"
+                      label="Data e horario da solicitacao"
                       onChange={(value) => setForm((current) => ({ ...current, scheduledAt: value }))}
                       required
                       type="datetime-local"
                       value={form.scheduledAt}
                     />
+                    <TextField
+                      icon={<CalendarClock size={15} />}
+                      label="Previsao de chegada"
+                      onChange={(value) => setForm((current) => ({ ...current, expectedArrivalAt: value }))}
+                      type="datetime-local"
+                      value={form.expectedArrivalAt}
+                    />
                     <SelectField
                       icon={<Route size={15} />}
-                      label="Etapa"
-                      onChange={(value) => setForm((current) => ({ ...current, programmingStatus: value as ProgrammingStatus }))}
-                      value={form.programmingStatus}
+                      label="Carga / descarga"
+                      onChange={(value) => updateFormOperationType(value as ProgrammingOperationType)}
+                      value={form.operationType}
                     >
-                      {kanbanColumns.map((column) => (
-                        <option key={column.status} value={column.status}>{column.label}</option>
+                      <option value="loading">Carga</option>
+                      <option value="unloading">Descarga</option>
+                    </SelectField>
+                    <SelectField
+                      icon={<ClipboardList size={15} />}
+                      label="Status"
+                      onChange={(value) => updateFormStatus(value as DailyStatusValue)}
+                      value={form.statusValue}
+                    >
+                      {dailyStatusOptions.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
                       ))}
                     </SelectField>
                     <SelectField
@@ -483,6 +583,15 @@ export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: 
                     <TextField icon={<MapPin size={15} />} label="Destino" value={form.destination} onChange={(value) => setForm((current) => ({ ...current, destination: value }))} required />
                   </div>
                 </section>
+
+                <section className="ui-card p-4">
+                  <h3 className="mb-3 text-sm font-semibold text-zinc-800">Informacao adicional</h3>
+                  <TextAreaField
+                    label="Observacoes da programacao"
+                    onChange={(value) => setForm((current) => ({ ...current, additionalInfo: value }))}
+                    value={form.additionalInfo}
+                  />
+                </section>
               </div>
 
               <footer className="flex flex-col-reverse gap-2 border-t border-zinc-200 bg-white px-5 py-4 sm:flex-row sm:justify-end">
@@ -502,49 +611,30 @@ export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: 
   );
 }
 
-function SpreadsheetOperationalStatusField({
-  busy,
-  onChange,
-  trip,
-}: {
-  busy: boolean;
-  onChange: (status: ProgrammingOperationalStatus) => void;
-  trip: Trip;
-}) {
-  const options = operationalStatusOptions(trip.programmingStatus ?? 'loading');
-  if (options.length === 0) {
-    return <span className="rounded-xl bg-zinc-50 px-2 py-2 text-xs text-zinc-500">Sem status</span>;
-  }
-
-  const currentStatus = trip.operationalStatus && options.some((option) => option.value === trip.operationalStatus)
-    ? trip.operationalStatus
-    : options[0].value;
-
+function GeneratedBadges({ trip }: { trip: Trip }) {
   return (
-    <label className="block">
-      <select
-        className="ui-input h-8 w-48 px-2 text-xs"
-        disabled={busy}
-        value={currentStatus}
-        onChange={(event) => onChange(event.target.value as ProgrammingOperationalStatus)}
-      >
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>{option.label}</option>
-        ))}
-      </select>
-    </label>
+    <div className="flex flex-wrap gap-1">
+      {trip.returnGeneratedTripId ? <span className="rounded-md bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">Retorno gerado</span> : null}
+      {trip.returnSourceTripId ? <span className="rounded-md bg-sky-50 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700">Retorno</span> : null}
+      {trip.unloadingGeneratedTripId ? <span className="rounded-md bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">Descarga gerada</span> : null}
+      {trip.unloadingSourceTripId ? <span className="rounded-md bg-zinc-100 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-700">Descarga</span> : null}
+    </div>
   );
 }
 
-function GeneratedBadges({ trip }: { trip: Trip }) {
+function SpreadsheetHeader({ children, className = '' }: { children: ReactNode; className?: string }) {
   return (
-    <div className="flex flex-wrap gap-1.5">
-      {trip.returnGeneratedTripId ? <span className="ui-pill bg-emerald-50 text-emerald-700">Retorno gerado</span> : null}
-      {trip.returnSourceTripId ? <span className="ui-pill bg-sky-50 text-sky-700">Retorno</span> : null}
-      {trip.unloadingGeneratedTripId ? <span className="ui-pill bg-emerald-50 text-emerald-700">Descarga gerada</span> : null}
-      {trip.unloadingSourceTripId ? <span className="ui-pill bg-zinc-100 text-zinc-700">Descarga</span> : null}
-      {!trip.returnGeneratedTripId && !trip.returnSourceTripId && !trip.unloadingGeneratedTripId && !trip.unloadingSourceTripId ? '-' : null}
-    </div>
+    <th className={`border-b-2 border-r border-avapex-black px-3 py-3 text-center font-semibold ${className}`}>
+      {children}
+    </th>
+  );
+}
+
+function SpreadsheetCell({ children, className = '' }: { children: ReactNode; className?: string }) {
+  return (
+    <td className={`border-b border-r border-zinc-300 px-3 py-2 align-middle text-zinc-800 ${className}`}>
+      {children}
+    </td>
   );
 }
 
@@ -581,6 +671,15 @@ function TextField({ icon, label, onChange, required, type = 'text', value }: { 
   );
 }
 
+function TextAreaField({ label, onChange, value }: { label: string; onChange: (value: string) => void; value: string }) {
+  return (
+    <label className="block">
+      <span className="mb-2 block text-sm font-medium text-zinc-700">{label}</span>
+      <textarea className="ui-input min-h-24 w-full resize-y px-3 py-2" value={value} onChange={(event) => onChange(event.target.value)} />
+    </label>
+  );
+}
+
 function SelectField({ children, icon, label, onChange, required, value }: { children: ReactNode; icon: ReactNode; label: string; onChange: (value: string) => void; required?: boolean; value: string }) {
   return (
     <label className="block">
@@ -611,43 +710,64 @@ function statusIcon(status: ProgrammingStatus) {
   return <ClipboardList size={20} />;
 }
 
-function programmingStatusLabel(status: ProgrammingStatus) {
-  return kanbanColumns.find((column) => column.status === status)?.label ?? status;
+function findDailyStatusOption(trip: Trip) {
+  if ((trip.programmingStatus ?? 'loading') === 'awaiting_invoice') {
+    return dailyStatusOptions.find((option) => option.value === 'awaiting_invoice') ?? dailyStatusOptions[6];
+  }
+  if (trip.operationalStatus) {
+    const byOperationalStatus = dailyStatusOptions.find((option) => option.operationalStatus === trip.operationalStatus);
+    if (byOperationalStatus) {
+      return byOperationalStatus;
+    }
+  }
+  if ((trip.programmingStatus ?? 'loading') === 'released') {
+    return trip.operationType === 'loading' ? dailyStatusOptions[8] : dailyStatusOptions[7];
+  }
+  if ((trip.programmingStatus ?? 'loading') === 'unloading') {
+    return dailyStatusOptions[4];
+  }
+  if ((trip.programmingStatus ?? 'loading') === 'in_transit') {
+    return trip.operationType === 'unloading' ? dailyStatusOptions[1] : dailyStatusOptions[0];
+  }
+  return dailyStatusOptions[2];
 }
 
-function operationalStatusOptions(programmingStatus: ProgrammingStatus) {
-  const options: Partial<Record<ProgrammingStatus, Array<{ value: ProgrammingOperationalStatus; label: string }>>> = {
-    in_transit: [
-      { value: 'transit_to_loading', label: 'Transito para Carga' },
-      { value: 'transit_to_unloading', label: 'Transito para descarga' },
-    ],
-    loading: [
-      { value: 'waiting_loading', label: 'Aguardando Carregar' },
-      { value: 'loading', label: 'Carregando' },
-    ],
-    released: [
-      { value: 'released_unloading', label: 'Liberado da descarga' },
-      { value: 'released_loading', label: 'Liberado da carga' },
-    ],
-    unloading: [
-      { value: 'waiting_unloading', label: 'Aguardando descarga' },
-      { value: 'unloading', label: 'Descarregando' },
-    ],
-  };
-  return options[programmingStatus] ?? [];
+function operationTypeLabel(type?: ProgrammingOperationType) {
+  return type === 'unloading' ? 'DESCARGA' : 'CARGA';
 }
 
 function programmedVehicleTypeLabel(type?: ProgrammedVehicleType) {
   return programmedVehicleOptions.find((option) => option.value === type)?.label ?? '-';
 }
 
-function formatDate(value: Date | null) {
+function formatDateOnly(value: Date | null) {
   if (!value) {
     return '-';
   }
   return new Intl.DateTimeFormat('pt-BR', {
     dateStyle: 'short',
-    timeStyle: 'short',
+  }).format(value);
+}
+
+function formatTimeOnly(value: Date | null) {
+  if (!value) {
+    return '-';
+  }
+  return new Intl.DateTimeFormat('pt-BR', {
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(value);
+}
+
+function formatDateTimeShort(value: Date | null) {
+  if (!value) {
+    return '-';
+  }
+  return new Intl.DateTimeFormat('pt-BR', {
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    month: '2-digit',
   }).format(value);
 }
 

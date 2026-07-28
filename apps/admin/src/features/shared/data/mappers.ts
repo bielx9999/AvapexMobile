@@ -78,6 +78,16 @@ export function mapTrip(id: string, data: Record<string, unknown>): Trip {
     data.operationalStatus === 'released_loading'
       ? data.operationalStatus
       : defaultOperationalStatus(programmingStatus as Trip['programmingStatus']);
+  const operationType =
+    data.operationType === 'loading' || data.operationType === 'unloading'
+      ? data.operationType
+      : operationalStatus === 'transit_to_unloading' ||
+          operationalStatus === 'waiting_unloading' ||
+          operationalStatus === 'unloading' ||
+          operationalStatus === 'released_unloading' ||
+          programmingStatus === 'unloading'
+        ? 'unloading'
+        : 'loading';
 
   return {
     id: typeof data.id === 'string' ? data.id : id,
@@ -102,6 +112,9 @@ export function mapTrip(id: string, data: Record<string, unknown>): Trip {
     customerRequestNumber:
       typeof data.customerRequestNumber === 'string' ? data.customerRequestNumber : undefined,
     programmedVehicleType: programmedVehicleType as Trip['programmedVehicleType'],
+    operationType,
+    expectedArrivalAt: readDate(data.expectedArrivalAt),
+    additionalInfo: typeof data.additionalInfo === 'string' ? data.additionalInfo : undefined,
     returnGeneratedTripId:
       typeof data.returnGeneratedTripId === 'string' ? data.returnGeneratedTripId : undefined,
     returnSourceTripId: typeof data.returnSourceTripId === 'string' ? data.returnSourceTripId : undefined,

@@ -172,10 +172,13 @@ export const adminWriteRepository = {
         vehiclePlate: trip.vehiclePlate ?? '',
         vehicleModel: trip.vehicleModel ?? '',
         programmingStatus: trip.programmingStatus ?? 'loading',
-        operationalStatus: trip.operationalStatus ?? defaultOperationalStatus(trip.programmingStatus ?? 'loading'),
+        operationalStatus: trip.operationalStatus ?? defaultOperationalStatus(trip.programmingStatus ?? 'loading') ?? null,
         returnTrip: trip.returnTrip ?? false,
         customerRequestNumber: trip.customerRequestNumber?.trim() ?? '',
         programmedVehicleType: trip.programmedVehicleType ?? 'truck',
+        operationType: trip.operationType ?? 'loading',
+        expectedArrivalAt: trip.expectedArrivalAt ?? null,
+        additionalInfo: trip.additionalInfo?.trim() ?? '',
       };
 
       if (trip.id) {
@@ -219,11 +222,14 @@ export const adminWriteRepository = {
   async updateTripProgrammingStatus(
     trip: Trip,
     programmingStatus: NonNullable<Trip['programmingStatus']>,
+    operationalStatus?: Trip['operationalStatus'],
+    operationType?: Trip['operationType'],
   ): Promise<GeneratedSchedulingResult | null> {
     try {
       const status = tripStatusFromProgrammingStatus(programmingStatus);
       const data: DocumentData = {
-        operationalStatus: defaultOperationalStatus(programmingStatus) ?? null,
+        operationalStatus: operationalStatus ?? defaultOperationalStatus(programmingStatus) ?? null,
+        operationType: operationType ?? trip.operationType ?? 'loading',
         programmingStatus,
         status,
       };
@@ -285,6 +291,9 @@ export const adminWriteRepository = {
         returnTrip: false,
         customerRequestNumber: trip.customerRequestNumber ?? '',
         programmedVehicleType: trip.programmedVehicleType ?? 'truck',
+        operationType: shouldCreateReturnTrip ? 'loading' : 'unloading',
+        expectedArrivalAt: null,
+        additionalInfo: trip.additionalInfo ?? '',
         ...(shouldCreateReturnTrip ? { returnSourceTripId: trip.id } : { unloadingSourceTripId: trip.id }),
       });
       await batch.commit();
