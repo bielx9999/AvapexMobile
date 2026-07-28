@@ -161,11 +161,47 @@ export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: 
   }, [driverId, driverNames, endDate, query, startDate, statusFilter, trips, vehicleNames]);
 
   const stats = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    const start = startDate ? new Date(`${startDate}T00:00:00`) : null;
+    const end = endDate ? new Date(`${endDate}T23:59:59`) : null;
+    const scopedTrips = trips.filter((trip) => {
+      if (driverId && trip.driverId !== driverId) {
+        return false;
+      }
+      if (start && (!trip.scheduledAt || trip.scheduledAt < start)) {
+        return false;
+      }
+      if (end && (!trip.scheduledAt || trip.scheduledAt > end)) {
+        return false;
+      }
+      if (!normalizedQuery) {
+        return true;
+      }
+
+      const currentDailyStatus = findDailyStatusOption(trip);
+      return [
+        trip.additionalInfo,
+        trip.customerRequestNumber,
+        trip.origin,
+        trip.destination,
+        trip.driverName,
+        driverNames.get(trip.driverId),
+        trip.vehiclePlate,
+        vehicleNames.get(trip.vehicleId),
+        operationTypeLabel(trip.operationType),
+        programmedVehicleTypeLabel(trip.programmedVehicleType),
+        currentDailyStatus.label,
+      ]
+        .join(' ')
+        .toLowerCase()
+        .includes(normalizedQuery);
+    });
+
     return stageCards.map((column) => ({
       ...column,
-      total: trips.filter((trip) => (trip.programmingStatus ?? 'loading') === column.status).length,
+      total: scopedTrips.filter((trip) => (trip.programmingStatus ?? 'loading') === column.status).length,
     }));
-  }, [trips]);
+  }, [driverId, driverNames, endDate, query, startDate, trips, vehicleNames]);
 
   function openCreateForm() {
     setForm({ ...initialForm, scheduledAt: formatDateTimeInput(new Date()) });
