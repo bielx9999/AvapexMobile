@@ -55,6 +55,15 @@ export function mapVehicle(id: string, data: Record<string, unknown>): Vehicle {
 }
 
 export function mapTrip(id: string, data: Record<string, unknown>): Trip {
+  const programmingStatus =
+    data.programmingStatus === 'unloading_in_transit' ||
+    data.programmingStatus === 'awaiting_invoice' ||
+    data.programmingStatus === 'released'
+      ? data.programmingStatus
+      : 'loading';
+  const programmedVehicleType =
+    typeof data.programmedVehicleType === 'string' ? data.programmedVehicleType : undefined;
+
   return {
     id: typeof data.id === 'string' ? data.id : id,
     driverId: typeof data.driverId === 'string' ? data.driverId : '',
@@ -72,6 +81,11 @@ export function mapTrip(id: string, data: Record<string, unknown>): Trip {
     driverName: typeof data.driverName === 'string' ? data.driverName : undefined,
     vehiclePlate: typeof data.vehiclePlate === 'string' ? data.vehiclePlate : undefined,
     vehicleModel: typeof data.vehicleModel === 'string' ? data.vehicleModel : undefined,
+    programmingStatus: programmingStatus as Trip['programmingStatus'],
+    returnTrip: typeof data.returnTrip === 'boolean' ? data.returnTrip : false,
+    customerRequestNumber:
+      typeof data.customerRequestNumber === 'string' ? data.customerRequestNumber : undefined,
+    programmedVehicleType: programmedVehicleType as Trip['programmedVehicleType'],
   };
 }
 

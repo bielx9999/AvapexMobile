@@ -3,6 +3,17 @@ export type UserStatus = 'active' | 'inactive';
 export type VehicleStatus = 'active' | 'inactive';
 export type VehicleType = 'mechanical_horse_trucado' | 'mechanical_horse_toco' | 'truck';
 export type TripStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled';
+export type ProgrammingStatus = 'loading' | 'unloading_in_transit' | 'awaiting_invoice' | 'released';
+export type ProgrammedVehicleType =
+  | 'vanderleia'
+  | 'carreta'
+  | 'truck'
+  | 'sprinter'
+  | 'munck'
+  | 'rodotrem'
+  | 'prancha'
+  | 'saveiro'
+  | 'hr';
 export type ChecklistType = 'departure' | 'arrival' | 'vehicle_daily' | 'chain_tensioner' | 'strap_ratchet';
 export type FuelType = 'diesel' | 'arla';
 export type EquipmentType = 'strap' | 'ratchet' | 'chain' | 'tensioner';
@@ -49,6 +60,10 @@ export type Trip = {
   driverName?: string;
   vehiclePlate?: string;
   vehicleModel?: string;
+  programmingStatus?: ProgrammingStatus;
+  returnTrip?: boolean;
+  customerRequestNumber?: string;
+  programmedVehicleType?: ProgrammedVehicleType;
 };
 
 export type Checklist = {

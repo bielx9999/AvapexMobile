@@ -62,6 +62,16 @@ async function listCollection<T>(
   }
 }
 
+function tripStatusFromProgrammingStatus(programmingStatus: NonNullable<Trip['programmingStatus']>): Trip['status'] {
+  if (programmingStatus === 'released') {
+    return 'completed';
+  }
+  if (programmingStatus === 'loading') {
+    return 'pending';
+  }
+  return 'in_progress';
+}
+
 export const adminReadRepository = {
   users: () => listCollection<AppUser>('users', [orderBy('createdAt', 'desc'), limit(200)], 'Erro ao listar usuarios.'),
   vehicles: () => listCollection<Vehicle>('vehicles', [orderBy('plate', 'asc'), limit(200)], 'Erro ao listar veiculos.'),
@@ -127,11 +137,15 @@ export const adminWriteRepository = {
         vehicleId: trip.vehicleId,
         origin: trip.origin.trim(),
         destination: trip.destination.trim(),
-        status: trip.status,
+        status: tripStatusFromProgrammingStatus(trip.programmingStatus ?? 'loading'),
         scheduledAt: trip.scheduledAt,
         driverName: trip.driverName ?? '',
         vehiclePlate: trip.vehiclePlate ?? '',
         vehicleModel: trip.vehicleModel ?? '',
+        programmingStatus: trip.programmingStatus ?? 'loading',
+        returnTrip: trip.returnTrip ?? false,
+        customerRequestNumber: trip.customerRequestNumber?.trim() ?? '',
+        programmedVehicleType: trip.programmedVehicleType ?? 'truck',
       };
 
       if (trip.id) {
@@ -169,6 +183,23 @@ export const adminWriteRepository = {
       await updateDoc(doc(firestore, 'trips', tripId), data);
     } catch (error) {
       throw mapFirebaseError(error, 'Erro ao atualizar status da programacao.');
+    }
+  },
+
+  async updateTripProgrammingStatus(tripId: string, programmingStatus: NonNullable<Trip['programmingStatus']>) {
+    try {
+      const status = tripStatusFromProgrammingStatus(programmingStatus);
+      const data: DocumentData = { programmingStatus, status };
+      if (status === 'in_progress') {
+        data.startedAt = serverTimestamp();
+        data.completedAt = null;
+      }
+      if (status === 'completed') {
+        data.completedAt = serverTimestamp();
+      }
+      await updateDoc(doc(firestore, 'trips', tripId), data);
+    } catch (error) {
+      throw mapFirebaseError(error, 'Erro ao atualizar etapa da programacao.');
     }
   },
 

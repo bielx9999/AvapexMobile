@@ -1,20 +1,25 @@
 import { FormEvent, type ReactNode, useMemo, useState } from 'react';
 import {
-  CheckCircle2,
+  ClipboardList,
   Clock3,
+  FileText,
   MapPin,
   Pencil,
-  Play,
   Plus,
   Route,
   Search,
   Truck,
   UserRound,
   X,
-  XCircle,
 } from 'lucide-react';
 import { adminWriteRepository } from '../../shared/data/firestoreCollections';
-import type { AppUser, Trip, TripStatus, Vehicle } from '../../shared/domain/models';
+import type {
+  AppUser,
+  ProgrammedVehicleType,
+  ProgrammingStatus,
+  Trip,
+  Vehicle,
+} from '../../shared/domain/models';
 
 type ProgramacaoPageProps = {
   loading: boolean;
@@ -24,20 +29,42 @@ type ProgramacaoPageProps = {
   vehicles: Vehicle[];
 };
 
+const kanbanColumns: Array<{ status: ProgrammingStatus; label: string; tone: 'dark' | 'yellow' | 'info' | 'success' }> = [
+  { status: 'loading', label: 'Carregando', tone: 'yellow' },
+  { status: 'unloading_in_transit', label: 'Descarregando em transito', tone: 'info' },
+  { status: 'awaiting_invoice', label: 'Aguardando NF', tone: 'dark' },
+  { status: 'released', label: 'Liberado', tone: 'success' },
+];
+
+const programmedVehicleOptions: Array<{ value: ProgrammedVehicleType; label: string }> = [
+  { value: 'vanderleia', label: 'Vanderleia' },
+  { value: 'carreta', label: 'Carreta' },
+  { value: 'truck', label: 'Truck' },
+  { value: 'sprinter', label: 'Sprinter' },
+  { value: 'munck', label: 'Munck' },
+  { value: 'rodotrem', label: 'Rodotrem' },
+  { value: 'prancha', label: 'Prancha' },
+  { value: 'saveiro', label: 'Saveiro' },
+  { value: 'hr', label: 'HR' },
+];
+
 const initialForm = {
-  driverId: '',
-  vehicleId: '',
-  origin: '',
+  customerRequestNumber: '',
   destination: '',
+  driverId: '',
+  origin: '',
+  programmedVehicleType: 'truck' as ProgrammedVehicleType,
+  programmingStatus: 'loading' as ProgrammingStatus,
+  returnTrip: false,
   scheduledAt: '',
-  status: 'pending' as TripStatus,
+  vehicleId: '',
 };
 
 export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: ProgramacaoPageProps) {
   const today = new Date().toISOString().slice(0, 10);
   const [form, setForm] = useState(initialForm);
   const [query, setQuery] = useState('');
-  const [status, setStatus] = useState<'all' | TripStatus>('all');
+  const [status, setStatus] = useState<'all' | ProgrammingStatus>('all');
   const [driverId, setDriverId] = useState('');
   const [startDate, setStartDate] = useState(today);
   const [endDate, setEndDate] = useState(today);
@@ -64,7 +91,8 @@ export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: 
     const end = endDate ? new Date(`${endDate}T23:59:59`) : null;
 
     return trips.filter((trip) => {
-      if (status !== 'all' && trip.status !== status) {
+      const tripProgrammingStatus = trip.programmingStatus ?? 'loading';
+      if (status !== 'all' && tripProgrammingStatus !== status) {
         return false;
       }
       if (driverId && trip.driverId !== driverId) {
@@ -81,13 +109,15 @@ export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: 
       }
 
       return [
+        trip.customerRequestNumber,
         trip.origin,
         trip.destination,
         trip.driverName,
         driverNames.get(trip.driverId),
         trip.vehiclePlate,
         vehicleNames.get(trip.vehicleId),
-        trip.status,
+        programmedVehicleTypeLabel(trip.programmedVehicleType),
+        programmingStatusLabel(tripProgrammingStatus),
       ]
         .join(' ')
         .toLowerCase()
@@ -96,11 +126,10 @@ export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: 
   }, [driverId, driverNames, endDate, query, startDate, status, trips, vehicleNames]);
 
   const stats = useMemo(() => {
-    const pending = trips.filter((trip) => trip.status === 'pending').length;
-    const inProgress = trips.filter((trip) => trip.status === 'in_progress').length;
-    const completed = trips.filter((trip) => trip.status === 'completed').length;
-    const cancelled = trips.filter((trip) => trip.status === 'cancelled').length;
-    return { cancelled, completed, inProgress, pending, total: trips.length };
+    return kanbanColumns.map((column) => ({
+      ...column,
+      total: trips.filter((trip) => (trip.programmingStatus ?? 'loading') === column.status).length,
+    }));
   }, [trips]);
 
   function openCreateForm() {
@@ -111,12 +140,15 @@ export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: 
 
   function openEditForm(trip: Trip) {
     setForm({
-      driverId: trip.driverId,
-      vehicleId: trip.vehicleId,
-      origin: trip.origin,
+      customerRequestNumber: trip.customerRequestNumber ?? '',
       destination: trip.destination,
+      driverId: trip.driverId,
+      origin: trip.origin,
+      programmedVehicleType: trip.programmedVehicleType ?? 'truck',
+      programmingStatus: trip.programmingStatus ?? 'loading',
+      returnTrip: trip.returnTrip ?? false,
       scheduledAt: formatDateTimeInput(trip.scheduledAt),
-      status: trip.status,
+      vehicleId: trip.vehicleId,
     });
     setEditingTrip(trip);
     setShowForm(true);
@@ -140,23 +172,24 @@ export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: 
       const driver = drivers.find((item) => item.uid === form.driverId);
       const vehicle = vehicles.find((item) => item.id === form.vehicleId);
       if (!driver || !vehicle) {
-        throw new Error('Selecione motorista e veiculo validos.');
+        throw new Error('Selecione motorista e placa cadastrada validos.');
       }
-      const savedTripId = await adminWriteRepository.saveTrip({
-        id: editingTrip?.id,
+      await adminWriteRepository.saveTrip({
+        customerRequestNumber: form.customerRequestNumber,
+        destination: form.destination,
         driverId: form.driverId,
         driverName: driver.name || driver.email,
+        id: editingTrip?.id,
+        origin: form.origin,
+        programmedVehicleType: form.programmedVehicleType,
+        programmingStatus: form.programmingStatus,
+        returnTrip: form.returnTrip,
+        scheduledAt: new Date(form.scheduledAt),
+        status: form.programmingStatus === 'released' ? 'completed' : form.programmingStatus === 'loading' ? 'pending' : 'in_progress',
         vehicleId: form.vehicleId,
         vehicleModel: vehicle.model,
         vehiclePlate: vehicle.plate,
-        origin: form.origin,
-        destination: form.destination,
-        scheduledAt: new Date(form.scheduledAt),
-        status: form.status,
       });
-      if (editingTrip || form.status !== 'pending') {
-        await adminWriteRepository.updateTripStatus(savedTripId, form.status);
-      }
       closeForm();
       await onChanged();
     } catch (submitError) {
@@ -166,11 +199,11 @@ export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: 
     }
   }
 
-  async function updateStatus(trip: Trip, nextStatus: TripStatus) {
+  async function updateProgrammingStatus(trip: Trip, nextStatus: ProgrammingStatus) {
     setBusyTripId(trip.id);
     setError('');
     try {
-      await adminWriteRepository.updateTripStatus(trip.id, nextStatus);
+      await adminWriteRepository.updateTripProgrammingStatus(trip.id, nextStatus);
       await onChanged();
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : 'Erro ao atualizar programacao.');
@@ -183,42 +216,41 @@ export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: 
     <div className="space-y-5">
       {error ? <p className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
 
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        <StatusCard icon={<Route size={20} />} label="Total" tone="dark" value={loading ? '-' : stats.total} />
-        <StatusCard icon={<Clock3 size={20} />} label="Pendentes" tone="yellow" value={loading ? '-' : stats.pending} />
-        <StatusCard icon={<Play size={20} />} label="Em andamento" tone="info" value={loading ? '-' : stats.inProgress} />
-        <StatusCard icon={<CheckCircle2 size={20} />} label="Concluidas" tone="success" value={loading ? '-' : stats.completed} />
-        <StatusCard icon={<XCircle size={20} />} label="Canceladas" tone="danger" value={loading ? '-' : stats.cancelled} />
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {stats.map((item) => (
+          <StatusCard
+            icon={statusIcon(item.status)}
+            key={item.status}
+            label={item.label}
+            tone={item.tone}
+            value={loading ? '-' : item.total}
+          />
+        ))}
       </section>
 
       <section className="ui-card overflow-hidden">
         <div className="flex flex-col gap-3 border-b border-zinc-200 px-4 py-3 xl:flex-row xl:items-end xl:justify-between">
-          <div>
-            <h2 className="font-semibold">Gerenciar programacao</h2>
-          </div>
-          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[140px_140px_150px_190px_260px_auto]">
+          <h2 className="font-semibold">Kanban de programacao</h2>
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[140px_140px_190px_190px_260px_auto]">
             <input className="ui-input h-10 px-3 text-sm" type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
             <input className="ui-input h-10 px-3 text-sm" type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
-            <select className="ui-input h-10 px-3 text-sm" value={status} onChange={(event) => setStatus(event.target.value as 'all' | TripStatus)}>
-              <option value="all">Todos status</option>
-              <option value="pending">Pendentes</option>
-              <option value="in_progress">Em andamento</option>
-              <option value="completed">Concluidas</option>
-              <option value="cancelled">Canceladas</option>
+            <select className="ui-input h-10 px-3 text-sm" value={status} onChange={(event) => setStatus(event.target.value as 'all' | ProgrammingStatus)}>
+              <option value="all">Todas etapas</option>
+              {kanbanColumns.map((column) => (
+                <option key={column.status} value={column.status}>{column.label}</option>
+              ))}
             </select>
             <select className="ui-input h-10 px-3 text-sm" value={driverId} onChange={(event) => setDriverId(event.target.value)}>
               <option value="">Todos motoristas</option>
               {drivers.map((driver) => (
-                <option key={driver.uid} value={driver.uid}>
-                  {driver.name || driver.email}
-                </option>
+                <option key={driver.uid} value={driver.uid}>{driver.name || driver.email}</option>
               ))}
             </select>
             <label className="relative block">
               <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" size={18} />
               <input
                 className="ui-input h-10 w-full pl-10 pr-3 text-sm"
-                placeholder="Buscar origem, destino, placa"
+                placeholder="Buscar solicitacao, rota, placa"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
               />
@@ -234,61 +266,47 @@ export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: 
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[1080px] text-left text-sm">
-            <thead className="bg-zinc-50 text-xs uppercase text-zinc-500">
-              <tr>
-                <th className="px-4 py-3">Horario</th>
-                <th className="px-4 py-3">Motorista</th>
-                <th className="px-4 py-3">Veiculo</th>
-                <th className="px-4 py-3">Origem</th>
-                <th className="px-4 py-3">Destino</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3 text-right">Acoes</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredTrips.map((trip) => (
-                <tr className="border-t border-zinc-100" key={trip.id}>
-                  <td className="px-4 py-3">{formatDate(trip.scheduledAt)}</td>
-                  <td className="px-4 py-3 font-medium">{trip.driverName || driverNames.get(trip.driverId) || trip.driverId}</td>
-                  <td className="px-4 py-3">{trip.vehiclePlate || vehicleNames.get(trip.vehicleId) || trip.vehicleId}</td>
-                  <td className="px-4 py-3">{trip.origin || '-'}</td>
-                  <td className="px-4 py-3">{trip.destination || '-'}</td>
-                  <td className="px-4 py-3"><StatusPill status={trip.status} /></td>
-                  <td className="px-4 py-3">
-                    <div className="flex justify-end gap-2">
-                      <IconButton label="Editar programacao" disabled={busyTripId === trip.id} onClick={() => openEditForm(trip)}>
-                        <Pencil size={17} />
-                      </IconButton>
-                      <IconButton label="Iniciar" disabled={busyTripId === trip.id || trip.status === 'in_progress'} onClick={() => void updateStatus(trip, 'in_progress')}>
-                        <Play size={17} />
-                      </IconButton>
-                      <IconButton label="Concluir" disabled={busyTripId === trip.id || trip.status === 'completed'} onClick={() => void updateStatus(trip, 'completed')}>
-                        <CheckCircle2 size={17} />
-                      </IconButton>
-                      <IconButton danger label="Cancelar" disabled={busyTripId === trip.id || trip.status === 'cancelled'} onClick={() => void updateStatus(trip, 'cancelled')}>
-                        <XCircle size={17} />
-                      </IconButton>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {!loading && filteredTrips.length === 0 ? (
-                <tr>
-                  <td className="px-4 py-8 text-center text-zinc-500" colSpan={7}>
-                    Nenhuma programacao encontrada.
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
+        <div className="grid gap-3 overflow-x-auto bg-zinc-50 p-3 xl:grid-cols-4">
+          {kanbanColumns.map((column) => {
+            const columnTrips = filteredTrips.filter((trip) => (trip.programmingStatus ?? 'loading') === column.status);
+            return (
+              <section className="min-h-[420px] min-w-[280px] rounded-2xl border border-zinc-200 bg-white" key={column.status}>
+                <header className="flex items-center justify-between border-b border-zinc-200 px-3 py-3">
+                  <div className="flex items-center gap-2">
+                    <span className={`flex h-9 w-9 items-center justify-center rounded-2xl ring-1 ${columnIconClass(column.tone)}`}>
+                      {statusIcon(column.status)}
+                    </span>
+                    <h3 className="text-sm font-semibold">{column.label}</h3>
+                  </div>
+                  <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-semibold text-zinc-600">{columnTrips.length}</span>
+                </header>
+                <div className="space-y-3 p-3">
+                  {columnTrips.map((trip) => (
+                    <KanbanCard
+                      busy={busyTripId === trip.id}
+                      driverName={trip.driverName || driverNames.get(trip.driverId) || trip.driverId}
+                      key={trip.id}
+                      onEdit={() => openEditForm(trip)}
+                      onMove={(nextStatus) => void updateProgrammingStatus(trip, nextStatus)}
+                      trip={trip}
+                      vehicleName={trip.vehiclePlate || vehicleNames.get(trip.vehicleId) || trip.vehicleId}
+                    />
+                  ))}
+                  {!loading && columnTrips.length === 0 ? (
+                    <p className="rounded-2xl border border-dashed border-zinc-200 px-3 py-8 text-center text-sm text-zinc-500">
+                      Nenhuma programacao nesta etapa.
+                    </p>
+                  ) : null}
+                </div>
+              </section>
+            );
+          })}
         </div>
       </section>
 
       {showForm ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 px-4 py-6">
-          <section className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-2xl">
+          <section className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-2xl">
             <header className="flex items-start justify-between gap-4 border-b border-zinc-200 px-5 py-4">
               <h2 className="text-lg font-semibold">{editingTrip ? 'Editar Programacao' : 'Nova Programacao'}</h2>
               <button
@@ -304,44 +322,74 @@ export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: 
             <form className="flex min-h-0 flex-1 flex-col" onSubmit={(event) => void handleSubmit(event)}>
               <div className="space-y-5 overflow-y-auto bg-zinc-50 p-5">
                 <section className="ui-card p-4">
+                  <h3 className="mb-3 text-sm font-semibold text-zinc-800">Dados da programacao</h3>
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                    <TextField
+                      icon={<FileText size={15} />}
+                      label="N° solicitacao do cliente"
+                      onChange={(value) => setForm((current) => ({ ...current, customerRequestNumber: value }))}
+                      required
+                      value={form.customerRequestNumber}
+                    />
+                    <TextField
+                      icon={<Clock3 size={15} />}
+                      label="Data e horario"
+                      onChange={(value) => setForm((current) => ({ ...current, scheduledAt: value }))}
+                      required
+                      type="datetime-local"
+                      value={form.scheduledAt}
+                    />
+                    <SelectField
+                      icon={<Route size={15} />}
+                      label="Etapa"
+                      onChange={(value) => setForm((current) => ({ ...current, programmingStatus: value as ProgrammingStatus }))}
+                      value={form.programmingStatus}
+                    >
+                      {kanbanColumns.map((column) => (
+                        <option key={column.status} value={column.status}>{column.label}</option>
+                      ))}
+                    </SelectField>
+                    <SelectField
+                      icon={<Route size={15} />}
+                      label="Retorno"
+                      onChange={(value) => setForm((current) => ({ ...current, returnTrip: value === 'yes' }))}
+                      value={form.returnTrip ? 'yes' : 'no'}
+                    >
+                      <option value="no">Nao</option>
+                      <option value="yes">Sim</option>
+                    </SelectField>
+                  </div>
+                </section>
+
+                <section className="ui-card p-4">
                   <h3 className="mb-3 text-sm font-semibold text-zinc-800">Atribuicao</h3>
                   <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                    <SelectField label="Motorista" value={form.driverId} onChange={(value) => setForm((current) => ({ ...current, driverId: value }))} required>
+                    <SelectField icon={<UserRound size={15} />} label="Motorista" value={form.driverId} onChange={(value) => setForm((current) => ({ ...current, driverId: value }))} required>
                       <option value="">Selecione</option>
                       {drivers.map((driver) => (
-                        <option key={driver.uid} value={driver.uid}>
-                          {driver.name || driver.email}
-                        </option>
+                        <option key={driver.uid} value={driver.uid}>{driver.name || driver.email}</option>
                       ))}
                     </SelectField>
-                    <SelectField label="Veiculo" value={form.vehicleId} onChange={(value) => setForm((current) => ({ ...current, vehicleId: value }))} required>
+                    <SelectField icon={<Truck size={15} />} label="Placa cadastrada" value={form.vehicleId} onChange={(value) => setForm((current) => ({ ...current, vehicleId: value }))} required>
                       <option value="">Selecione</option>
                       {activeVehicles.map((vehicle) => (
-                        <option key={vehicle.id} value={vehicle.id}>
-                          {vehicle.plate} - {vehicle.fleetNumber || vehicle.model}
-                        </option>
+                        <option key={vehicle.id} value={vehicle.id}>{vehicle.plate} - {vehicle.fleetNumber || vehicle.model}</option>
                       ))}
                     </SelectField>
-                    <TextField label="Data e horario" type="datetime-local" value={form.scheduledAt} onChange={(value) => setForm((current) => ({ ...current, scheduledAt: value }))} required />
+                    <SelectField icon={<Truck size={15} />} label="Veiculo" value={form.programmedVehicleType} onChange={(value) => setForm((current) => ({ ...current, programmedVehicleType: value as ProgrammedVehicleType }))}>
+                      {programmedVehicleOptions.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </SelectField>
                   </div>
                 </section>
 
                 <section className="ui-card p-4">
                   <h3 className="mb-3 text-sm font-semibold text-zinc-800">Rota</h3>
                   <div className="grid gap-4 md:grid-cols-2">
-                    <TextField label="Origem" value={form.origin} onChange={(value) => setForm((current) => ({ ...current, origin: value }))} required />
-                    <TextField label="Destino" value={form.destination} onChange={(value) => setForm((current) => ({ ...current, destination: value }))} required />
+                    <TextField icon={<MapPin size={15} />} label="Origem" value={form.origin} onChange={(value) => setForm((current) => ({ ...current, origin: value }))} required />
+                    <TextField icon={<MapPin size={15} />} label="Destino" value={form.destination} onChange={(value) => setForm((current) => ({ ...current, destination: value }))} required />
                   </div>
-                </section>
-
-                <section className="ui-card p-4">
-                  <h3 className="mb-3 text-sm font-semibold text-zinc-800">Status</h3>
-                  <SelectField label="Status da programacao" value={form.status} onChange={(value) => setForm((current) => ({ ...current, status: value as TripStatus }))}>
-                    <option value="pending">Pendente</option>
-                    <option value="in_progress">Em andamento</option>
-                    <option value="completed">Concluida</option>
-                    <option value="cancelled">Cancelada</option>
-                  </SelectField>
                 </section>
               </div>
 
@@ -362,16 +410,60 @@ export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: 
   );
 }
 
-type StatusCardProps = {
-  icon: ReactNode;
-  label: string;
-  tone: 'dark' | 'yellow' | 'success' | 'danger' | 'info';
-  value: number | string;
-};
+function KanbanCard({
+  busy,
+  driverName,
+  onEdit,
+  onMove,
+  trip,
+  vehicleName,
+}: {
+  busy: boolean;
+  driverName: string;
+  onEdit: () => void;
+  onMove: (status: ProgrammingStatus) => void;
+  trip: Trip;
+  vehicleName: string;
+}) {
+  return (
+    <article className="rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-md">
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Solicitacao</p>
+          <h4 className="mt-1 font-semibold">{trip.customerRequestNumber || '-'}</h4>
+        </div>
+        <button className="ui-icon-button flex h-9 w-9 items-center justify-center text-zinc-700 hover:bg-zinc-50" disabled={busy} onClick={onEdit} title="Editar programacao" type="button">
+          <Pencil size={17} />
+        </button>
+      </div>
+      <div className="space-y-2 text-sm">
+        <InfoLine icon={<UserRound size={15} />} text={driverName} />
+        <InfoLine icon={<Truck size={15} />} text={`${programmedVehicleTypeLabel(trip.programmedVehicleType)} - ${vehicleName}`} />
+        <InfoLine icon={<MapPin size={15} />} text={`${trip.origin || '-'} -> ${trip.destination || '-'}`} />
+        <InfoLine icon={<Clock3 size={15} />} text={formatDate(trip.scheduledAt)} />
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <span className="ui-pill bg-zinc-100 text-zinc-700">{trip.returnTrip ? 'Retorno: Sim' : 'Retorno: Nao'}</span>
+      </div>
+      <label className="mt-3 block">
+        <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-500">Mover para</span>
+        <select
+          className="ui-input h-9 w-full px-2 text-sm"
+          disabled={busy}
+          value={trip.programmingStatus ?? 'loading'}
+          onChange={(event) => onMove(event.target.value as ProgrammingStatus)}
+        >
+          {kanbanColumns.map((column) => (
+            <option key={column.status} value={column.status}>{column.label}</option>
+          ))}
+        </select>
+      </label>
+    </article>
+  );
+}
 
-function StatusCard({ icon, label, tone, value }: StatusCardProps) {
+function StatusCard({ icon, label, tone, value }: { icon: ReactNode; label: string; tone: 'dark' | 'yellow' | 'success' | 'info'; value: number | string }) {
   const toneClassNames = {
-    danger: { accent: 'bg-red-500', icon: 'bg-red-50 text-red-700 ring-red-100', value: 'text-red-700' },
     dark: { accent: 'bg-avapex-black', icon: 'bg-avapex-black text-white ring-zinc-200', value: 'text-avapex-black' },
     info: { accent: 'bg-sky-500', icon: 'bg-sky-50 text-sky-700 ring-sky-100', value: 'text-sky-700' },
     success: { accent: 'bg-emerald-500', icon: 'bg-emerald-50 text-emerald-700 ring-emerald-100', value: 'text-emerald-700' },
@@ -390,11 +482,20 @@ function StatusCard({ icon, label, tone, value }: StatusCardProps) {
   );
 }
 
-function TextField({ label, onChange, required, type = 'text', value }: { label: string; onChange: (value: string) => void; required?: boolean; type?: string; value: string }) {
+function InfoLine({ icon, text }: { icon: ReactNode; text: string }) {
+  return (
+    <p className="flex items-center gap-2 text-zinc-700">
+      <span className="text-zinc-400">{icon}</span>
+      <span className="truncate">{text}</span>
+    </p>
+  );
+}
+
+function TextField({ icon, label, onChange, required, type = 'text', value }: { icon: ReactNode; label: string; onChange: (value: string) => void; required?: boolean; type?: string; value: string }) {
   return (
     <label className="block">
       <span className="mb-2 flex items-center gap-2 text-sm font-medium text-zinc-700">
-        <MapPin size={15} />
+        {icon}
         {label}
       </span>
       <input className="ui-input h-11 w-full px-3" required={required} type={type} value={value} onChange={(event) => onChange(event.target.value)} />
@@ -402,11 +503,11 @@ function TextField({ label, onChange, required, type = 'text', value }: { label:
   );
 }
 
-function SelectField({ children, label, onChange, required, value }: { children: ReactNode; label: string; onChange: (value: string) => void; required?: boolean; value: string }) {
+function SelectField({ children, icon, label, onChange, required, value }: { children: ReactNode; icon: ReactNode; label: string; onChange: (value: string) => void; required?: boolean; value: string }) {
   return (
     <label className="block">
       <span className="mb-2 flex items-center gap-2 text-sm font-medium text-zinc-700">
-        {label === 'Motorista' ? <UserRound size={15} /> : label === 'Veiculo' ? <Truck size={15} /> : <Route size={15} />}
+        {icon}
         {label}
       </span>
       <select className="ui-input h-11 w-full px-3" required={required} value={value} onChange={(event) => onChange(event.target.value)}>
@@ -416,43 +517,35 @@ function SelectField({ children, label, onChange, required, value }: { children:
   );
 }
 
-function IconButton({ children, danger, disabled, label, onClick }: { children: ReactNode; danger?: boolean; disabled?: boolean; label: string; onClick: () => void }) {
-  return (
-    <button
-      aria-label={label}
-      className={`ui-icon-button flex h-9 w-9 items-center justify-center disabled:cursor-not-allowed disabled:opacity-50 ${
-        danger ? 'text-red-700 hover:bg-red-50' : 'text-zinc-700 hover:bg-zinc-50'
-      }`}
-      disabled={disabled}
-      onClick={onClick}
-      title={label}
-      type="button"
-    >
-      {children}
-    </button>
-  );
+function statusIcon(status: ProgrammingStatus) {
+  if (status === 'released') {
+    return <Route size={20} />;
+  }
+  if (status === 'awaiting_invoice') {
+    return <FileText size={20} />;
+  }
+  if (status === 'unloading_in_transit') {
+    return <Truck size={20} />;
+  }
+  return <ClipboardList size={20} />;
 }
 
-function StatusPill({ status }: { status: TripStatus }) {
-  const className =
-    status === 'completed'
-      ? 'bg-emerald-50 text-emerald-700'
-      : status === 'cancelled'
-        ? 'bg-red-50 text-red-700'
-        : status === 'in_progress'
-          ? 'bg-sky-50 text-sky-700'
-          : 'bg-yellow-50 text-yellow-800';
-  return <span className={`ui-pill ${className}`}>{tripStatusLabel(status)}</span>;
-}
-
-function tripStatusLabel(status: TripStatus) {
-  const labels: Record<TripStatus, string> = {
-    cancelled: 'Cancelada',
-    completed: 'Concluida',
-    in_progress: 'Em andamento',
-    pending: 'Pendente',
+function columnIconClass(tone: 'dark' | 'yellow' | 'info' | 'success') {
+  const classes = {
+    dark: 'bg-avapex-black text-white ring-zinc-200',
+    info: 'bg-sky-50 text-sky-700 ring-sky-100',
+    success: 'bg-emerald-50 text-emerald-700 ring-emerald-100',
+    yellow: 'bg-avapex-yellow text-avapex-black ring-yellow-100',
   };
-  return labels[status];
+  return classes[tone];
+}
+
+function programmingStatusLabel(status: ProgrammingStatus) {
+  return kanbanColumns.find((column) => column.status === status)?.label ?? status;
+}
+
+function programmedVehicleTypeLabel(type?: ProgrammedVehicleType) {
+  return programmedVehicleOptions.find((option) => option.value === type)?.label ?? '-';
 }
 
 function formatDate(value: Date | null) {
