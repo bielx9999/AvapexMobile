@@ -64,6 +64,8 @@ export type Trip = {
   returnTrip?: boolean;
   customerRequestNumber?: string;
   programmedVehicleType?: ProgrammedVehicleType;
+  returnGeneratedTripId?: string;
+  returnSourceTripId?: string;
 };
 
 export type Checklist = {

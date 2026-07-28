@@ -90,6 +90,9 @@ export function mapTrip(id: string, data: Record<string, unknown>): Trip {
     customerRequestNumber:
       typeof data.customerRequestNumber === 'string' ? data.customerRequestNumber : undefined,
     programmedVehicleType: programmedVehicleType as Trip['programmedVehicleType'],
+    returnGeneratedTripId:
+      typeof data.returnGeneratedTripId === 'string' ? data.returnGeneratedTripId : undefined,
+    returnSourceTripId: typeof data.returnSourceTripId === 'string' ? data.returnSourceTripId : undefined,
   };
 }
 

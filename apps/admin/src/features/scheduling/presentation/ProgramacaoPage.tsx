@@ -210,7 +210,7 @@ export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: 
     setBusyTripId(trip.id);
     setError('');
     try {
-      await adminWriteRepository.updateTripProgrammingStatus(trip.id, nextStatus);
+      await adminWriteRepository.updateTripProgrammingStatus(trip, nextStatus);
       await onChanged();
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : 'Erro ao atualizar programacao.');
@@ -512,6 +512,8 @@ function KanbanCard({
       <div className="mt-2 flex flex-wrap gap-1.5">
         <span className="ui-pill bg-zinc-100 text-zinc-700">{trip.returnTrip ? 'Retorno: Sim' : 'Retorno: Nao'}</span>
         <span className="ui-pill bg-yellow-50 text-yellow-800">{programmingStatusLabel(trip.programmingStatus ?? 'loading')}</span>
+        {trip.returnGeneratedTripId ? <span className="ui-pill bg-emerald-50 text-emerald-700">Retorno gerado</span> : null}
+        {trip.returnSourceTripId ? <span className="ui-pill bg-sky-50 text-sky-700">Retorno</span> : null}
       </div>
       <label className="mt-2 block border-t border-zinc-100 pt-2">
         <span className="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">

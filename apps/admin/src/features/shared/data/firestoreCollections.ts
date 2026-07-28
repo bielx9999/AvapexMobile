@@ -10,6 +10,7 @@ import {
   setDoc,
   updateDoc,
   where,
+  writeBatch,
   type DocumentData,
   type QueryConstraint,
 } from 'firebase/firestore';
@@ -70,6 +71,12 @@ function tripStatusFromProgrammingStatus(programmingStatus: NonNullable<Trip['pr
     return 'pending';
   }
   return 'in_progress';
+}
+
+function nextDaySameTime(value: Date | null) {
+  const nextDate = value ? new Date(value) : new Date();
+  nextDate.setDate(nextDate.getDate() + 1);
+  return nextDate;
 }
 
 export const adminReadRepository = {
@@ -186,7 +193,7 @@ export const adminWriteRepository = {
     }
   },
 
-  async updateTripProgrammingStatus(tripId: string, programmingStatus: NonNullable<Trip['programmingStatus']>) {
+  async updateTripProgrammingStatus(trip: Trip, programmingStatus: NonNullable<Trip['programmingStatus']>) {
     try {
       const status = tripStatusFromProgrammingStatus(programmingStatus);
       const data: DocumentData = { programmingStatus, status };
@@ -197,7 +204,46 @@ export const adminWriteRepository = {
       if (status === 'completed') {
         data.completedAt = serverTimestamp();
       }
-      await updateDoc(doc(firestore, 'trips', tripId), data);
+
+      const tripRef = doc(firestore, 'trips', trip.id);
+      const shouldCreateReturnTrip =
+        programmingStatus === 'released' &&
+        trip.returnTrip === true &&
+        !trip.returnGeneratedTripId &&
+        !trip.returnSourceTripId;
+
+      if (!shouldCreateReturnTrip) {
+        await updateDoc(tripRef, data);
+        return;
+      }
+
+      const returnRef = doc(collection(firestore, 'trips'));
+      const batch = writeBatch(firestore);
+      batch.update(tripRef, {
+        ...data,
+        returnGeneratedTripId: returnRef.id,
+      });
+      batch.set(returnRef, {
+        id: returnRef.id,
+        driverId: trip.driverId,
+        vehicleId: trip.vehicleId,
+        origin: trip.destination,
+        destination: trip.origin,
+        status: 'pending',
+        scheduledAt: nextDaySameTime(trip.scheduledAt),
+        startedAt: null,
+        completedAt: null,
+        deliveryDocs: [],
+        driverName: trip.driverName ?? '',
+        vehiclePlate: trip.vehiclePlate ?? '',
+        vehicleModel: trip.vehicleModel ?? '',
+        programmingStatus: 'loading',
+        returnTrip: false,
+        customerRequestNumber: trip.customerRequestNumber ?? '',
+        programmedVehicleType: trip.programmedVehicleType ?? 'truck',
+        returnSourceTripId: trip.id,
+      });
+      await batch.commit();
     } catch (error) {
       throw mapFirebaseError(error, 'Erro ao atualizar etapa da programacao.');
     }
