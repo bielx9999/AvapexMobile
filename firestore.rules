@@ -216,6 +216,9 @@ service cloud.firestore {
           'delivery_completed',
           'delivery_failed',
           'delivery_cancelled',
+          'delivery_proof_submitted',
+          'delivery_proof_approved',
+          'delivery_proof_rejected',
           'status_changed',
           'note_added'
         ]
@@ -231,6 +234,82 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/deliveries/$(deliveryId)).data.routeId == routeId
         && get(/databases/$(database)/documents/deliveries/$(deliveryId)).data.driverId == request.auth.uid
       );
+    }
+
+    function ownsDelivery(deliveryId) {
+      return isActiveUser()
+        && deliveryId is string
+        && deliveryId.size() > 0
+        && exists(/databases/$(database)/documents/deliveries/$(deliveryId))
+        && get(/databases/$(database)/documents/deliveries/$(deliveryId)).data.driverId == request.auth.uid;
+    }
+
+    function validDeliveryReceiptData(data, receiptId) {
+      return data.keys().hasAll([
+          'id',
+          'deliveryId',
+          'routeId',
+          'orderNumber',
+          'clientId',
+          'clientName',
+          'driverId',
+          'driverName',
+          'vehicleId',
+          'vehiclePlate',
+          'cteAccessKey',
+          'cteNumber',
+          'receiverName',
+          'receiverDocument',
+          'location',
+          'physicalProofPhotoUrls',
+          'pendingPhysicalProofLocalPaths',
+          'declaration',
+          'adminStatus',
+          'createdAt'
+        ])
+        && data.id == receiptId
+        && data.deliveryId is string
+        && data.deliveryId.size() > 0
+        && data.routeId is string
+        && data.orderNumber is string
+        && data.orderNumber.size() > 0
+        && data.clientId is string
+        && data.clientName is string
+        && data.driverId is string
+        && data.driverName is string
+        && data.vehicleId is string
+        && data.vehiclePlate is string
+        && data.cteAccessKey is string
+        && data.cteAccessKey.size() == 44
+        && data.cteNumber is string
+        && data.receiverName is string
+        && data.receiverName.size() > 0
+        && data.receiverDocument is string
+        && data.receiverDocument.size() > 0
+        && validGeoLocation(data.location)
+        && data.physicalProofPhotoUrls is list
+        && data.pendingPhysicalProofLocalPaths is list
+        && data.physicalProofPhotoUrls.size() + data.pendingPhysicalProofLocalPaths.size() > 0
+        && data.declaration is string
+        && data.adminStatus == 'pending'
+        && data.createdAt is timestamp;
+    }
+
+    function receiptMatchesDelivery(data, receiptId) {
+      return ownsDelivery(data.deliveryId)
+        && get(/databases/$(database)/documents/deliveries/$(data.deliveryId)).data.status != 'cancelled'
+        && get(/databases/$(database)/documents/deliveries/$(data.deliveryId)).data.proofStatus in ['pending', 'rejected']
+        && get(/databases/$(database)/documents/deliveries/$(data.deliveryId)).data.routeId == data.routeId
+        && get(/databases/$(database)/documents/deliveries/$(data.deliveryId)).data.orderNumber == data.orderNumber
+        && get(/databases/$(database)/documents/deliveries/$(data.deliveryId)).data.driverId == data.driverId
+        && get(/databases/$(database)/documents/deliveries/$(data.deliveryId)).data.vehicleId == data.vehicleId
+        && (
+          !('cteAccessKey' in get(/databases/$(database)/documents/deliveries/$(data.deliveryId)).data)
+          || get(/databases/$(database)/documents/deliveries/$(data.deliveryId)).data.cteAccessKey == ''
+          || get(/databases/$(database)/documents/deliveries/$(data.deliveryId)).data.cteAccessKey == data.cteAccessKey
+        )
+        && getAfter(/databases/$(database)/documents/deliveries/$(data.deliveryId)).data.proofStatus == 'submitted'
+        && getAfter(/databases/$(database)/documents/deliveries/$(data.deliveryId)).data.deliveryProofId == receiptId;
     }
 
     function validSetting(data, settingId) {
@@ -387,8 +466,16 @@ service cloud.firestore {
           'updatedBy'
         ])
         && (
-          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['proofStatus'])
-          || request.resource.data.proofStatus == 'submitted'
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+            'proofStatus',
+            'deliveryProofId'
+          ])
+          || (
+            resource.data.proofStatus in ['pending', 'rejected']
+            && request.resource.data.proofStatus == 'submitted'
+            && request.resource.data.deliveryProofId is string
+            && request.resource.data.deliveryProofId.size() > 0
+          )
         )
       );
       allow delete: if isAdmin();
@@ -406,6 +493,7 @@ service cloud.firestore {
           && request.resource.data.source == 'driver'
           && request.resource.data.actorId == request.auth.uid
           && request.resource.data.driverId == request.auth.uid
+          && !(request.resource.data.type in ['delivery_proof_approved', 'delivery_proof_rejected'])
           && ownsRoute(request.resource.data.routeId)
           && deliveryBelongsToRoute(request.resource.data.deliveryId, request.resource.data.routeId)
         )
@@ -453,10 +541,19 @@ service cloud.firestore {
 
     match /deliveryReceipts/{receiptId} {
       allow read: if isAdmin() || ownedExistingDriverData();
-      allow create: if isAdmin() || ownsDriverData();
+      allow create: if isAdmin() || (
+        ownsDriverData()
+        && validDeliveryReceiptData(request.resource.data, receiptId)
+        && receiptMatchesDelivery(request.resource.data, receiptId)
+      );
       allow update: if isAdmin() || (
         ownedExistingDriverData()
         && request.resource.data.driverId == resource.data.driverId
+        && request.resource.data.deliveryId == resource.data.deliveryId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'physicalProofPhotoUrls',
+          'pendingPhysicalProofLocalPaths'
+        ])
       );
       allow delete: if isAdmin();
     }

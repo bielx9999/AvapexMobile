@@ -11,10 +11,11 @@ import {
   X,
 } from 'lucide-react';
 import { adminWriteRepository } from '../../shared/data/firestoreCollections';
-import type { DeliveryReceipt } from '../../shared/domain/models';
+import type { Delivery, DeliveryReceipt } from '../../shared/domain/models';
 import { ActionIconButton, ErrorBanner, MetricCard } from '../../shared/presentation/ui';
 
 type ComprovantesPageProps = {
+  deliveries: Delivery[];
   loading: boolean;
   onChanged: () => Promise<void>;
   receipts: DeliveryReceipt[];
@@ -22,7 +23,7 @@ type ComprovantesPageProps = {
 
 type ReceiptStatus = NonNullable<DeliveryReceipt['adminStatus']>;
 
-export function ComprovantesPage({ loading, onChanged, receipts }: ComprovantesPageProps) {
+export function ComprovantesPage({ deliveries, loading, onChanged, receipts }: ComprovantesPageProps) {
   const today = new Date().toISOString().slice(0, 10);
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState<'all' | ReceiptStatus>('all');
@@ -57,6 +58,9 @@ export function ComprovantesPage({ loading, onChanged, receipts }: ComprovantesP
 
       return [
         receipt.driverName,
+        receipt.orderNumber,
+        receipt.clientName,
+        receipt.vehiclePlate,
         receipt.cteAccessKey,
         receipt.cteNumber,
         receipt.receiverName,
@@ -112,7 +116,7 @@ export function ComprovantesPage({ loading, onChanged, receipts }: ComprovantesP
 
     await runAction(failureReceipt.id, () =>
       adminWriteRepository.markDeliveryReceiptFailed(
-        failureReceipt.id,
+        failureReceipt,
         failureReason,
         notificationMessage,
       ),
@@ -164,6 +168,7 @@ export function ComprovantesPage({ loading, onChanged, receipts }: ComprovantesP
             <thead>
               <tr>
                 <th className="px-4 py-3">Data</th>
+                <th className="px-4 py-3">Entrega</th>
                 <th className="px-4 py-3">Motorista</th>
                 <th className="px-4 py-3">CT-e</th>
                 <th className="px-4 py-3">Recebedor</th>
@@ -177,6 +182,10 @@ export function ComprovantesPage({ loading, onChanged, receipts }: ComprovantesP
               {filteredReceipts.map((receipt) => (
                 <tr key={receipt.id}>
                   <td className="px-4 py-3">{formatDate(receipt.createdAt)}</td>
+                  <td className="px-4 py-3">
+                    <p className="font-medium">{receipt.orderNumber || '-'}</p>
+                    <p className="max-w-48 truncate text-xs text-zinc-500">{receipt.clientName || receipt.deliveryId || 'Legado'}</p>
+                  </td>
                   <td className="px-4 py-3 font-medium">{receipt.driverName || receipt.driverId}</td>
                   <td className="px-4 py-3">
                     <p className="font-medium">{receipt.cteNumber || '-'}</p>
@@ -192,17 +201,17 @@ export function ComprovantesPage({ loading, onChanged, receipts }: ComprovantesP
                         <Eye size={17} />
                       </ActionIconButton>
                       <ActionIconButton
-                        disabled={busyReceiptId === receipt.id}
+                        disabled={busyReceiptId === receipt.id || (receipt.adminStatus ?? 'pending') !== 'pending'}
                         label="Registrar como entregue"
                         onClick={() =>
                           void runAction(receipt.id, () =>
-                            adminWriteRepository.markDeliveryReceiptDelivered(receipt.id),
+                            adminWriteRepository.markDeliveryReceiptDelivered(receipt),
                           )
                         }
                       >
                         <CheckCircle2 size={17} />
                       </ActionIconButton>
-                      <ActionIconButton disabled={busyReceiptId === receipt.id} label="Registrar falha" onClick={() => openFailureModal(receipt)}>
+                      <ActionIconButton disabled={busyReceiptId === receipt.id || (receipt.adminStatus ?? 'pending') !== 'pending'} label="Registrar falha" onClick={() => openFailureModal(receipt)}>
                         <MessageSquareWarning size={17} />
                       </ActionIconButton>
                     </div>
@@ -211,7 +220,7 @@ export function ComprovantesPage({ loading, onChanged, receipts }: ComprovantesP
               ))}
               {!loading && filteredReceipts.length === 0 ? (
                 <tr>
-                  <td className="px-4 py-8 text-center text-zinc-500" colSpan={8}>
+                  <td className="px-4 py-8 text-center text-zinc-500" colSpan={9}>
                     Nenhum comprovante encontrado.
                   </td>
                 </tr>
@@ -227,11 +236,13 @@ export function ComprovantesPage({ loading, onChanged, receipts }: ComprovantesP
           onClose={() => setSelectedReceipt(null)}
           onDelivered={() =>
             void runAction(selectedReceipt.id, () =>
-              adminWriteRepository.markDeliveryReceiptDelivered(selectedReceipt.id),
+              adminWriteRepository.markDeliveryReceiptDelivered(selectedReceipt),
             )
           }
           onFailed={() => openFailureModal(selectedReceipt)}
           receipt={selectedReceipt}
+          delivery={deliveries.find((delivery) => delivery.id === selectedReceipt.deliveryId)}
+          reviewable={(selectedReceipt.adminStatus ?? 'pending') === 'pending'}
         />
       ) : null}
 
@@ -276,12 +287,16 @@ function ReceiptDetailsDrawer({
   onDelivered,
   onFailed,
   receipt,
+  delivery,
+  reviewable,
 }: {
   busy: boolean;
   onClose: () => void;
   onDelivered: () => void;
   onFailed: () => void;
   receipt: DeliveryReceipt;
+  delivery?: Delivery;
+  reviewable: boolean;
 }) {
   return (
     <div className="fixed inset-0 z-50 bg-black/35 backdrop-blur-[1px]">
@@ -300,6 +315,10 @@ function ReceiptDetailsDrawer({
           <section className="grid gap-3 sm:grid-cols-2">
             <DetailItem label="Motorista" value={receipt.driverName || receipt.driverId} />
             <DetailItem label="Enviado em" value={formatDate(receipt.createdAt)} />
+            <DetailItem label="Pedido" value={receipt.orderNumber || delivery?.orderNumber || '-'} />
+            <DetailItem label="Cliente" value={receipt.clientName || delivery?.clientName || '-'} />
+            <DetailItem label="Veiculo" value={receipt.vehiclePlate || delivery?.vehiclePlate || '-'} />
+            <DetailItem label="Rota" value={receipt.routeId || delivery?.routeId || '-'} />
             <DetailItem label="Chave CT-e" value={receipt.cteAccessKey || '-'} />
             <DetailItem label="Numero CT-e" value={receipt.cteNumber || '-'} />
             <DetailItem label="Recebedor" value={receipt.receiverName || '-'} />
@@ -352,11 +371,11 @@ function ReceiptDetailsDrawer({
           ) : null}
         </div>
         <footer className="grid gap-2 border-t border-zinc-200 p-5 sm:grid-cols-2">
-          <button className="ui-button flex h-11 items-center justify-center gap-2 bg-avapex-yellow px-4 text-sm font-semibold text-avapex-black hover:bg-yellow-300" disabled={busy} onClick={onDelivered} type="button">
+          <button className="ui-button flex h-11 items-center justify-center gap-2 bg-avapex-yellow px-4 text-sm font-semibold text-avapex-black hover:bg-yellow-300" disabled={busy || !reviewable} onClick={onDelivered} type="button">
             <CheckCircle2 size={18} />
             Registrar entregue
           </button>
-          <button className="ui-button flex h-11 items-center justify-center gap-2 border border-red-200 bg-red-50 px-4 text-sm font-semibold text-red-700 hover:bg-red-100" disabled={busy} onClick={onFailed} type="button">
+          <button className="ui-button flex h-11 items-center justify-center gap-2 border border-red-200 bg-red-50 px-4 text-sm font-semibold text-red-700 hover:bg-red-100" disabled={busy || !reviewable} onClick={onFailed} type="button">
             <MessageSquareWarning size={18} />
             Registrar falha
           </button>

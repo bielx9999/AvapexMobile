@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:logistica_avapex_mobile/features/deliveries/data/models/delivery_model.dart';
 import 'package:logistica_avapex_mobile/features/routes/data/models/route_event_model.dart';
 import 'package:logistica_avapex_mobile/features/routes/data/models/route_plan_model.dart';
+import 'package:logistica_avapex_mobile/features/receipts/data/models/delivery_receipt_model.dart';
 import 'package:logistica_avapex_mobile/features/settings/data/models/operational_settings_model.dart';
 
 void main() {
@@ -138,5 +139,37 @@ void main() {
     expect(settings, isA<DeliverySettings>());
     expect((settings as DeliverySettings).checkInRadiusMeters, 120);
     expect(settings.failureReasons.single.requirePhoto, isTrue);
+  });
+
+  test('DeliveryReceipt preserves its direct delivery relationship', () {
+    final receipt = DeliveryReceipt.fromFirestore({
+      'id': 'receipt-1',
+      'deliveryId': 'delivery-1',
+      'routeId': 'route-1',
+      'orderNumber': 'PED-1001',
+      'clientId': 'client-1',
+      'clientName': 'Cliente Teste',
+      'driverId': 'driver-1',
+      'driverName': 'Motorista Teste',
+      'vehicleId': 'vehicle-1',
+      'vehiclePlate': 'ABC1D23',
+      'cteAccessKey': '35260812345678000123570010000012341000012345',
+      'cteNumber': '000001234',
+      'receiverName': 'Recebedor Teste',
+      'receiverDocument': '12345678900',
+      'location': {'latitude': -23.55, 'longitude': -46.63},
+      'signaturePoints': const [],
+      'physicalProofPhotoUrls': ['proof-url'],
+      'pendingPhysicalProofLocalPaths': const [],
+      'declaration': 'Entrega recebida.',
+      'adminStatus': 'failed',
+      'failureReason': 'Foto ilegivel',
+      'createdAt': Timestamp.fromDate(serviceDate),
+    });
+
+    expect(receipt.deliveryId, 'delivery-1');
+    expect(receipt.orderNumber, 'PED-1001');
+    expect(receipt.adminStatus, DeliveryReceiptReviewStatus.failed);
+    expect(receipt.toFirestore()['vehiclePlate'], 'ABC1D23');
   });
 }

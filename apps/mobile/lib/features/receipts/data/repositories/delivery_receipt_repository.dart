@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../../../core/errors/firebase_failure.dart';
 import '../../../../core/firebase/firestore_collections.dart';
+import '../../../deliveries/data/models/delivery_model.dart';
 import '../models/delivery_receipt_model.dart';
 
 final class DeliveryReceiptRepository {
@@ -25,20 +26,82 @@ final class DeliveryReceiptRepository {
         );
   }
 
-  Future<void> saveForCurrentDriver(DeliveryReceipt receipt) async {
+  Future<void> saveForCurrentDriver({
+    required DeliveryReceipt receipt,
+    required Delivery delivery,
+  }) async {
     try {
       final uid = _requireCurrentUserId();
-      if (receipt.driverId != uid) {
+      if (receipt.driverId != uid || delivery.driverId != uid) {
         throw const FirebaseFailure(
           code: FirebaseFailureCode.permissionDenied,
           message: 'Comprovante nao pertence ao motorista atual.',
         );
       }
 
-      await _receipts
-          .doc(receipt.id)
-          .set(receipt, SetOptions(merge: true))
-          .timeout(const Duration(seconds: 10));
+      if (receipt.deliveryId != delivery.id ||
+          receipt.routeId != delivery.routeId ||
+          receipt.orderNumber != delivery.orderNumber) {
+        throw const FirebaseFailure(
+          code: FirebaseFailureCode.permissionDenied,
+          message: 'Dados do comprovante nao correspondem a entrega.',
+        );
+      }
+
+      if (delivery.cteAccessKey.isNotEmpty &&
+          receipt.cteAccessKey != delivery.cteAccessKey) {
+        throw const FirebaseFailure(
+          code: FirebaseFailureCode.permissionDenied,
+          message: 'A chave CT-e nao corresponde a entrega selecionada.',
+        );
+      }
+
+      if (delivery.proofStatus == DeliveryProofStatus.submitted ||
+          delivery.proofStatus == DeliveryProofStatus.approved) {
+        throw const FirebaseFailure(
+          code: FirebaseFailureCode.permissionDenied,
+          message: 'Esta entrega ja possui um comprovante em analise.',
+        );
+      }
+
+      final batch = _firestore.batch();
+      batch.set(_receipts.doc(receipt.id), receipt, SetOptions(merge: false));
+      batch.update(
+        _firestore.collection(FirestoreCollections.deliveries).doc(delivery.id),
+        {
+          'proofStatus': DeliveryProofStatus.submitted.value,
+          'deliveryProofId': receipt.id,
+          'updatedAt': FieldValue.serverTimestamp(),
+          'updatedBy': uid,
+        },
+      );
+
+      if (delivery.routeId.isNotEmpty) {
+        final eventId = 'proof_submitted_${receipt.id}';
+        batch.set(
+          _firestore.collection(FirestoreCollections.routeEvents).doc(eventId),
+          {
+            'id': eventId,
+            'routeId': delivery.routeId,
+            'deliveryId': delivery.id,
+            'driverId': uid,
+            'vehicleId': delivery.vehicleId,
+            'type': 'delivery_proof_submitted',
+            'source': 'driver',
+            'actorId': uid,
+            'actorName': receipt.driverName,
+            'fromStatus': delivery.proofStatus.value,
+            'toStatus': DeliveryProofStatus.submitted.value,
+            'message': 'Comprovante de entrega enviado pelo motorista.',
+            'metadata': {'receiptId': receipt.id},
+            'location': receipt.location,
+            'occurredAt': Timestamp.fromDate(receipt.createdAt),
+            'createdAt': FieldValue.serverTimestamp(),
+          },
+        );
+      }
+
+      await batch.commit().timeout(const Duration(seconds: 10));
     } on Object catch (error, stackTrace) {
       throw FirebaseFailure.fromException(error, stackTrace);
     }

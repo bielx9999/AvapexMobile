@@ -2,6 +2,22 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../../../core/firebase/firestore_serializers.dart';
 
+enum DeliveryReceiptReviewStatus {
+  pending('pending'),
+  delivered('delivered'),
+  failed('failed');
+
+  const DeliveryReceiptReviewStatus(this.value);
+  final String value;
+
+  static DeliveryReceiptReviewStatus fromFirestore(Object? value) {
+    return DeliveryReceiptReviewStatus.values.firstWhere(
+      (status) => status.value == value,
+      orElse: () => pending,
+    );
+  }
+}
+
 final class DeliveryReceipt {
   const DeliveryReceipt({
     required this.id,
@@ -17,6 +33,19 @@ final class DeliveryReceipt {
     required this.pendingPhysicalProofLocalPaths,
     required this.declaration,
     required this.createdAt,
+    this.deliveryId = '',
+    this.routeId = '',
+    this.orderNumber = '',
+    this.clientId = '',
+    this.clientName = '',
+    this.vehicleId = '',
+    this.vehiclePlate = '',
+    this.adminStatus = DeliveryReceiptReviewStatus.pending,
+    this.failureReason = '',
+    this.driverNotificationMessage = '',
+    this.driverNotificationStatus = 'not_sent',
+    this.reviewedAt,
+    this.reviewedBy = '',
   });
 
   final String id;
@@ -32,6 +61,19 @@ final class DeliveryReceipt {
   final List<String> pendingPhysicalProofLocalPaths;
   final String declaration;
   final DateTime createdAt;
+  final String deliveryId;
+  final String routeId;
+  final String orderNumber;
+  final String clientId;
+  final String clientName;
+  final String vehicleId;
+  final String vehiclePlate;
+  final DeliveryReceiptReviewStatus adminStatus;
+  final String failureReason;
+  final String driverNotificationMessage;
+  final String driverNotificationStatus;
+  final DateTime? reviewedAt;
+  final String reviewedBy;
 
   factory DeliveryReceipt.fromDocument(
     DocumentSnapshot<Map<String, dynamic>> doc,
@@ -64,6 +106,23 @@ final class DeliveryReceipt {
       ),
       declaration: json['declaration'] as String,
       createdAt: readDateTime(json, 'createdAt'),
+      deliveryId: (json['deliveryId'] as String?) ?? '',
+      routeId: (json['routeId'] as String?) ?? '',
+      orderNumber: (json['orderNumber'] as String?) ?? '',
+      clientId: (json['clientId'] as String?) ?? '',
+      clientName: (json['clientName'] as String?) ?? '',
+      vehicleId: (json['vehicleId'] as String?) ?? '',
+      vehiclePlate: (json['vehiclePlate'] as String?) ?? '',
+      adminStatus: DeliveryReceiptReviewStatus.fromFirestore(
+        json['adminStatus'],
+      ),
+      failureReason: (json['failureReason'] as String?) ?? '',
+      driverNotificationMessage:
+          (json['driverNotificationMessage'] as String?) ?? '',
+      driverNotificationStatus:
+          (json['driverNotificationStatus'] as String?) ?? 'not_sent',
+      reviewedAt: readNullableDateTime(json, 'reviewedAt'),
+      reviewedBy: (json['reviewedBy'] as String?) ?? '',
     );
   }
 
@@ -82,6 +141,19 @@ final class DeliveryReceipt {
       'pendingPhysicalProofLocalPaths': pendingPhysicalProofLocalPaths,
       'declaration': declaration,
       'createdAt': writeTimestamp(createdAt),
+      'deliveryId': deliveryId,
+      'routeId': routeId,
+      'orderNumber': orderNumber,
+      'clientId': clientId,
+      'clientName': clientName,
+      'vehicleId': vehicleId,
+      'vehiclePlate': vehiclePlate,
+      'adminStatus': adminStatus.value,
+      'failureReason': failureReason,
+      'driverNotificationMessage': driverNotificationMessage,
+      'driverNotificationStatus': driverNotificationStatus,
+      'reviewedAt': writeNullableTimestamp(reviewedAt),
+      'reviewedBy': reviewedBy,
     };
   }
 

@@ -26,6 +26,9 @@ enum RouteEventType {
   deliveryCompleted('delivery_completed'),
   deliveryFailed('delivery_failed'),
   deliveryCancelled('delivery_cancelled'),
+  deliveryProofSubmitted('delivery_proof_submitted'),
+  deliveryProofApproved('delivery_proof_approved'),
+  deliveryProofRejected('delivery_proof_rejected'),
   statusChanged('status_changed'),
   noteAdded('note_added');
 

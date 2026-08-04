@@ -9,6 +9,8 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import '../../../core/errors/firebase_failure.dart';
 import '../../../core/providers/firebase_providers.dart';
 import '../../checklists/data/services/device_location_service.dart';
+import '../../deliveries/application/delivery_providers.dart';
+import '../../deliveries/data/models/delivery_model.dart';
 import '../../media/application/media_providers.dart';
 import '../../media/data/models/driver_media_type.dart';
 import '../../users/application/user_providers.dart';
@@ -34,6 +36,7 @@ final class _DeliveryReceiptsPageState
   final _imagePicker = ImagePicker();
 
   CteAccessKey? _cteAccessKey;
+  String? _selectedDeliveryId;
   DeviceLocation? _confirmedLocation;
   var _isLocating = false;
   var _isSaving = false;
@@ -57,10 +60,42 @@ final class _DeliveryReceiptsPageState
 
   void _updateCteFromInput() {
     final parsed = CteAccessKey.tryParse(_cteKeyController.text);
-    if (parsed?.value == _cteAccessKey?.value) {
+    final deliveries = ref.read(currentDriverDeliveriesProvider).asData?.value;
+    var selectedDeliveryId = _selectedDeliveryId;
+
+    if (parsed != null && deliveries != null) {
+      final matched = _deliveryByCteAccessKey(deliveries, parsed.value);
+      if (matched != null && _canSubmitProof(matched)) {
+        selectedDeliveryId = matched.id;
+      } else {
+        final selected = _deliveryById(deliveries, selectedDeliveryId);
+        if (selected != null &&
+            selected.cteAccessKey.isNotEmpty &&
+            selected.cteAccessKey != parsed.value) {
+          selectedDeliveryId = null;
+        }
+      }
+    }
+
+    if (parsed?.value == _cteAccessKey?.value &&
+        selectedDeliveryId == _selectedDeliveryId) {
       return;
     }
-    setState(() => _cteAccessKey = parsed);
+    setState(() {
+      _cteAccessKey = parsed;
+      _selectedDeliveryId = selectedDeliveryId;
+    });
+  }
+
+  void _selectDelivery(String? deliveryId, List<Delivery> deliveries) {
+    final delivery = _deliveryById(deliveries, deliveryId);
+    setState(() {
+      _selectedDeliveryId = delivery?.id;
+      _errorMessage = null;
+    });
+    if (delivery != null && delivery.cteAccessKey.isNotEmpty) {
+      _cteKeyController.text = delivery.cteAccessKey;
+    }
   }
 
   Future<void> _scanQrCode() async {
@@ -164,6 +199,25 @@ final class _DeliveryReceiptsPageState
       return;
     }
 
+    final deliveries = ref.read(currentDriverDeliveriesProvider).asData?.value;
+    final delivery = _deliveryById(deliveries ?? const [], _selectedDeliveryId);
+    if (delivery == null || !_canSubmitProof(delivery)) {
+      setState(
+        () => _errorMessage =
+            'Selecione uma entrega atribuida com comprovante pendente.',
+      );
+      return;
+    }
+
+    if (delivery.cteAccessKey.isNotEmpty &&
+        delivery.cteAccessKey != cteKey.value) {
+      setState(
+        () => _errorMessage =
+            'A chave CT-e informada nao corresponde a entrega selecionada.',
+      );
+      return;
+    }
+
     final location = _confirmedLocation;
     if (location == null) {
       setState(() => _errorMessage = 'Confirme a localizacao da entrega.');
@@ -230,11 +284,18 @@ final class _DeliveryReceiptsPageState
           cteNumber: cteKey.number,
         ),
         createdAt: now,
+        deliveryId: delivery.id,
+        routeId: delivery.routeId,
+        orderNumber: delivery.orderNumber,
+        clientId: delivery.clientId,
+        clientName: delivery.clientName,
+        vehicleId: delivery.vehicleId,
+        vehiclePlate: delivery.vehiclePlate,
       );
 
       await ref
           .read(deliveryReceiptRepositoryProvider)
-          .saveForCurrentDriver(receipt);
+          .saveForCurrentDriver(receipt: receipt, delivery: delivery);
 
       if (!mounted) {
         return;
@@ -245,6 +306,7 @@ final class _DeliveryReceiptsPageState
       _receiverDocumentController.clear();
       setState(() {
         _cteAccessKey = null;
+        _selectedDeliveryId = null;
         _confirmedLocation = null;
         _physicalProofPhotos.clear();
       });
@@ -270,6 +332,8 @@ final class _DeliveryReceiptsPageState
 
   @override
   Widget build(BuildContext context) {
+    final deliveries = ref.watch(currentDriverDeliveriesProvider);
+
     return DefaultTabController(
       length: 2,
       child: Column(
@@ -293,6 +357,34 @@ final class _DeliveryReceiptsPageState
                         ScrollViewKeyboardDismissBehavior.onDrag,
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
                     children: [
+                      _SectionCard(
+                        title: 'Entrega vinculada',
+                        child: deliveries.when(
+                          data: (items) => _DeliverySelector(
+                            deliveries: items,
+                            selectedDeliveryId: _selectedDeliveryId,
+                            onChanged: (deliveryId) =>
+                                _selectDelivery(deliveryId, items),
+                          ),
+                          error: (_, _) => const _ErrorBox(
+                            message:
+                                'Nao foi possivel carregar as entregas atribuidas.',
+                          ),
+                          loading: () => const Row(
+                            children: [
+                              SizedBox.square(
+                                dimension: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              ),
+                              SizedBox(width: 12),
+                              Text('Carregando entregas...'),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
                       _SectionCard(
                         title: 'CT-e da entrega',
                         child: Column(
@@ -578,6 +670,71 @@ final class _SectionCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+final class _DeliverySelector extends StatelessWidget {
+  const _DeliverySelector({
+    required this.deliveries,
+    required this.selectedDeliveryId,
+    required this.onChanged,
+  });
+
+  final List<Delivery> deliveries;
+  final String? selectedDeliveryId;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final available = deliveries.where(_canSubmitProof).toList(growable: false);
+    final selected = _deliveryById(available, selectedDeliveryId);
+
+    if (available.isEmpty) {
+      return const _InfoBanner(
+        icon: Icons.local_shipping_outlined,
+        label: 'Entregas disponiveis',
+        value: 'Nenhuma entrega com comprovante pendente.',
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        DropdownButtonFormField<String>(
+          key: ValueKey(selectedDeliveryId),
+          initialValue: selected?.id,
+          isExpanded: true,
+          decoration: const InputDecoration(
+            labelText: 'Pedido / entrega',
+            prefixIcon: Icon(Icons.local_shipping_outlined),
+          ),
+          items: [
+            for (final delivery in available)
+              DropdownMenuItem(
+                value: delivery.id,
+                child: Text(
+                  '${delivery.orderNumber} - ${delivery.clientName.isEmpty ? delivery.cteNumber : delivery.clientName}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+          ],
+          onChanged: onChanged,
+          validator: (value) => value == null
+              ? 'Selecione a entrega referente ao comprovante.'
+              : null,
+        ),
+        if (selected != null) ...[
+          const SizedBox(height: 10),
+          _InfoBanner(
+            icon: Icons.inventory_2_outlined,
+            label: 'Entrega selecionada',
+            value:
+                '${selected.orderNumber} - ${selected.vehiclePlate.isEmpty ? 'Veiculo nao informado' : selected.vehiclePlate}',
+          ),
+        ],
+      ],
     );
   }
 }
@@ -962,11 +1119,46 @@ final class _ReceiptHistoryTile extends StatelessWidget {
         ),
         title: Text('CT-e ${receipt.cteNumber}'),
         subtitle: Text(
-          '${receipt.receiverName} - ${_formatDateTime(receipt.createdAt)}',
+          '${receipt.orderNumber.isEmpty ? receipt.receiverName : receipt.orderNumber} - ${_formatDateTime(receipt.createdAt)} - ${_receiptStatusLabel(receipt.adminStatus)}',
         ),
       ),
     );
   }
+}
+
+bool _canSubmitProof(Delivery delivery) {
+  return delivery.status != DeliveryStatus.cancelled &&
+      delivery.proofStatus != DeliveryProofStatus.submitted &&
+      delivery.proofStatus != DeliveryProofStatus.approved;
+}
+
+Delivery? _deliveryById(List<Delivery> deliveries, String? id) {
+  if (id == null || id.isEmpty) {
+    return null;
+  }
+  for (final delivery in deliveries) {
+    if (delivery.id == id) {
+      return delivery;
+    }
+  }
+  return null;
+}
+
+Delivery? _deliveryByCteAccessKey(List<Delivery> deliveries, String accessKey) {
+  for (final delivery in deliveries) {
+    if (delivery.cteAccessKey == accessKey) {
+      return delivery;
+    }
+  }
+  return null;
+}
+
+String _receiptStatusLabel(DeliveryReceiptReviewStatus status) {
+  return switch (status) {
+    DeliveryReceiptReviewStatus.pending => 'Em analise',
+    DeliveryReceiptReviewStatus.delivered => 'Aprovado',
+    DeliveryReceiptReviewStatus.failed => 'Rejeitado',
+  };
 }
 
 String? _requiredText(String? value) {

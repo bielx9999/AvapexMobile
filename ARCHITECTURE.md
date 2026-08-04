@@ -139,6 +139,22 @@ Coleção append-only usada para auditoria e sincronização offline.
 * `occurredAt` (timestamp do dispositivo)
 * `createdAt` (timestamp do servidor)
 
+### Coleção: `deliveryReceipts`
+Comprovantes permanecem em coleção própria para auditoria e armazenamento de múltiplas fotos, mas são obrigatoriamente vinculados a uma entrega.
+* `id` (string, PK)
+* `deliveryId` (string, FK -> deliveries)
+* `routeId`, `orderNumber`, `clientId`, `clientName` (snapshots da entrega)
+* `driverId`, `driverName`, `vehicleId`, `vehiclePlate` (snapshots operacionais)
+* `cteAccessKey`, `cteNumber` (string)
+* `receiverName`, `receiverDocument` (string)
+* `location` (map GeoLocation)
+* `physicalProofPhotoUrls`, `pendingPhysicalProofLocalPaths` (array de string)
+* `declaration` (string)
+* `adminStatus` (string: `pending` | `delivered` | `failed`)
+* `failureReason`, `driverNotificationMessage`, `driverNotificationStatus` (string)
+* `createdAt`, `reviewedAt` (timestamp)
+* `reviewedBy` (string)
+
 ### Coleção: `settings`
 Documentos fixos, somente administradores podem alterar.
 * `settings/delivery`: campos obrigatórios, raio de check-in, motivos de não entrega e transições.
@@ -156,3 +172,5 @@ Documentos fixos, somente administradores podem alterar.
 3. Eventos nunca podem ser atualizados ou excluídos.
 4. Motoristas não podem alterar atribuição, sequência, cliente, veículo ou requisitos de comprovante.
 5. Configurações são versionadas e escritas somente por administradores.
+6. A criação de um comprovante e a atualização de `deliveries.proofStatus`/`deliveryProofId` acontecem no mesmo batch.
+7. Aprovação ou rejeição administrativa atualiza comprovante e entrega atomicamente e gera um `routeEvent` imutável.

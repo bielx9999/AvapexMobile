@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useState } from 'react';
 import { Filter, RefreshCw } from 'lucide-react';
 import type { AdminSession } from '../../auth/data/authRepository';
 import { adminReadRepository } from '../../shared/data/firestoreCollections';
-import type { AppUser, Checklist, DeliveryReceipt, FuelingRecord, Trip, Vehicle } from '../../shared/domain/models';
+import type { AppUser, Checklist, Delivery, DeliveryReceipt, FuelingRecord, Trip, Vehicle } from '../../shared/domain/models';
 import { ErrorBanner, PageSkeleton } from '../../shared/presentation/ui';
 import { AdminShell, type AdminPage } from './AdminShell';
 
@@ -30,6 +30,7 @@ type AdminData = {
   trips: Trip[];
   checklists: Checklist[];
   receipts: DeliveryReceipt[];
+  deliveries: Delivery[];
   fueling: FuelingRecord[];
 };
 
@@ -39,6 +40,7 @@ const emptyData: AdminData = {
   trips: [],
   checklists: [],
   receipts: [],
+  deliveries: [],
   fueling: [],
 };
 
@@ -67,15 +69,16 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
     setLoading(true);
     setError('');
     try {
-      const [users, vehicles, trips, checklists, receipts, fueling] = await Promise.all([
+      const [users, vehicles, trips, checklists, receipts, deliveries, fueling] = await Promise.all([
         adminReadRepository.users(),
         adminReadRepository.vehicles(),
         adminReadRepository.trips(),
         adminReadRepository.checklists(),
         adminReadRepository.deliveryReceipts(),
+        adminReadRepository.deliveries(),
         adminReadRepository.fuelingRecords(),
       ]);
-      setData({ users, vehicles, trips, checklists, receipts, fueling });
+      setData({ users, vehicles, trips, checklists, receipts, deliveries, fueling });
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Erro ao carregar painel.');
     } finally {
@@ -163,7 +166,7 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
               users={data.users}
             />
           ) : activePage === 'receipts' ? (
-            <ComprovantesPage loading={loading} onChanged={loadData} receipts={data.receipts} />
+            <ComprovantesPage deliveries={data.deliveries} loading={loading} onChanged={loadData} receipts={data.receipts} />
           ) : activePage === 'fueling' ? (
             <AbastecimentoPage fueling={data.fueling} loading={loading} onChanged={loadData} />
           ) : activePage === 'users' ? (

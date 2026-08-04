@@ -17,7 +17,7 @@ import {
   type QueryConstraint,
   type Unsubscribe,
 } from 'firebase/firestore';
-import { firestore } from '../../../core/firebase/firebaseConfig';
+import { auth, firestore } from '../../../core/firebase/firebaseConfig';
 import { makeConverter } from '../../../core/firebase/firestoreConverters';
 import { mapFirebaseError } from '../../../core/firebase/firebaseErrors';
 import {
@@ -141,29 +141,68 @@ export const adminReadRepository = {
 };
 
 export const adminWriteRepository = {
-  async markDeliveryReceiptDelivered(receiptId: string) {
+  async markDeliveryReceiptDelivered(receipt: DeliveryReceipt) {
     try {
-      await updateDoc(doc(firestore, 'deliveryReceipts', receiptId), {
+      if ((receipt.adminStatus ?? 'pending') !== 'pending') {
+        throw new Error('Este comprovante ja foi revisado.');
+      }
+      const reviewer = auth.currentUser;
+      const reviewerId = reviewer?.uid ?? '';
+      const batch = writeBatch(firestore);
+      batch.update(doc(firestore, 'deliveryReceipts', receipt.id), {
         adminStatus: 'delivered',
         failureReason: '',
         driverNotificationMessage: '',
         driverNotificationStatus: 'not_sent',
         reviewedAt: serverTimestamp(),
+        reviewedBy: reviewerId,
       });
+
+      if (receipt.deliveryId) {
+        batch.update(doc(firestore, 'deliveries', receipt.deliveryId), {
+          proofStatus: 'approved',
+          deliveryProofId: receipt.id,
+          status: 'delivered',
+          deliveredAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+          updatedBy: reviewerId,
+        });
+        addDeliveryProofEvent(batch, receipt, 'delivery_proof_approved', 'approved');
+      }
+
+      await batch.commit();
     } catch (error) {
       throw mapFirebaseError(error, 'Erro ao registrar comprovante como entregue.');
     }
   },
 
-  async markDeliveryReceiptFailed(receiptId: string, reason: string, notificationMessage: string) {
+  async markDeliveryReceiptFailed(receipt: DeliveryReceipt, reason: string, notificationMessage: string) {
     try {
-      await updateDoc(doc(firestore, 'deliveryReceipts', receiptId), {
+      if ((receipt.adminStatus ?? 'pending') !== 'pending') {
+        throw new Error('Este comprovante ja foi revisado.');
+      }
+      const reviewerId = auth.currentUser?.uid ?? '';
+      const batch = writeBatch(firestore);
+      batch.update(doc(firestore, 'deliveryReceipts', receipt.id), {
         adminStatus: 'failed',
         failureReason: reason.trim(),
         driverNotificationMessage: notificationMessage.trim(),
         driverNotificationStatus: notificationMessage.trim() ? 'queued' : 'not_sent',
         reviewedAt: serverTimestamp(),
+        reviewedBy: reviewerId,
       });
+
+      if (receipt.deliveryId) {
+        batch.update(doc(firestore, 'deliveries', receipt.deliveryId), {
+          proofStatus: 'rejected',
+          deliveryProofId: receipt.id,
+          updatedAt: serverTimestamp(),
+          updatedBy: reviewerId,
+        });
+        addDeliveryProofEvent(batch, receipt, 'delivery_proof_rejected', 'rejected', reason.trim());
+      }
+
+      await batch.commit();
     } catch (error) {
       throw mapFirebaseError(error, 'Erro ao registrar falha no comprovante.');
     }
@@ -411,3 +450,34 @@ export const adminWriteRepository = {
     }
   },
 };
+
+function addDeliveryProofEvent(
+  batch: ReturnType<typeof writeBatch>,
+  receipt: DeliveryReceipt,
+  type: 'delivery_proof_approved' | 'delivery_proof_rejected',
+  toStatus: 'approved' | 'rejected',
+  message = '',
+) {
+  if (!receipt.routeId) {
+    return;
+  }
+  const actor = auth.currentUser;
+  const eventRef = doc(collection(firestore, 'routeEvents'));
+  batch.set(eventRef, {
+    id: eventRef.id,
+    routeId: receipt.routeId,
+    deliveryId: receipt.deliveryId,
+    driverId: receipt.driverId,
+    vehicleId: receipt.vehicleId,
+    type,
+    source: 'admin',
+    actorId: actor?.uid ?? '',
+    actorName: actor?.displayName ?? actor?.email ?? '',
+    fromStatus: 'submitted',
+    toStatus,
+    message: message || (toStatus === 'approved' ? 'Comprovante aprovado pelo administrativo.' : 'Comprovante rejeitado pelo administrativo.'),
+    metadata: { receiptId: receipt.id },
+    occurredAt: serverTimestamp(),
+    createdAt: serverTimestamp(),
+  });
+}

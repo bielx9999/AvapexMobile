@@ -373,8 +373,15 @@ export function mapDeliveryReceipt(id: string, data: Record<string, unknown>): D
 
   return {
     id: typeof data.id === 'string' ? data.id : id,
+    deliveryId: readString(data.deliveryId),
+    routeId: readString(data.routeId),
+    orderNumber: readString(data.orderNumber),
+    clientId: readString(data.clientId),
+    clientName: readString(data.clientName),
     driverId: typeof data.driverId === 'string' ? data.driverId : '',
     driverName: typeof data.driverName === 'string' ? data.driverName : '',
+    vehicleId: readString(data.vehicleId),
+    vehiclePlate: readString(data.vehiclePlate),
     cteAccessKey: typeof data.cteAccessKey === 'string' ? data.cteAccessKey : '',
     cteNumber: typeof data.cteNumber === 'string' ? data.cteNumber : '',
     receiverName: typeof data.receiverName === 'string' ? data.receiverName : '',
@@ -389,6 +396,7 @@ export function mapDeliveryReceipt(id: string, data: Record<string, unknown>): D
       typeof data.driverNotificationMessage === 'string' ? data.driverNotificationMessage : undefined,
     driverNotificationStatus: driverNotificationStatus as DeliveryReceipt['driverNotificationStatus'],
     reviewedAt: readDate(data.reviewedAt),
+    reviewedBy: readString(data.reviewedBy),
   };
 }
 
@@ -488,5 +496,5 @@ function isDeliveryStatus(value: unknown): value is Delivery['status'] {
 }
 
 function isRouteEventType(value: unknown): value is RouteEvent['type'] {
-  return value === 'route_created' || value === 'route_assigned' || value === 'route_started' || value === 'route_completed' || value === 'route_cancelled' || value === 'delivery_check_in' || value === 'delivery_completed' || value === 'delivery_failed' || value === 'delivery_cancelled' || value === 'status_changed' || value === 'note_added';
+  return value === 'route_created' || value === 'route_assigned' || value === 'route_started' || value === 'route_completed' || value === 'route_cancelled' || value === 'delivery_check_in' || value === 'delivery_completed' || value === 'delivery_failed' || value === 'delivery_cancelled' || value === 'delivery_proof_submitted' || value === 'delivery_proof_approved' || value === 'delivery_proof_rejected' || value === 'status_changed' || value === 'note_added';
 }

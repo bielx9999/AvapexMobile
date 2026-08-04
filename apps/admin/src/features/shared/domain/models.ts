@@ -42,6 +42,9 @@ export type RouteEventType =
   | 'delivery_completed'
   | 'delivery_failed'
   | 'delivery_cancelled'
+  | 'delivery_proof_submitted'
+  | 'delivery_proof_approved'
+  | 'delivery_proof_rejected'
   | 'status_changed'
   | 'note_added';
 
@@ -320,8 +323,15 @@ export type Checklist = {
 
 export type DeliveryReceipt = {
   id: string;
+  deliveryId: string;
+  routeId: string;
+  orderNumber: string;
+  clientId: string;
+  clientName: string;
   driverId: string;
   driverName: string;
+  vehicleId: string;
+  vehiclePlate: string;
   cteAccessKey: string;
   cteNumber: string;
   receiverName: string;
@@ -335,6 +345,7 @@ export type DeliveryReceipt = {
   driverNotificationMessage?: string;
   driverNotificationStatus?: 'not_sent' | 'queued' | 'sent';
   reviewedAt?: Date | null;
+  reviewedBy?: string;
 };
 
 export type FuelingRecord = {
