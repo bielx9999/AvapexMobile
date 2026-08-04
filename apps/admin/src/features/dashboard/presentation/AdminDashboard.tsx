@@ -123,15 +123,15 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
 
   return (
     <main className="min-h-screen bg-avapex-paper text-avapex-ink">
-      <aside className="fixed left-0 top-0 hidden h-full w-64 flex-col bg-avapex-black px-5 py-6 text-white lg:flex">
+      <aside className="fixed left-0 top-0 hidden h-full w-72 flex-col bg-avapex-black px-5 py-6 text-white lg:flex">
         <div>
-          <div className="mb-10 flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-avapex-yellow font-black text-avapex-black">
+          <div className="mb-8 flex items-center gap-3 rounded-3xl border border-white/10 bg-white/[0.04] p-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-avapex-yellow font-black text-avapex-black">
               AV
             </div>
             <div>
               <p className="font-semibold">Avapex</p>
-              <p className="text-xs text-zinc-400">Painel administrativo</p>
+              <p className="text-xs text-zinc-400">Gestao logistica</p>
             </div>
           </div>
 
@@ -139,10 +139,16 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
             {navSections.map((section) => {
               const SectionIcon = section.icon;
               const isCollapsed = collapsedSections[section.label] ?? false;
+              const hasActiveItem = section.items.some((item) => item.key === activePage);
               return (
-                <div key={section.label}>
+                <div
+                  className={`rounded-3xl border p-2 transition ${
+                    hasActiveItem ? 'border-white/12 bg-white/[0.055]' : 'border-white/8 bg-white/[0.025]'
+                  }`}
+                  key={section.label}
+                >
                   <button
-                    className="mb-2 flex h-9 w-full items-center justify-between rounded-xl px-3 text-xs font-semibold uppercase tracking-wide text-zinc-400 transition hover:bg-white/10 hover:text-white"
+                    className="flex h-11 w-full items-center justify-between rounded-2xl px-3 text-left font-semibold text-zinc-100 transition hover:bg-white/10"
                     onClick={() =>
                       setCollapsedSections((current) => ({
                         ...current,
@@ -151,42 +157,54 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
                     }
                     type="button"
                   >
-                    <span className="flex items-center gap-2">
-                      <SectionIcon size={14} />
-                      {section.label}
+                    <span className="flex items-center gap-3">
+                      <span
+                        className={`flex h-8 w-8 items-center justify-center rounded-xl ${
+                          hasActiveItem ? 'bg-avapex-yellow text-avapex-black' : 'bg-white/10 text-zinc-300'
+                        }`}
+                      >
+                        <SectionIcon size={16} />
+                      </span>
+                      <span>{section.label}</span>
                     </span>
                     <ChevronDown
-                      className={`transition-transform ${isCollapsed ? '-rotate-90' : 'rotate-0'}`}
-                      size={15}
+                      className={`text-zinc-400 transition-transform ${isCollapsed ? '-rotate-90' : 'rotate-0'}`}
+                      size={17}
                     />
                   </button>
-                  <div className={`space-y-1 overflow-hidden transition-all ${isCollapsed ? 'max-h-0 opacity-0' : 'max-h-80 opacity-100'}`}>
+                  <div
+                    className={`overflow-hidden transition-all duration-200 ${
+                      isCollapsed ? 'max-h-0 opacity-0' : 'mt-2 max-h-96 opacity-100'
+                    }`}
+                  >
+                    <div className="space-y-1 border-l border-white/10 pl-3">
                     {section.items.map((item) => {
                       const ItemIcon = item.icon;
                       const isActive = activePage === item.key;
                       return (
                         <button
-                          className={`group flex h-11 w-full items-center gap-3 rounded-2xl px-3 text-left transition ${
+                          className={`group relative flex h-10 w-full items-center gap-3 rounded-2xl px-3 text-left transition ${
                             isActive
-                              ? 'bg-white/12 font-semibold text-white ring-1 ring-white/10'
-                              : 'text-zinc-200 hover:bg-white/10 hover:text-white'
+                              ? 'bg-[#2B2828] font-semibold text-white shadow-inner'
+                              : 'text-zinc-300 hover:bg-white/8 hover:text-white'
                           }`}
                           key={item.key}
                           onClick={() => setActivePage(item.key)}
                           type="button"
                         >
+                          {isActive ? <span className="absolute left-0 h-5 w-1 rounded-full bg-avapex-yellow" /> : null}
                           <span
-                            className={`flex h-8 w-8 items-center justify-center rounded-xl transition ${
-                              isActive ? 'bg-white text-avapex-black' : 'bg-white/10 text-zinc-300 group-hover:bg-white/15'
+                            className={`flex h-7 w-7 items-center justify-center rounded-lg transition ${
+                              isActive ? 'bg-white/10 text-avapex-yellow' : 'text-zinc-400 group-hover:text-white'
                             }`}
                           >
-                            <ItemIcon size={17} />
+                            <ItemIcon size={16} />
                           </span>
                           <span className="flex-1">{item.label}</span>
-                          {isActive ? <span className="h-2 w-2 rounded-full bg-avapex-yellow" /> : null}
                         </button>
                       );
                     })}
+                    </div>
                   </div>
                 </div>
               );
@@ -208,7 +226,7 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
         </div>
       </aside>
 
-      <section className="lg:pl-64">
+      <section className="lg:pl-72">
         <header className="flex min-h-20 flex-col justify-between gap-3 border-b border-zinc-200 bg-white px-4 py-4 sm:flex-row sm:items-center sm:px-6">
           <div>
             <h1 className="text-2xl font-semibold tracking-normal">{pageTitles[activePage]}</h1>
