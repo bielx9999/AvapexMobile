@@ -2,6 +2,7 @@ import { FormEvent, type ReactNode, useMemo, useState } from 'react';
 import { Ban, KeyRound, Pencil, Plus, Search, Trash2, UserCheck, X } from 'lucide-react';
 import { adminUserRepository } from '../data/adminUserRepository';
 import type { AppUser, UserRole, UserStatus } from '../../shared/domain/models';
+import { ActionIconButton, EmptyState, ErrorBanner } from '../../shared/presentation/ui';
 
 type UsersPageProps = {
   users: AppUser[];
@@ -122,13 +123,11 @@ export function UsersPage({ users, loading, currentUid, onChanged }: UsersPagePr
 
   return (
     <div className="space-y-5">
-      {error ? <p className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
+      <ErrorBanner message={error} />
 
       <section className="ui-card overflow-hidden">
         <div className="flex flex-col gap-3 border-b border-zinc-200 px-4 py-3 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h2 className="font-semibold">Gerenciar usuarios</h2>
-          </div>
+          <p className="text-sm text-zinc-500">{filteredUsers.length} usuarios encontrados</p>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <button
               className="ui-button flex h-10 items-center justify-center gap-2 bg-avapex-yellow px-4 text-sm font-semibold text-avapex-black hover:bg-yellow-300"
@@ -151,8 +150,8 @@ export function UsersPage({ users, loading, currentUid, onChanged }: UsersPagePr
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[900px] text-left text-sm">
-            <thead className="bg-zinc-50 text-xs uppercase text-zinc-500">
+          <table className="ui-table min-w-[900px]">
+            <thead>
               <tr>
                 <th className="px-4 py-3">Nome</th>
                 <th className="px-4 py-3">Email</th>
@@ -165,7 +164,7 @@ export function UsersPage({ users, loading, currentUid, onChanged }: UsersPagePr
             </thead>
             <tbody>
               {filteredUsers.map((user) => (
-                <tr className="border-t border-zinc-100" key={user.uid}>
+                <tr key={user.uid}>
                   <td className="px-4 py-3 font-medium">{user.name || '-'}</td>
                   <td className="px-4 py-3">{user.email}</td>
                   <td className="px-4 py-3">{user.phone || '-'}</td>
@@ -187,14 +186,14 @@ export function UsersPage({ users, loading, currentUid, onChanged }: UsersPagePr
                       {user.uid === currentUid ? (
                         <span className="ui-pill bg-zinc-100 text-zinc-600">Voce</span>
                       ) : null}
-                      <IconButton
+                      <ActionIconButton
                         label="Editar usuario"
                         disabled={busyUid === user.uid}
                         onClick={() => openEditForm(user)}
                       >
                         <Pencil size={17} />
-                      </IconButton>
-                      <IconButton
+                      </ActionIconButton>
+                      <ActionIconButton
                         label="Enviar redefinicao de senha"
                         disabled={busyUid === user.uid}
                         onClick={() =>
@@ -205,8 +204,8 @@ export function UsersPage({ users, loading, currentUid, onChanged }: UsersPagePr
                         }
                       >
                         <KeyRound size={17} />
-                      </IconButton>
-                      <IconButton
+                      </ActionIconButton>
+                      <ActionIconButton
                         label={user.status === 'active' ? 'Bloquear usuario' : 'Ativar usuario'}
                         disabled={busyUid === user.uid || user.uid === currentUid}
                         onClick={() =>
@@ -217,8 +216,8 @@ export function UsersPage({ users, loading, currentUid, onChanged }: UsersPagePr
                         }
                       >
                         {user.status === 'active' ? <Ban size={17} /> : <UserCheck size={17} />}
-                      </IconButton>
-                      <IconButton
+                      </ActionIconButton>
+                      <ActionIconButton
                         danger
                         label="Excluir cadastro"
                         disabled={busyUid === user.uid || user.uid === currentUid}
@@ -236,7 +235,7 @@ export function UsersPage({ users, loading, currentUid, onChanged }: UsersPagePr
                         }}
                       >
                         <Trash2 size={17} />
-                      </IconButton>
+                      </ActionIconButton>
                     </div>
                   </td>
                 </tr>
@@ -244,8 +243,8 @@ export function UsersPage({ users, loading, currentUid, onChanged }: UsersPagePr
 
               {!loading && filteredUsers.length === 0 ? (
                 <tr>
-                  <td className="px-4 py-8 text-center text-zinc-500" colSpan={7}>
-                    Nenhum usuario encontrado.
+                  <td className="p-0" colSpan={7}>
+                    <EmptyState description="Nao existem usuarios correspondentes aos filtros atuais." title="Nenhum usuario encontrado" />
                   </td>
                 </tr>
               ) : null}
@@ -255,7 +254,7 @@ export function UsersPage({ users, loading, currentUid, onChanged }: UsersPagePr
       </section>
 
       {showCreateForm ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 px-4 py-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4 py-6 backdrop-blur-[1px]">
           <section className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-2xl">
             <header className="flex items-start justify-between gap-4 border-b border-zinc-200 px-5 py-4">
               <div>
@@ -275,7 +274,7 @@ export function UsersPage({ users, loading, currentUid, onChanged }: UsersPagePr
             </header>
 
             <form className="flex min-h-0 flex-1 flex-col" onSubmit={handleSubmitUser}>
-              <div className="space-y-5 overflow-y-auto bg-zinc-50 p-5">
+              <div className="space-y-5 overflow-y-auto bg-white p-5">
                 <FormTopic title="Dados pessoais">
                   <TextField
                     label="Nome e sobrenome"
@@ -421,37 +420,10 @@ type FormTopicProps = {
 
 function FormTopic({ title, children }: FormTopicProps) {
   return (
-    <section className="ui-card p-4">
-      <h3 className="mb-3 text-sm font-semibold text-zinc-800">{title}</h3>
+    <section className="border-b border-zinc-200 pb-5 last:border-0 last:pb-0">
+      <h3 className="mb-4 text-sm font-semibold text-zinc-900">{title}</h3>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{children}</div>
     </section>
-  );
-}
-
-type IconButtonProps = {
-  children: ReactNode;
-  label: string;
-  disabled?: boolean;
-  danger?: boolean;
-  onClick: () => void;
-};
-
-function IconButton({ children, label, disabled, danger, onClick }: IconButtonProps) {
-  return (
-    <button
-      aria-label={label}
-      className={`ui-icon-button flex h-9 w-9 items-center justify-center ${
-        danger
-          ? 'border-red-200 text-red-700 hover:bg-red-50'
-          : 'border-zinc-300 text-zinc-700 hover:bg-zinc-50'
-      }`}
-      disabled={disabled}
-      onClick={onClick}
-      title={label}
-      type="button"
-    >
-      {children}
-    </button>
   );
 }
 

@@ -10,6 +10,11 @@ export default {
           ink: '#111111',
           paper: '#F7F7F7',
         },
+        surface: 'rgb(var(--surface) / <alpha-value>)',
+        canvas: 'rgb(var(--background) / <alpha-value>)',
+      },
+      boxShadow: {
+        panel: 'var(--shadow-card)',
       },
     },
   },

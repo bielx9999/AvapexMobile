@@ -14,6 +14,7 @@ import {
 import Chart from 'react-apexcharts';
 import type { ApexOptions } from 'apexcharts';
 import type { AppUser, Checklist, ChecklistType } from '../../shared/domain/models';
+import { MetricCard } from '../../shared/presentation/ui';
 
 type ChecklistsPageProps = {
   checklists: Checklist[];
@@ -243,11 +244,11 @@ export function ChecklistsPage({
         </div>
       ) : null}
 
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard icon={<ClipboardList size={20} />} label="Total" tone="dark" value={loading ? '-' : stats.total} />
-        <StatCard icon={<UsersRound size={20} />} label="Motoristas" tone="yellow" value={loading ? '-' : stats.uniqueDrivers} />
-        <StatCard icon={<CheckCircle2 size={20} />} label="Aprovados" tone="success" value={loading ? '-' : stats.approved} />
-        <StatCard icon={<AlertTriangle size={20} />} label="Reprovados" tone="danger" value={loading ? '-' : stats.rejected} />
+      <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        <MetricCard icon={<ClipboardList size={19} />} label="Total" value={loading ? '-' : stats.total} />
+        <MetricCard icon={<UsersRound size={19} />} label="Motoristas" tone="accent" value={loading ? '-' : stats.uniqueDrivers} />
+        <MetricCard icon={<CheckCircle2 size={19} />} label="Aprovados" tone="success" value={loading ? '-' : stats.approved} />
+        <MetricCard icon={<AlertTriangle size={19} />} label="Reprovados" tone="danger" value={loading ? '-' : stats.rejected} />
       </section>
 
       <section className="grid gap-4">
@@ -292,8 +293,8 @@ export function ChecklistsPage({
           <h2 className="font-semibold">Registros de checklist</h2>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[920px] text-left text-sm">
-            <thead className="bg-zinc-50 text-xs uppercase text-zinc-500">
+          <table className="ui-table min-w-[920px]">
+            <thead>
               <tr>
                 <th className="px-4 py-3">Data</th>
                 <th className="px-4 py-3">Motorista</th>
@@ -305,7 +306,7 @@ export function ChecklistsPage({
             </thead>
             <tbody>
               {filteredChecklists.map((checklist) => (
-                <tr className="border-t border-zinc-100" key={checklist.id}>
+                <tr key={checklist.id}>
                   <td className="px-4 py-3">{formatDate(checklist.createdAt)}</td>
                   <td className="px-4 py-3">{checklist.driverName || driverNames.get(checklist.driverId) || checklist.driverId}</td>
                   <td className="px-4 py-3">{checklistLabel(checklist.type)}</td>
@@ -333,51 +334,6 @@ export function ChecklistsPage({
   );
 }
 
-type StatCardProps = {
-  icon: ReactNode;
-  label: string;
-  value: number | string;
-  tone: 'dark' | 'yellow' | 'success' | 'danger';
-};
-
-function StatCard({ icon, label, value, tone }: StatCardProps) {
-  const toneClassNames = {
-    danger: {
-      accent: 'bg-red-500',
-      icon: 'bg-red-50 text-red-700 ring-red-100',
-      value: 'text-red-700',
-    },
-    dark: {
-      accent: 'bg-avapex-black',
-      icon: 'bg-avapex-black text-white ring-zinc-200',
-      value: 'text-avapex-black',
-    },
-    success: {
-      accent: 'bg-emerald-500',
-      icon: 'bg-emerald-50 text-emerald-700 ring-emerald-100',
-      value: 'text-emerald-700',
-    },
-    yellow: {
-      accent: 'bg-avapex-yellow',
-      icon: 'bg-avapex-yellow text-avapex-black ring-yellow-100',
-      value: 'text-avapex-black',
-    },
-  }[tone];
-
-  return (
-    <article className="ui-card relative overflow-hidden p-4 transition duration-200 hover:-translate-y-0.5 hover:shadow-md">
-      <span className={`absolute inset-x-0 top-0 h-1 ${toneClassNames.accent}`} />
-      <div className="mb-4 flex items-center justify-between">
-        <span className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{label}</span>
-        <span className={`flex h-11 w-11 items-center justify-center rounded-2xl ring-1 ${toneClassNames.icon}`}>
-          {icon}
-        </span>
-      </div>
-      <strong className={`block text-3xl font-semibold leading-none ${toneClassNames.value}`}>{value}</strong>
-    </article>
-  );
-}
-
 type ChartCardProps = {
   icon: ReactNode;
   title: string;
@@ -386,9 +342,9 @@ type ChartCardProps = {
 
 function ChartCard({ icon, title, children }: ChartCardProps) {
   return (
-    <section className="ui-card overflow-hidden p-3 transition duration-200 hover:shadow-md">
-      <div className="mb-2 flex items-center gap-2 px-1">
-        <span className="flex h-9 w-9 items-center justify-center rounded-2xl bg-zinc-100 text-avapex-black ring-1 ring-zinc-200">
+    <section className="ui-card overflow-hidden p-4">
+      <div className="mb-2 flex items-center gap-2">
+        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-zinc-100 text-avapex-black">
           {icon}
         </span>
         <h2 className="text-sm font-semibold">{title}</h2>

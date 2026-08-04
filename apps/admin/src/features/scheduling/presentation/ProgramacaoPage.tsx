@@ -15,6 +15,7 @@ import {
   X,
 } from 'lucide-react';
 import { adminWriteRepository } from '../../shared/data/firestoreCollections';
+import { ErrorBanner, MetricCard, type MetricTone } from '../../shared/presentation/ui';
 import type {
   AppUser,
   ProgrammingOperationType,
@@ -43,11 +44,11 @@ type DailyStatusOption = {
   value: DailyStatusValue;
 };
 
-const stageCards: Array<{ status: ProgrammingStatus; label: string; tone: 'dark' | 'yellow' | 'info' | 'success' | 'neutral' }> = [
+const stageCards: Array<{ status: ProgrammingStatus; label: string; tone: MetricTone }> = [
   { status: 'in_transit', label: 'Em transito', tone: 'info' },
-  { status: 'loading', label: 'Carregando', tone: 'yellow' },
+  { status: 'loading', label: 'Carregando', tone: 'accent' },
   { status: 'unloading', label: 'Descarregando', tone: 'neutral' },
-  { status: 'awaiting_invoice', label: 'Aguardando NF', tone: 'dark' },
+  { status: 'awaiting_invoice', label: 'Aguardando NF', tone: 'warning' },
   { status: 'released', label: 'Liberado', tone: 'success' },
 ];
 
@@ -350,11 +351,11 @@ export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: 
 
   return (
     <div className="space-y-4">
-      {error ? <p className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
+      <ErrorBanner message={error} />
 
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      <section className="grid grid-cols-2 gap-3 xl:grid-cols-5">
         {stats.map((item) => (
-          <StatusCard
+          <MetricCard
             icon={statusIcon(item.status)}
             key={item.status}
             label={item.label}
@@ -364,49 +365,47 @@ export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: 
         ))}
       </section>
 
-      <section className="overflow-hidden rounded-[28px] border border-zinc-200 bg-white shadow-sm">
-        <div className="border-b border-zinc-200 bg-gradient-to-r from-zinc-950 via-zinc-900 to-zinc-800 px-5 py-4 text-white">
-          <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
-            <div>
-              <h2 className="text-lg font-semibold">Programacao diaria</h2>
-            </div>
-            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[140px_140px_230px_190px_260px_auto]">
-              <input className="h-10 rounded-2xl border border-white/15 bg-white/10 px-3 text-sm text-white outline-none focus:border-avapex-yellow" type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
-              <input className="h-10 rounded-2xl border border-white/15 bg-white/10 px-3 text-sm text-white outline-none focus:border-avapex-yellow" type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
-              <select className="h-10 rounded-2xl border border-white/15 bg-white/10 px-3 text-sm text-white outline-none focus:border-avapex-yellow" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as 'all' | DailyStatusValue)}>
+      <section className="ui-card overflow-hidden">
+        <div className="border-b border-zinc-200 bg-white px-4 py-4">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-base font-semibold text-zinc-950">Programacao diaria</h2>
+            <button
+              className="ui-button h-10 shrink-0 gap-2 bg-zinc-900 px-4 text-sm font-semibold text-white hover:bg-zinc-800"
+              onClick={openCreateForm}
+              type="button"
+            >
+              <Plus size={18} />
+              Nova Programacao
+            </button>
+          </div>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-[140px_140px_minmax(180px,1fr)_minmax(170px,1fr)_minmax(220px,1.4fr)]">
+              <input aria-label="Data inicial" className="ui-input h-10 px-3 text-sm" type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
+              <input aria-label="Data final" className="ui-input h-10 px-3 text-sm" type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
+              <select aria-label="Status" className="ui-input h-10 px-3 text-sm" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as 'all' | DailyStatusValue)}>
                 <option value="all">Todos status</option>
                 {dailyStatusOptions.map((option) => (
                   <option key={option.value} value={option.value}>{option.label}</option>
                 ))}
               </select>
-              <select className="h-10 rounded-2xl border border-white/15 bg-white/10 px-3 text-sm text-white outline-none focus:border-avapex-yellow" value={driverId} onChange={(event) => setDriverId(event.target.value)}>
+              <select aria-label="Motorista" className="ui-input h-10 px-3 text-sm" value={driverId} onChange={(event) => setDriverId(event.target.value)}>
                 <option value="">Todos motoristas</option>
                 {drivers.map((driver) => (
                   <option key={driver.uid} value={driver.uid}>{driver.name || driver.email}</option>
                 ))}
               </select>
               <label className="relative block">
-                <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-white/55" size={18} />
+                <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" size={18} />
                 <input
-                  className="h-10 w-full rounded-2xl border border-white/15 bg-white/10 pl-10 pr-3 text-sm text-white outline-none placeholder:text-white/50 focus:border-avapex-yellow"
+                  className="ui-input h-10 w-full pl-10 pr-3 text-sm"
                   placeholder="Buscar solicitacao, rota, placa"
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                 />
               </label>
-              <button
-                className="ui-button flex h-10 items-center justify-center gap-2 bg-avapex-yellow px-4 text-sm font-semibold text-avapex-black hover:bg-yellow-300"
-                onClick={openCreateForm}
-                type="button"
-              >
-                <Plus size={18} />
-                Nova Programacao
-              </button>
-            </div>
           </div>
         </div>
 
-        <div className="bg-zinc-50/80 p-4">
+        <div className="bg-zinc-50/50 p-4">
           <div className="mb-3 grid gap-3 md:grid-cols-4">
             <SummaryStrip label="Hoje" value={formatDateOnly(new Date())} />
             <SummaryStrip label="Exibindo" value={`${filteredTrips.length} registros`} />
@@ -414,7 +413,7 @@ export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: 
             <SummaryStrip label="Modelo" value="Carga / Descarga" highlighted />
           </div>
 
-          <div className="overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-sm">
+          <div className="overflow-hidden rounded-lg border border-zinc-200 bg-white">
             <div className="overflow-x-auto">
               <table className="w-full min-w-[1580px] border-separate border-spacing-0 text-left text-xs">
                 <thead className="sticky top-0 z-10 bg-zinc-950 text-[11px] uppercase text-white">
@@ -646,31 +645,10 @@ function SpreadsheetCell({ children, className = '', title }: { children: ReactN
 
 function SummaryStrip({ highlighted, label, value }: { highlighted?: boolean; label: string; value: string }) {
   return (
-    <div className={`rounded-2xl border px-4 py-3 ${highlighted ? 'border-yellow-200 bg-avapex-yellow text-avapex-black' : 'border-zinc-200 bg-white text-zinc-900'}`}>
+    <div className={`rounded-lg border px-3 py-2.5 ${highlighted ? 'border-yellow-200 bg-yellow-50 text-avapex-black' : 'border-zinc-200 bg-white text-zinc-900'}`}>
       <span className="block text-[11px] font-semibold uppercase text-zinc-500">{label}</span>
       <strong className="mt-1 block text-sm">{value}</strong>
     </div>
-  );
-}
-
-function StatusCard({ icon, label, tone, value }: { icon: ReactNode; label: string; tone: 'dark' | 'yellow' | 'success' | 'info' | 'neutral'; value: number | string }) {
-  const toneClassNames = {
-    dark: { accent: 'bg-avapex-black', icon: 'bg-avapex-black text-white ring-zinc-200', value: 'text-avapex-black' },
-    info: { accent: 'bg-sky-500', icon: 'bg-sky-50 text-sky-700 ring-sky-100', value: 'text-sky-700' },
-    neutral: { accent: 'bg-zinc-400', icon: 'bg-zinc-100 text-zinc-700 ring-zinc-200', value: 'text-zinc-800' },
-    success: { accent: 'bg-emerald-500', icon: 'bg-emerald-50 text-emerald-700 ring-emerald-100', value: 'text-emerald-700' },
-    yellow: { accent: 'bg-avapex-yellow', icon: 'bg-avapex-yellow text-avapex-black ring-yellow-100', value: 'text-avapex-black' },
-  }[tone];
-
-  return (
-    <article className="ui-card relative overflow-hidden p-4 transition duration-200 hover:-translate-y-0.5 hover:shadow-md">
-      <span className={`absolute inset-x-0 top-0 h-1 ${toneClassNames.accent}`} />
-      <div className="mb-4 flex items-center justify-between">
-        <span className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{label}</span>
-        <span className={`flex h-11 w-11 items-center justify-center rounded-2xl ring-1 ${toneClassNames.icon}`}>{icon}</span>
-      </div>
-      <strong className={`block text-3xl font-semibold leading-none ${toneClassNames.value}`}>{value}</strong>
-    </article>
   );
 }
 

@@ -1,19 +1,64 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  color: #111111;
-  background: #f7f7f7;
-  font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    sans-serif;
+  color-scheme: light;
+  --background: 248 249 250;
+  --foreground: 24 24 27;
+  --surface: 255 255 255;
+  --surface-subtle: 250 250 250;
+  --primary: 31 28 28;
+  --primary-foreground: 255 255 255;
+  --accent: 250 204 21;
+  --accent-foreground: 31 28 28;
+  --muted: 244 244 245;
+  --muted-foreground: 113 113 122;
+  --border: 228 228 231;
+  --input: 212 212 216;
+  --success: 5 150 105;
+  --warning: 217 119 6;
+  --danger: 220 38 38;
+  --info: 2 132 199;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --shadow-card: 0 1px 2px rgb(24 24 27 / 0.04);
+  color: rgb(var(--foreground));
+  background: rgb(var(--background));
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+.dark {
+  color-scheme: dark;
+  --background: 18 18 20;
+  --foreground: 244 244 245;
+  --surface: 28 28 31;
+  --surface-subtle: 34 34 38;
+  --muted: 39 39 42;
+  --muted-foreground: 161 161 170;
+  --border: 63 63 70;
+  --input: 82 82 91;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: rgb(var(--background));
 }
 
 body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  background: rgb(var(--background));
+  color: rgb(var(--foreground));
 }
 
 button,
@@ -23,28 +68,118 @@ textarea {
   font: inherit;
 }
 
+button,
+a,
+input,
+select,
+textarea {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid rgb(var(--accent));
+  outline-offset: 2px;
+}
+
+::selection {
+  background: rgb(var(--accent) / 0.35);
+}
+
 @layer components {
   .ui-card {
-    @apply rounded-2xl border border-zinc-200 bg-white shadow-sm;
+    @apply border border-zinc-200 bg-white;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card);
   }
 
   .ui-card-soft {
-    @apply rounded-2xl border border-zinc-200 bg-zinc-50 shadow-sm;
+    @apply border border-zinc-200 bg-zinc-50;
+    border-radius: var(--radius-lg);
   }
 
   .ui-button {
-    @apply rounded-xl transition disabled:cursor-not-allowed disabled:opacity-60;
+    @apply inline-flex items-center justify-center font-medium transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50;
+    border-radius: var(--radius-md);
   }
 
   .ui-input {
-    @apply rounded-xl border border-zinc-300 bg-white outline-none focus:border-avapex-yellow focus:ring-2 focus:ring-avapex-yellow/30;
+    @apply border border-zinc-300 bg-white text-zinc-900 outline-none transition-colors placeholder:text-zinc-400 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-500;
+    border-radius: var(--radius-md);
+  }
+
+  .ui-input:hover:not(:disabled) {
+    @apply border-zinc-400;
+  }
+
+  .ui-input:focus {
+    @apply border-zinc-500 ring-2 ring-zinc-200;
   }
 
   .ui-icon-button {
-    @apply rounded-xl border transition disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex items-center justify-center border transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-40;
+    border-radius: var(--radius-md);
   }
 
   .ui-pill {
-    @apply rounded-full px-2.5 py-1 text-xs font-medium;
+    @apply inline-flex items-center gap-1.5 whitespace-nowrap px-2.5 py-1 text-xs font-medium;
+    border-radius: 999px;
+  }
+
+  .ui-table-wrap {
+    @apply overflow-x-auto;
+  }
+
+  .ui-table {
+    @apply w-full text-left text-sm;
+  }
+
+  .ui-table thead {
+    @apply border-y border-zinc-200 bg-zinc-50/80 text-xs text-zinc-500;
+  }
+
+  .ui-table th {
+    @apply whitespace-nowrap px-4 py-2.5 font-semibold;
+  }
+
+  .ui-table td {
+    @apply px-4 py-3 text-zinc-700;
+  }
+
+  .ui-table tbody tr {
+    @apply border-b border-zinc-100 transition-colors last:border-b-0 hover:bg-zinc-50/80;
+  }
+
+  .ui-page-stack {
+    @apply space-y-5;
+  }
+
+  .ui-panel-header {
+    @apply flex flex-col gap-3 border-b border-zinc-200 px-4 py-3.5 md:flex-row md:items-center md:justify-between;
+  }
+
+  .ui-error {
+    @apply flex items-start gap-3 border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700;
+    border-radius: var(--radius-lg);
+  }
+}
+
+/* Legacy radius utilities are normalized while feature pages are migrated. */
+#root .rounded-2xl,
+#root .rounded-3xl {
+  border-radius: var(--radius-lg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
   }
 }

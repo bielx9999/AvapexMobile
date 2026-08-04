@@ -1,4 +1,4 @@
-import { FormEvent, type ReactNode, useMemo, useState } from 'react';
+import { FormEvent, useMemo, useState } from 'react';
 import { Ban, Pencil, Plus, Search, Trash2, UserCheck, X } from 'lucide-react';
 import {
   adminVehicleRepository,
@@ -6,6 +6,7 @@ import {
   vehicleTypeLabel,
 } from '../data/adminVehicleRepository';
 import type { Vehicle, VehicleStatus, VehicleType } from '../../shared/domain/models';
+import { ActionIconButton, EmptyState, ErrorBanner } from '../../shared/presentation/ui';
 
 type VehiclesPageProps = {
   vehicles: Vehicle[];
@@ -110,11 +111,11 @@ export function VehiclesPage({ vehicles, loading, onChanged }: VehiclesPageProps
 
   return (
     <div className="space-y-5">
-      {error ? <p className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
+      <ErrorBanner message={error} />
 
       <section className="ui-card overflow-hidden">
         <div className="flex flex-col gap-3 border-b border-zinc-200 px-4 py-3 md:flex-row md:items-center md:justify-between">
-          <h2 className="font-semibold">Gerenciar veiculos</h2>
+          <p className="text-sm text-zinc-500">{filteredVehicles.length} veiculos encontrados</p>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <button
               className="ui-button flex h-10 items-center justify-center gap-2 bg-avapex-yellow px-4 text-sm font-semibold text-avapex-black hover:bg-yellow-300"
@@ -137,8 +138,8 @@ export function VehiclesPage({ vehicles, loading, onChanged }: VehiclesPageProps
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[820px] text-left text-sm">
-            <thead className="bg-zinc-50 text-xs uppercase text-zinc-500">
+          <table className="ui-table min-w-[820px]">
+            <thead>
               <tr>
                 <th className="px-4 py-3">Placa</th>
                 <th className="px-4 py-3">Frota</th>
@@ -150,7 +151,7 @@ export function VehiclesPage({ vehicles, loading, onChanged }: VehiclesPageProps
             </thead>
             <tbody>
               {filteredVehicles.map((vehicle) => (
-                <tr className="border-t border-zinc-100" key={vehicle.id}>
+                <tr key={vehicle.id}>
                   <td className="px-4 py-3 font-medium">{vehicle.plate}</td>
                   <td className="px-4 py-3">{vehicle.fleetNumber || '-'}</td>
                   <td className="px-4 py-3">{vehicle.year ?? '-'}</td>
@@ -160,10 +161,10 @@ export function VehiclesPage({ vehicles, loading, onChanged }: VehiclesPageProps
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-2">
-                      <IconButton label="Editar veiculo" disabled={busyId === vehicle.id} onClick={() => openEditForm(vehicle)}>
+                      <ActionIconButton label="Editar veiculo" disabled={busyId === vehicle.id} onClick={() => openEditForm(vehicle)}>
                         <Pencil size={17} />
-                      </IconButton>
-                      <IconButton
+                      </ActionIconButton>
+                      <ActionIconButton
                         label={vehicle.status === 'active' ? 'Desativar veiculo' : 'Ativar veiculo'}
                         disabled={busyId === vehicle.id}
                         onClick={() =>
@@ -174,8 +175,8 @@ export function VehiclesPage({ vehicles, loading, onChanged }: VehiclesPageProps
                         }
                       >
                         {vehicle.status === 'active' ? <Ban size={17} /> : <UserCheck size={17} />}
-                      </IconButton>
-                      <IconButton
+                      </ActionIconButton>
+                      <ActionIconButton
                         danger
                         label="Excluir veiculo"
                         disabled={busyId === vehicle.id}
@@ -188,7 +189,7 @@ export function VehiclesPage({ vehicles, loading, onChanged }: VehiclesPageProps
                         }}
                       >
                         <Trash2 size={17} />
-                      </IconButton>
+                      </ActionIconButton>
                     </div>
                   </td>
                 </tr>
@@ -196,8 +197,8 @@ export function VehiclesPage({ vehicles, loading, onChanged }: VehiclesPageProps
 
               {!loading && filteredVehicles.length === 0 ? (
                 <tr>
-                  <td className="px-4 py-8 text-center text-zinc-500" colSpan={6}>
-                    Nenhum veiculo encontrado.
+                  <td className="p-0" colSpan={6}>
+                    <EmptyState description="Nao existem veiculos correspondentes aos filtros atuais." title="Nenhum veiculo encontrado" />
                   </td>
                 </tr>
               ) : null}
@@ -207,7 +208,7 @@ export function VehiclesPage({ vehicles, loading, onChanged }: VehiclesPageProps
       </section>
 
       {showForm ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 px-4 py-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4 py-6 backdrop-blur-[1px]">
           <section className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-2xl">
             <header className="flex items-start justify-between gap-4 border-b border-zinc-200 px-5 py-4">
               <h2 className="text-lg font-semibold">{editingVehicle ? 'Editar Veiculo' : 'Novo Veiculo'}</h2>
@@ -222,9 +223,9 @@ export function VehiclesPage({ vehicles, loading, onChanged }: VehiclesPageProps
             </header>
 
             <form className="flex min-h-0 flex-1 flex-col" onSubmit={handleSubmit}>
-              <div className="space-y-5 overflow-y-auto bg-zinc-50 p-5">
-                <section className="ui-card p-4">
-                  <h3 className="mb-3 text-sm font-semibold text-zinc-800">Identificacao</h3>
+              <div className="space-y-5 overflow-y-auto bg-white p-5">
+                <section className="border-b border-zinc-200 pb-5">
+                  <h3 className="mb-4 text-sm font-semibold text-zinc-900">Identificacao</h3>
                   <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                     <TextField
                       label="Placa"
@@ -249,8 +250,8 @@ export function VehiclesPage({ vehicles, loading, onChanged }: VehiclesPageProps
                   </div>
                 </section>
 
-                <section className="ui-card p-4">
-                  <h3 className="mb-3 text-sm font-semibold text-zinc-800">Classificacao</h3>
+                <section>
+                  <h3 className="mb-4 text-sm font-semibold text-zinc-900">Classificacao</h3>
                   <div className="grid gap-4 md:grid-cols-2">
                     <label className="block">
                       <span className="mb-2 block text-sm font-medium text-zinc-700">Tipo</span>
@@ -327,33 +328,6 @@ function TextField({ label, value, onChange, type = 'text', required, readOnly }
         readOnly={readOnly}
       />
     </label>
-  );
-}
-
-type IconButtonProps = {
-  children: ReactNode;
-  label: string;
-  disabled?: boolean;
-  danger?: boolean;
-  onClick: () => void;
-};
-
-function IconButton({ children, label, disabled, danger, onClick }: IconButtonProps) {
-  return (
-    <button
-      aria-label={label}
-      className={`ui-icon-button flex h-9 w-9 items-center justify-center ${
-        danger
-          ? 'border-red-200 text-red-700 hover:bg-red-50'
-          : 'border-zinc-300 text-zinc-700 hover:bg-zinc-50'
-      }`}
-      disabled={disabled}
-      onClick={onClick}
-      title={label}
-      type="button"
-    >
-      {children}
-    </button>
   );
 }
 

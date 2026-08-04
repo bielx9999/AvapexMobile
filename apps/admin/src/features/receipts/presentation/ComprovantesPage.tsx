@@ -1,4 +1,4 @@
-import { FormEvent, type ReactNode, useMemo, useState } from 'react';
+import { FormEvent, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { adminWriteRepository } from '../../shared/data/firestoreCollections';
 import type { DeliveryReceipt } from '../../shared/domain/models';
+import { ActionIconButton, ErrorBanner, MetricCard } from '../../shared/presentation/ui';
 
 type ComprovantesPageProps = {
   loading: boolean;
@@ -123,13 +124,13 @@ export function ComprovantesPage({ loading, onChanged, receipts }: ComprovantesP
 
   return (
     <div className="space-y-5">
-      {error ? <p className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
+      <ErrorBanner message={error} />
 
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatusCard icon={<FileImage size={20} />} label="Total" tone="dark" value={loading ? '-' : stats.total} />
-        <StatusCard icon={<Eye size={20} />} label="Pendentes" tone="yellow" value={loading ? '-' : stats.pending} />
-        <StatusCard icon={<CheckCircle2 size={20} />} label="Entregues" tone="success" value={loading ? '-' : stats.delivered} />
-        <StatusCard icon={<AlertTriangle size={20} />} label="Falhas" tone="danger" value={loading ? '-' : stats.failed} />
+      <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        <MetricCard icon={<FileImage size={19} />} label="Total" value={loading ? '-' : stats.total} />
+        <MetricCard icon={<Eye size={19} />} label="Pendentes" tone="accent" value={loading ? '-' : stats.pending} />
+        <MetricCard icon={<CheckCircle2 size={19} />} label="Entregues" tone="success" value={loading ? '-' : stats.delivered} />
+        <MetricCard icon={<AlertTriangle size={19} />} label="Falhas" tone="danger" value={loading ? '-' : stats.failed} />
       </section>
 
       <section className="ui-card overflow-hidden">
@@ -159,8 +160,8 @@ export function ComprovantesPage({ loading, onChanged, receipts }: ComprovantesP
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1080px] text-left text-sm">
-            <thead className="bg-zinc-50 text-xs uppercase text-zinc-500">
+          <table className="ui-table min-w-[1080px]">
+            <thead>
               <tr>
                 <th className="px-4 py-3">Data</th>
                 <th className="px-4 py-3">Motorista</th>
@@ -174,7 +175,7 @@ export function ComprovantesPage({ loading, onChanged, receipts }: ComprovantesP
             </thead>
             <tbody>
               {filteredReceipts.map((receipt) => (
-                <tr className="border-t border-zinc-100" key={receipt.id}>
+                <tr key={receipt.id}>
                   <td className="px-4 py-3">{formatDate(receipt.createdAt)}</td>
                   <td className="px-4 py-3 font-medium">{receipt.driverName || receipt.driverId}</td>
                   <td className="px-4 py-3">
@@ -187,10 +188,10 @@ export function ComprovantesPage({ loading, onChanged, receipts }: ComprovantesP
                   <td className="px-4 py-3"><StatusPill status={receipt.adminStatus ?? 'pending'} /></td>
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-2">
-                      <IconButton label="Visualizar comprovante" onClick={() => setSelectedReceipt(receipt)}>
+                      <ActionIconButton label="Visualizar comprovante" onClick={() => setSelectedReceipt(receipt)}>
                         <Eye size={17} />
-                      </IconButton>
-                      <IconButton
+                      </ActionIconButton>
+                      <ActionIconButton
                         disabled={busyReceiptId === receipt.id}
                         label="Registrar como entregue"
                         onClick={() =>
@@ -200,10 +201,10 @@ export function ComprovantesPage({ loading, onChanged, receipts }: ComprovantesP
                         }
                       >
                         <CheckCircle2 size={17} />
-                      </IconButton>
-                      <IconButton disabled={busyReceiptId === receipt.id} label="Registrar falha" onClick={() => openFailureModal(receipt)}>
+                      </ActionIconButton>
+                      <ActionIconButton disabled={busyReceiptId === receipt.id} label="Registrar falha" onClick={() => openFailureModal(receipt)}>
                         <MessageSquareWarning size={17} />
-                      </IconButton>
+                      </ActionIconButton>
                     </div>
                   </td>
                 </tr>
@@ -266,51 +267,6 @@ export function ComprovantesPage({ loading, onChanged, receipts }: ComprovantesP
         </div>
       ) : null}
     </div>
-  );
-}
-
-type StatusCardProps = {
-  icon: ReactNode;
-  label: string;
-  tone: 'dark' | 'yellow' | 'success' | 'danger';
-  value: number | string;
-};
-
-function StatusCard({ icon, label, tone, value }: StatusCardProps) {
-  const toneClassNames = {
-    danger: {
-      accent: 'bg-red-500',
-      icon: 'bg-red-50 text-red-700 ring-red-100',
-      value: 'text-red-700',
-    },
-    dark: {
-      accent: 'bg-avapex-black',
-      icon: 'bg-avapex-black text-white ring-zinc-200',
-      value: 'text-avapex-black',
-    },
-    success: {
-      accent: 'bg-emerald-500',
-      icon: 'bg-emerald-50 text-emerald-700 ring-emerald-100',
-      value: 'text-emerald-700',
-    },
-    yellow: {
-      accent: 'bg-avapex-yellow',
-      icon: 'bg-avapex-yellow text-avapex-black ring-yellow-100',
-      value: 'text-avapex-black',
-    },
-  }[tone];
-
-  return (
-    <article className="ui-card relative overflow-hidden p-4 transition duration-200 hover:-translate-y-0.5 hover:shadow-md">
-      <span className={`absolute inset-x-0 top-0 h-1 ${toneClassNames.accent}`} />
-      <div className="mb-4 flex items-center justify-between">
-        <span className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{label}</span>
-        <span className={`flex h-11 w-11 items-center justify-center rounded-2xl ring-1 ${toneClassNames.icon}`}>
-          {icon}
-        </span>
-      </div>
-      <strong className={`block text-3xl font-semibold leading-none ${toneClassNames.value}`}>{value}</strong>
-    </article>
   );
 }
 
@@ -416,21 +372,6 @@ function DetailItem({ label, value }: { label: string; value: string }) {
       <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{label}</p>
       <p className="mt-1 break-words text-sm font-medium text-zinc-900">{value}</p>
     </div>
-  );
-}
-
-function IconButton({ children, disabled, label, onClick }: { children: ReactNode; disabled?: boolean; label: string; onClick: () => void }) {
-  return (
-    <button
-      aria-label={label}
-      className="ui-icon-button flex h-9 w-9 items-center justify-center text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
-      disabled={disabled}
-      onClick={onClick}
-      title={label}
-      type="button"
-    >
-      {children}
-    </button>
   );
 }
 

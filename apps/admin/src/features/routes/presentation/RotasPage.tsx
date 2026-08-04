@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { CheckCircle2, Copy, ExternalLink, MapPinned, Route, Search, Send, Truck } from 'lucide-react';
 import type { Trip } from '../../shared/domain/models';
+import { EmptyState, MetricCard } from '../../shared/presentation/ui';
 
 type RotasPageProps = {
   loading: boolean;
@@ -84,11 +85,11 @@ export function RotasPage({ loading, trips }: RotasPageProps) {
 
   return (
     <div className="space-y-5">
-      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <RouteMetric icon={<Route size={20} />} label="Rotas no periodo" tone="dark" value={loading ? '-' : routeStats.total} />
-        <RouteMetric icon={<Send size={20} />} label="Prontas para envio" tone="yellow" value={loading ? '-' : routeStats.ready} />
-        <RouteMetric icon={<Truck size={20} />} label="Em transito" tone="info" value={loading ? '-' : routeStats.inTransit} />
-        <RouteMetric icon={<CheckCircle2 size={20} />} label="Liberadas" tone="success" value={loading ? '-' : routeStats.released} />
+      <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        <MetricCard icon={<Route size={19} />} label="Rotas no periodo" value={loading ? '-' : routeStats.total} />
+        <MetricCard icon={<Send size={19} />} label="Prontas para envio" tone="accent" value={loading ? '-' : routeStats.ready} />
+        <MetricCard icon={<Truck size={19} />} label="Em transito" tone="info" value={loading ? '-' : routeStats.inTransit} />
+        <MetricCard icon={<CheckCircle2 size={19} />} label="Liberadas" tone="success" value={loading ? '-' : routeStats.released} />
       </section>
 
       <section className="ui-card p-4">
@@ -96,15 +97,15 @@ export function RotasPage({ loading, trips }: RotasPageProps) {
           <label className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" size={18} />
             <input
-              className="ui-input pl-10"
+              className="ui-input h-10 w-full pl-10 pr-3 text-sm"
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Buscar solicitacao, motorista, veiculo ou rota"
               value={query}
             />
           </label>
-          <input className="ui-input" onChange={(event) => setStartDate(event.target.value)} type="date" value={startDate} />
-          <input className="ui-input" onChange={(event) => setEndDate(event.target.value)} type="date" value={endDate} />
-          <select className="ui-input" onChange={(event) => setStatusFilter(event.target.value as RouteStatus)} value={statusFilter}>
+          <input aria-label="Data inicial" className="ui-input h-10 px-3 text-sm" onChange={(event) => setStartDate(event.target.value)} type="date" value={startDate} />
+          <input aria-label="Data final" className="ui-input h-10 px-3 text-sm" onChange={(event) => setEndDate(event.target.value)} type="date" value={endDate} />
+          <select aria-label="Status" className="ui-input h-10 px-3 text-sm" onChange={(event) => setStatusFilter(event.target.value as RouteStatus)} value={statusFilter}>
             {statusOptions.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
@@ -117,19 +118,16 @@ export function RotasPage({ loading, trips }: RotasPageProps) {
       <section className="ui-card overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-200 px-4 py-3">
           <div className="flex items-center gap-2">
-            <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-avapex-black text-white">
+            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-zinc-900 text-white">
               <MapPinned size={19} />
             </span>
-            <div>
-              <h2 className="font-semibold">Rotas programadas</h2>
-              <p className="text-xs text-zinc-500">Google Maps via link direto. Directions API entra quando a chave for configurada.</p>
-            </div>
+            <h2 className="font-semibold">Rotas programadas</h2>
           </div>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[980px] text-left text-sm">
-            <thead className="bg-zinc-50 text-xs uppercase text-zinc-500">
+          <table className="ui-table min-w-[980px]">
+            <thead>
               <tr>
                 <th className="px-4 py-3">Data</th>
                 <th className="px-4 py-3">Solicitacao</th>
@@ -142,7 +140,7 @@ export function RotasPage({ loading, trips }: RotasPageProps) {
             </thead>
             <tbody>
               {routeTrips.map((trip) => (
-                <tr className="border-t border-zinc-100 align-top" key={trip.id}>
+                <tr className="align-top" key={trip.id}>
                   <td className="px-4 py-3">{formatDate(trip.scheduledAt)}</td>
                   <td className="px-4 py-3 font-semibold">{trip.customerRequestNumber || '-'}</td>
                   <td className="px-4 py-3">{trip.driverName || trip.driverId || '-'}</td>
@@ -157,7 +155,8 @@ export function RotasPage({ loading, trips }: RotasPageProps) {
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-2">
                       <a
-                        className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-avapex-black text-white transition hover:scale-[1.02]"
+                        aria-label="Abrir rota no Google Maps"
+                        className="ui-icon-button h-9 w-9 border-zinc-900 bg-zinc-900 text-white hover:bg-zinc-800"
                         href={buildMapsUrl(trip.origin, trip.destination)}
                         rel="noreferrer"
                         target="_blank"
@@ -166,7 +165,8 @@ export function RotasPage({ loading, trips }: RotasPageProps) {
                         <ExternalLink size={18} />
                       </a>
                       <a
-                        className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-avapex-yellow text-avapex-black transition hover:scale-[1.02]"
+                        aria-label="Enviar rota ao motorista"
+                        className="ui-icon-button h-9 w-9 border-yellow-300 bg-avapex-yellow text-avapex-black hover:bg-yellow-300"
                         href={buildWhatsappUrl(trip)}
                         rel="noreferrer"
                         target="_blank"
@@ -175,7 +175,8 @@ export function RotasPage({ loading, trips }: RotasPageProps) {
                         <Send size={18} />
                       </a>
                       <button
-                        className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-zinc-100 text-avapex-black transition hover:bg-zinc-200"
+                        aria-label={copiedTripId === trip.id ? 'Link copiado' : 'Copiar link da rota'}
+                        className="ui-icon-button h-9 w-9 border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-100"
                         onClick={() => void copyRoute(trip)}
                         title={copiedTripId === trip.id ? 'Copiado' : 'Copiar link da rota'}
                         type="button"
@@ -188,8 +189,8 @@ export function RotasPage({ loading, trips }: RotasPageProps) {
               ))}
               {!loading && routeTrips.length === 0 ? (
                 <tr>
-                  <td className="px-4 py-10 text-center text-zinc-500" colSpan={7}>
-                    Nenhuma rota encontrada para o filtro selecionado.
+                  <td className="p-0" colSpan={7}>
+                    <EmptyState description="Ajuste o periodo ou os filtros para visualizar outras programacoes." title="Nenhuma rota encontrada" />
                   </td>
                 </tr>
               ) : null}
@@ -198,35 +199,6 @@ export function RotasPage({ loading, trips }: RotasPageProps) {
         </div>
       </section>
     </div>
-  );
-}
-
-function RouteMetric({
-  icon,
-  label,
-  tone,
-  value,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  tone: 'dark' | 'yellow' | 'info' | 'success';
-  value: number | string;
-}) {
-  const toneClassName = {
-    dark: 'bg-avapex-black text-white',
-    info: 'bg-sky-50 text-sky-700',
-    success: 'bg-emerald-50 text-emerald-700',
-    yellow: 'bg-avapex-yellow text-avapex-black',
-  }[tone];
-
-  return (
-    <article className="ui-card p-4">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-xs font-semibold uppercase text-zinc-500">{label}</p>
-        <span className={`flex h-11 w-11 items-center justify-center rounded-2xl ${toneClassName}`}>{icon}</span>
-      </div>
-      <strong className="mt-4 block text-3xl font-semibold leading-none">{value}</strong>
-    </article>
   );
 }
 
