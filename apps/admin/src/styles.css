@@ -183,3 +183,123 @@ textarea:focus-visible {
     animation-iteration-count: 1 !important;
   }
 }
+
+.operational-map {
+  background: #f4f4f5;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+.avapex-map-vehicle {
+  position: relative;
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  background: #18181b;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.3);
+}
+
+.avapex-map-vehicle > span {
+  width: 14px;
+  height: 9px;
+  border: 2px solid #fff;
+  border-radius: 2px;
+  box-shadow: 5px 0 0 -2px #18181b, 5px 0 0 0 #fff;
+}
+
+.avapex-map-vehicle-online::after {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 10px;
+  height: 10px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #10b981;
+  content: '';
+}
+
+.avapex-map-vehicle-offline {
+  background: #71717a;
+}
+
+.avapex-map-vehicle-offline > span {
+  box-shadow: 5px 0 0 -2px #71717a, 5px 0 0 0 #fff;
+}
+
+.avapex-map-delivery,
+.avapex-map-endpoint {
+  display: grid;
+  place-items: center;
+  border: 2px solid #18181b;
+  border-radius: 50%;
+  background: #facc15;
+  color: #18181b;
+  font-size: 11px;
+  font-weight: 800;
+  box-shadow: 0 2px 7px rgb(0 0 0 / 0.24);
+}
+
+.avapex-map-delivery {
+  width: 26px;
+  height: 26px;
+}
+
+.avapex-map-delivery-delivered {
+  border-color: #047857;
+  background: #10b981;
+  color: #fff;
+}
+
+.avapex-map-delivery-arrived {
+  border-color: #0369a1;
+  background: #38bdf8;
+  color: #082f49;
+}
+
+.avapex-map-delivery-not_delivered,
+.avapex-map-delivery-cancelled {
+  border-color: #b91c1c;
+  background: #ef4444;
+  color: #fff;
+}
+
+.avapex-map-endpoint {
+  width: 30px;
+  height: 30px;
+  border-width: 3px;
+}
+
+.avapex-map-endpoint-origin {
+  background: #18181b;
+  color: #fff;
+}
+
+.avapex-map-info {
+  max-width: 260px;
+  color: #27272a;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.avapex-map-info strong {
+  display: block;
+  margin-bottom: 5px;
+  color: #18181b;
+  font-size: 14px;
+}
+
+.avapex-map-info p {
+  margin: 2px 0;
+}
+
+.avapex-map-info a {
+  display: inline-block;
+  margin-top: 8px;
+  color: #18181b;
+  font-weight: 700;
+  text-decoration: underline;
+}

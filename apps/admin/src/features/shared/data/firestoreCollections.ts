@@ -138,6 +138,22 @@ export const adminReadRepository = {
       (error) => onError(mapFirebaseError(error, 'Erro ao acompanhar viagens em tempo real.')),
     );
   },
+  watchRoutes(onData: (routes: RoutePlan[]) => void, onError: (error: Error) => void): Unsubscribe {
+    const routesQuery = query(typedCollection<RoutePlan>('routes'), orderBy('serviceDate', 'desc'), limit(200));
+    return onSnapshot(
+      routesQuery,
+      (snapshot) => onData(snapshot.docs.map((document) => document.data())),
+      (error) => onError(mapFirebaseError(error, 'Erro ao acompanhar rotas em tempo real.')),
+    );
+  },
+  watchDeliveries(onData: (deliveries: Delivery[]) => void, onError: (error: Error) => void): Unsubscribe {
+    const deliveriesQuery = query(typedCollection<Delivery>('deliveries'), orderBy('scheduledAt', 'desc'), limit(500));
+    return onSnapshot(
+      deliveriesQuery,
+      (snapshot) => onData(snapshot.docs.map((document) => document.data())),
+      (error) => onError(mapFirebaseError(error, 'Erro ao acompanhar entregas em tempo real.')),
+    );
+  },
 };
 
 export const adminWriteRepository = {

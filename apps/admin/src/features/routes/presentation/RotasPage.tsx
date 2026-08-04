@@ -1,10 +1,13 @@
 import { useMemo, useState } from 'react';
 import { CheckCircle2, Copy, ExternalLink, MapPinned, Route, Search, Send, Truck } from 'lucide-react';
-import type { Trip } from '../../shared/domain/models';
+import type { Delivery, RoutePlan, Trip } from '../../shared/domain/models';
 import { EmptyState, MetricCard } from '../../shared/presentation/ui';
+import { OperationalMap } from './OperationalMap';
 
 type RotasPageProps = {
+  deliveries: Delivery[];
   loading: boolean;
+  routes: RoutePlan[];
   trips: Trip[];
 };
 
@@ -17,7 +20,7 @@ const statusOptions: Array<{ label: string; value: RouteStatus }> = [
   { label: 'Liberadas', value: 'released' },
 ];
 
-export function RotasPage({ loading, trips }: RotasPageProps) {
+export function RotasPage({ deliveries, loading, routes, trips }: RotasPageProps) {
   const today = new Date().toISOString().slice(0, 10);
   const [query, setQuery] = useState('');
   const [startDate, setStartDate] = useState(today);
@@ -73,6 +76,37 @@ export function RotasPage({ loading, trips }: RotasPageProps) {
     return { inTransit, ready, released, total: routeTrips.length };
   }, [routeTrips]);
 
+  const routePlans = useMemo(() => {
+    const start = new Date(`${startDate}T00:00:00`).getTime();
+    const end = new Date(`${endDate}T23:59:59`).getTime();
+    const normalizedQuery = query.trim().toLowerCase();
+    return routes
+      .filter((route) => {
+        const serviceDate = route.serviceDate?.getTime();
+        return Boolean(serviceDate && serviceDate >= start && serviceDate <= end);
+      })
+      .filter((route) => {
+        if (statusFilter === 'ready') {
+          return route.status === 'planned' || route.status === 'assigned';
+        }
+        if (statusFilter === 'in_transit') {
+          return route.status === 'in_progress';
+        }
+        if (statusFilter === 'released') {
+          return route.status === 'completed';
+        }
+        return true;
+      })
+      .filter((route) => {
+        if (!normalizedQuery) {
+          return true;
+        }
+        return [route.code, route.driverName, route.vehiclePlate, route.startAddress.formattedAddress, route.endAddress.formattedAddress]
+          .some((value) => value.toLowerCase().includes(normalizedQuery));
+      })
+      .sort((a, b) => (a.serviceDate?.getTime() ?? 0) - (b.serviceDate?.getTime() ?? 0));
+  }, [endDate, query, routes, startDate, statusFilter]);
+
   async function copyRoute(trip: Trip) {
     try {
       await navigator.clipboard.writeText(buildMapsUrl(trip.origin, trip.destination));
@@ -114,6 +148,8 @@ export function RotasPage({ loading, trips }: RotasPageProps) {
           </select>
         </div>
       </section>
+
+      <OperationalMap deliveries={deliveries} routes={routePlans} trips={routeTrips} />
 
       <section className="ui-card overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-200 px-4 py-3">

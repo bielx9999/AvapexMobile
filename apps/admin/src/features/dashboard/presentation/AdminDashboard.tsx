@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useState } from 'react';
 import { Filter, RefreshCw } from 'lucide-react';
 import type { AdminSession } from '../../auth/data/authRepository';
 import { adminReadRepository } from '../../shared/data/firestoreCollections';
-import type { AppUser, Checklist, Delivery, DeliveryReceipt, FuelingRecord, Trip, Vehicle } from '../../shared/domain/models';
+import type { AppUser, Checklist, Delivery, DeliveryReceipt, FuelingRecord, RoutePlan, Trip, Vehicle } from '../../shared/domain/models';
 import { ErrorBanner, PageSkeleton } from '../../shared/presentation/ui';
 import { AdminShell, type AdminPage } from './AdminShell';
 
@@ -31,6 +31,7 @@ type AdminData = {
   checklists: Checklist[];
   receipts: DeliveryReceipt[];
   deliveries: Delivery[];
+  routes: RoutePlan[];
   fueling: FuelingRecord[];
 };
 
@@ -41,6 +42,7 @@ const emptyData: AdminData = {
   checklists: [],
   receipts: [],
   deliveries: [],
+  routes: [],
   fueling: [],
 };
 
@@ -69,16 +71,17 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
     setLoading(true);
     setError('');
     try {
-      const [users, vehicles, trips, checklists, receipts, deliveries, fueling] = await Promise.all([
+      const [users, vehicles, trips, routes, checklists, receipts, deliveries, fueling] = await Promise.all([
         adminReadRepository.users(),
         adminReadRepository.vehicles(),
         adminReadRepository.trips(),
+        adminReadRepository.routes(),
         adminReadRepository.checklists(),
         adminReadRepository.deliveryReceipts(),
         adminReadRepository.deliveries(),
         adminReadRepository.fuelingRecords(),
       ]);
-      setData({ users, vehicles, trips, checklists, receipts, deliveries, fueling });
+      setData({ users, vehicles, trips, routes, checklists, receipts, deliveries, fueling });
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Erro ao carregar painel.');
     } finally {
@@ -96,6 +99,20 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
   useEffect(() => {
     return adminReadRepository.watchTrips(
       (trips) => setData((current) => ({ ...current, trips })),
+      (watchError) => setError(watchError.message),
+    );
+  }, []);
+
+  useEffect(() => {
+    return adminReadRepository.watchRoutes(
+      (routes) => setData((current) => ({ ...current, routes })),
+      (watchError) => setError(watchError.message),
+    );
+  }, []);
+
+  useEffect(() => {
+    return adminReadRepository.watchDeliveries(
+      (deliveries) => setData((current) => ({ ...current, deliveries })),
       (watchError) => setError(watchError.message),
     );
   }, []);
@@ -155,7 +172,7 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
               vehicles={data.vehicles}
             />
           ) : activePage === 'routes' ? (
-            <RotasPage loading={loading} trips={data.trips} />
+            <RotasPage deliveries={data.deliveries} loading={loading} routes={data.routes} trips={data.trips} />
           ) : activePage === 'checklists' ? (
             <ChecklistsPage
               checklists={data.checklists}
