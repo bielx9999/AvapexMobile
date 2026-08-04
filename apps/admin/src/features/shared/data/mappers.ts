@@ -1,10 +1,17 @@
 import { readDate, readRecord, readStringList } from '../../../core/firebase/firestoreConverters';
 import type {
   AppUser,
+  AddressSnapshot,
   Checklist,
+  Delivery,
   DeliveryReceipt,
+  DeliveryProofRequirements,
   DriverEquipment,
   FuelingRecord,
+  GeoLocation,
+  OperationalSettings,
+  RouteEvent,
+  RoutePlan,
   Trip,
   Vehicle,
 } from '../domain/models';
@@ -128,6 +135,198 @@ export function mapTrip(id: string, data: Record<string, unknown>): Trip {
   };
 }
 
+export function mapRoute(id: string, data: Record<string, unknown>): RoutePlan {
+  const optimization = readRecord(data.optimization);
+  const optimizationStatus = optimization.status;
+  return {
+    id: readString(data.id, id),
+    code: readString(data.code),
+    serviceDate: readDate(data.serviceDate),
+    status: isRouteStatus(data.status) ? data.status : 'draft',
+    driverId: readString(data.driverId),
+    driverName: readString(data.driverName),
+    vehicleId: readString(data.vehicleId),
+    vehiclePlate: readString(data.vehiclePlate),
+    fleetId: readString(data.fleetId),
+    carrierId: readString(data.carrierId),
+    carrierName: readString(data.carrierName),
+    operationTypeId: readString(data.operationTypeId),
+    operationTypeName: readString(data.operationTypeName),
+    regionIds: readStringList(data.regionIds),
+    startAddress: mapAddress(data.startAddress),
+    endAddress: mapAddress(data.endAddress),
+    deliveryCount: readNumber(data.deliveryCount),
+    completedDeliveryCount: readNumber(data.completedDeliveryCount),
+    plannedDistanceMeters: readNumber(data.plannedDistanceMeters),
+    plannedDurationSeconds: readNumber(data.plannedDurationSeconds),
+    plannedCost: readNumber(data.plannedCost),
+    actualDistanceMeters: readNumber(data.actualDistanceMeters),
+    actualDurationSeconds: readNumber(data.actualDurationSeconds),
+    actualCost: readNumber(data.actualCost),
+    optimization: {
+      status:
+        optimizationStatus === 'processing' ||
+        optimizationStatus === 'optimized' ||
+        optimizationStatus === 'failed'
+          ? optimizationStatus
+          : 'not_requested',
+      provider: readString(optimization.provider),
+      requestId: readString(optimization.requestId),
+      optimizedAt: readDate(optimization.optimizedAt),
+      errorMessage: readString(optimization.errorMessage),
+    },
+    currentLocation: mapGeoLocation(data.currentLocation),
+    startedAt: readDate(data.startedAt),
+    completedAt: readDate(data.completedAt),
+    createdAt: readDate(data.createdAt),
+    createdBy: readString(data.createdBy),
+    updatedAt: readDate(data.updatedAt),
+    updatedBy: readString(data.updatedBy),
+  };
+}
+
+export function mapDelivery(id: string, data: Record<string, unknown>): Delivery {
+  const failure = readRecord(data.failure);
+  return {
+    id: readString(data.id, id),
+    routeId: readString(data.routeId),
+    orderNumber: readString(data.orderNumber),
+    cteAccessKey: readString(data.cteAccessKey),
+    cteNumber: readString(data.cteNumber),
+    clientId: readString(data.clientId),
+    clientName: readString(data.clientName),
+    carrierId: readString(data.carrierId),
+    carrierName: readString(data.carrierName),
+    regionId: readString(data.regionId),
+    regionName: readString(data.regionName),
+    driverId: readString(data.driverId),
+    driverName: readString(data.driverName),
+    vehicleId: readString(data.vehicleId),
+    vehiclePlate: readString(data.vehiclePlate),
+    sequence: readNumber(data.sequence),
+    status: isDeliveryStatus(data.status) ? data.status : 'pending',
+    address: mapAddress(data.address),
+    scheduledAt: readDate(data.scheduledAt),
+    timeWindowStart: readDate(data.timeWindowStart),
+    timeWindowEnd: readDate(data.timeWindowEnd),
+    estimatedArrivalAt: readDate(data.estimatedArrivalAt),
+    arrivedAt: readDate(data.arrivedAt),
+    deliveredAt: readDate(data.deliveredAt),
+    packageCount: readNumber(data.packageCount),
+    weightKg: readNumber(data.weightKg),
+    volumeM3: readNumber(data.volumeM3),
+    notes: readString(data.notes),
+    proofRequirements: mapProofRequirements(data.proofRequirements),
+    proofStatus:
+      data.proofStatus === 'submitted' || data.proofStatus === 'approved' || data.proofStatus === 'rejected'
+        ? data.proofStatus
+        : 'pending',
+    deliveryProofId: readString(data.deliveryProofId),
+    checkInLocation: mapGeoLocation(data.checkInLocation),
+    failure:
+      Object.keys(failure).length > 0
+        ? {
+            reasonCode: readString(failure.reasonCode),
+            reasonLabel: readString(failure.reasonLabel),
+            notes: readString(failure.notes),
+            registeredAt: readDate(failure.registeredAt),
+          }
+        : undefined,
+    createdAt: readDate(data.createdAt),
+    createdBy: readString(data.createdBy),
+    updatedAt: readDate(data.updatedAt),
+    updatedBy: readString(data.updatedBy),
+  };
+}
+
+export function mapRouteEvent(id: string, data: Record<string, unknown>): RouteEvent {
+  return {
+    id: readString(data.id, id),
+    routeId: readString(data.routeId),
+    deliveryId: readString(data.deliveryId),
+    driverId: readString(data.driverId),
+    vehicleId: readString(data.vehicleId),
+    type: isRouteEventType(data.type) ? data.type : 'note_added',
+    source: data.source === 'driver' || data.source === 'system' ? data.source : 'admin',
+    actorId: readString(data.actorId),
+    actorName: readString(data.actorName),
+    fromStatus: readString(data.fromStatus),
+    toStatus: readString(data.toStatus),
+    message: readString(data.message),
+    metadata: readRecord(data.metadata),
+    location: mapGeoLocation(data.location),
+    occurredAt: readDate(data.occurredAt),
+    createdAt: readDate(data.createdAt),
+  };
+}
+
+export function mapOperationalSettings(id: string, data: Record<string, unknown>): OperationalSettings {
+  const kind = data.kind === 'delivery' || data.kind === 'routes' || data.kind === 'permissions' || data.kind === 'imports'
+    ? data.kind
+    : id === 'delivery' || id === 'routes' || id === 'permissions'
+      ? id
+      : 'imports';
+  const common = {
+    version: readNumber(data.version, 1),
+    updatedAt: readDate(data.updatedAt),
+    updatedBy: readString(data.updatedBy),
+  };
+
+  if (kind === 'delivery') {
+    const reasons = Array.isArray(data.failureReasons) ? data.failureReasons : [];
+    return {
+      id: 'delivery',
+      kind,
+      ...common,
+      checkInRadiusMeters: readNumber(data.checkInRadiusMeters, 150),
+      defaultProofRequirements: mapProofRequirements(data.defaultProofRequirements),
+      failureReasons: reasons.map((reason) => {
+        const value = readRecord(reason);
+        return {
+          code: readString(value.code),
+          label: readString(value.label),
+          active: readBoolean(value.active, true),
+          requireNotes: readBoolean(value.requireNotes, true),
+          requirePhoto: readBoolean(value.requirePhoto),
+        };
+      }),
+      statusTransitions: readTransitions(data.statusTransitions),
+    };
+  }
+  if (kind === 'routes') {
+    return {
+      id: 'routes',
+      kind,
+      ...common,
+      gpsUpdateIntervalSeconds: readNumber(data.gpsUpdateIntervalSeconds, 60),
+      gpsOfflineAfterSeconds: readNumber(data.gpsOfflineAfterSeconds, 180),
+      allowDriverReorderStops: readBoolean(data.allowDriverReorderStops),
+      allowRouteEditAfterStart: readBoolean(data.allowRouteEditAfterStart),
+      statusTransitions: readTransitions(data.statusTransitions),
+    };
+  }
+  if (kind === 'permissions') {
+    const rolePermissions = readRecord(data.rolePermissions);
+    return {
+      id: 'permissions',
+      kind,
+      ...common,
+      rolePermissions: Object.fromEntries(
+        Object.entries(rolePermissions).map(([role, permissions]) => [role, readStringList(permissions)]),
+      ),
+    };
+  }
+  return {
+    id: 'imports',
+    kind: 'imports',
+    ...common,
+    maxRows: readNumber(data.maxRows, 1000),
+    requiredColumns: readStringList(data.requiredColumns),
+    duplicateKey: readString(data.duplicateKey, 'orderNumber'),
+    allowPartialImport: readBoolean(data.allowPartialImport),
+  };
+}
+
 function defaultOperationalStatus(programmingStatus: Trip['programmingStatus']): Trip['operationalStatus'] {
   if (programmingStatus === 'in_transit') {
     return 'transit_to_loading';
@@ -221,4 +420,73 @@ export function mapDriverEquipment(id: string, data: Record<string, unknown>): D
     status: typeof data.status === 'string' ? data.status : 'available',
     description: typeof data.description === 'string' ? data.description : undefined,
   };
+}
+
+function readString(value: unknown, fallback = '') {
+  return typeof value === 'string' ? value : fallback;
+}
+
+function readNumber(value: unknown, fallback = 0) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+function readBoolean(value: unknown, fallback = false) {
+  return typeof value === 'boolean' ? value : fallback;
+}
+
+function mapAddress(value: unknown): AddressSnapshot {
+  const data = readRecord(value);
+  return {
+    formattedAddress: readString(data.formattedAddress),
+    latitude: readNumber(data.latitude),
+    longitude: readNumber(data.longitude),
+    placeId: readString(data.placeId) || undefined,
+    city: readString(data.city) || undefined,
+    state: readString(data.state) || undefined,
+    postalCode: readString(data.postalCode) || undefined,
+  };
+}
+
+function mapGeoLocation(value: unknown): GeoLocation | undefined {
+  const data = readRecord(value);
+  if (typeof data.latitude !== 'number' || typeof data.longitude !== 'number') {
+    return undefined;
+  }
+  return {
+    latitude: data.latitude,
+    longitude: data.longitude,
+    accuracyMeters: typeof data.accuracyMeters === 'number' ? data.accuracyMeters : undefined,
+    headingDegrees: typeof data.headingDegrees === 'number' ? data.headingDegrees : undefined,
+    speedKph: typeof data.speedKph === 'number' ? data.speedKph : undefined,
+    recordedAt: readDate(data.recordedAt),
+  };
+}
+
+function mapProofRequirements(value: unknown): DeliveryProofRequirements {
+  const data = readRecord(value);
+  return {
+    requirePhoto: readBoolean(data.requirePhoto, true),
+    requireReceiverName: readBoolean(data.requireReceiverName, true),
+    requireReceiverDocument: readBoolean(data.requireReceiverDocument, true),
+    requireSignature: readBoolean(data.requireSignature),
+    requireLocation: readBoolean(data.requireLocation, true),
+  };
+}
+
+function readTransitions<TStatus extends string>(value: unknown) {
+  return Object.fromEntries(
+    Object.entries(readRecord(value)).map(([status, transitions]) => [status, readStringList(transitions)]),
+  ) as Partial<Record<TStatus, TStatus[]>>;
+}
+
+function isRouteStatus(value: unknown): value is RoutePlan['status'] {
+  return value === 'draft' || value === 'planned' || value === 'assigned' || value === 'in_progress' || value === 'completed' || value === 'cancelled';
+}
+
+function isDeliveryStatus(value: unknown): value is Delivery['status'] {
+  return value === 'pending' || value === 'in_route' || value === 'arrived' || value === 'delivered' || value === 'not_delivered' || value === 'cancelled';
+}
+
+function isRouteEventType(value: unknown): value is RouteEvent['type'] {
+  return value === 'route_created' || value === 'route_assigned' || value === 'route_started' || value === 'route_completed' || value === 'route_cancelled' || value === 'delivery_check_in' || value === 'delivery_completed' || value === 'delivery_failed' || value === 'delivery_cancelled' || value === 'status_changed' || value === 'note_added';
 }

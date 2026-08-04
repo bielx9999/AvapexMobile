@@ -29,6 +29,272 @@ service cloud.firestore {
         && resource.data.driverId == request.auth.uid;
     }
 
+    function ownsRoute(routeId) {
+      return isActiveUser()
+        && routeId is string
+        && exists(/databases/$(database)/documents/routes/$(routeId))
+        && get(/databases/$(database)/documents/routes/$(routeId)).data.driverId == request.auth.uid;
+    }
+
+    function validRouteStatus(status) {
+      return status in ['draft', 'planned', 'assigned', 'in_progress', 'completed', 'cancelled'];
+    }
+
+    function validDeliveryStatus(status) {
+      return status in ['pending', 'in_route', 'arrived', 'delivered', 'not_delivered', 'cancelled'];
+    }
+
+    function validDriverRouteTransition(previousStatus, nextStatus) {
+      return previousStatus == nextStatus
+        || (previousStatus == 'assigned' && nextStatus == 'in_progress')
+        || (previousStatus == 'in_progress' && nextStatus == 'completed');
+    }
+
+    function validDriverDeliveryTransition(previousStatus, nextStatus) {
+      return previousStatus == nextStatus
+        || (previousStatus == 'pending' && nextStatus == 'in_route')
+        || (previousStatus == 'in_route' && nextStatus in ['arrived', 'not_delivered'])
+        || (previousStatus == 'arrived' && nextStatus in ['delivered', 'not_delivered']);
+    }
+
+    function validAddress(data) {
+      return data is map
+        && data.keys().hasAll(['formattedAddress', 'latitude', 'longitude'])
+        && data.formattedAddress is string
+        && data.latitude is number
+        && data.latitude >= -90
+        && data.latitude <= 90
+        && data.longitude is number
+        && data.longitude >= -180
+        && data.longitude <= 180;
+    }
+
+    function validGeoLocation(data) {
+      return data is map
+        && data.keys().hasAll(['latitude', 'longitude'])
+        && data.latitude is number
+        && data.latitude >= -90
+        && data.latitude <= 90
+        && data.longitude is number
+        && data.longitude >= -180
+        && data.longitude <= 180
+        && (!('recordedAt' in data) || data.recordedAt is timestamp);
+    }
+
+    function validProofRequirements(data) {
+      return data is map
+        && data.keys().hasAll([
+          'requirePhoto',
+          'requireReceiverName',
+          'requireReceiverDocument',
+          'requireSignature',
+          'requireLocation'
+        ])
+        && data.requirePhoto is bool
+        && data.requireReceiverName is bool
+        && data.requireReceiverDocument is bool
+        && data.requireSignature is bool
+        && data.requireLocation is bool;
+    }
+
+    function validRouteData(data, routeId) {
+      return data.keys().hasAll([
+          'id',
+          'code',
+          'serviceDate',
+          'status',
+          'driverId',
+          'driverName',
+          'vehicleId',
+          'vehiclePlate',
+          'startAddress',
+          'endAddress',
+          'deliveryCount',
+          'completedDeliveryCount',
+          'createdAt',
+          'createdBy',
+          'updatedAt',
+          'updatedBy'
+        ])
+        && data.id == routeId
+        && data.code is string
+        && data.code.size() > 0
+        && data.serviceDate is timestamp
+        && validRouteStatus(data.status)
+        && data.driverId is string
+        && data.driverName is string
+        && data.vehicleId is string
+        && data.vehiclePlate is string
+        && validAddress(data.startAddress)
+        && validAddress(data.endAddress)
+        && data.deliveryCount is int
+        && data.deliveryCount >= 0
+        && data.completedDeliveryCount is int
+        && data.completedDeliveryCount >= 0
+        && data.completedDeliveryCount <= data.deliveryCount
+        && data.createdAt is timestamp
+        && data.createdBy is string
+        && data.updatedAt is timestamp
+        && data.updatedBy is string
+        && (!('currentLocation' in data) || validGeoLocation(data.currentLocation))
+        && (!('startedAt' in data) || data.startedAt == null || data.startedAt is timestamp)
+        && (!('completedAt' in data) || data.completedAt == null || data.completedAt is timestamp);
+    }
+
+    function validDeliveryData(data, deliveryId) {
+      return data.keys().hasAll([
+          'id',
+          'routeId',
+          'orderNumber',
+          'clientName',
+          'driverId',
+          'driverName',
+          'vehicleId',
+          'vehiclePlate',
+          'sequence',
+          'status',
+          'address',
+          'scheduledAt',
+          'proofRequirements',
+          'proofStatus',
+          'createdAt',
+          'createdBy',
+          'updatedAt',
+          'updatedBy'
+        ])
+        && data.id == deliveryId
+        && data.routeId is string
+        && data.orderNumber is string
+        && data.orderNumber.size() > 0
+        && data.clientName is string
+        && data.driverId is string
+        && data.driverName is string
+        && data.vehicleId is string
+        && data.vehiclePlate is string
+        && data.sequence is int
+        && data.sequence >= 0
+        && validDeliveryStatus(data.status)
+        && validAddress(data.address)
+        && data.scheduledAt is timestamp
+        && validProofRequirements(data.proofRequirements)
+        && data.proofStatus in ['pending', 'submitted', 'approved', 'rejected']
+        && data.createdAt is timestamp
+        && data.createdBy is string
+        && data.updatedAt is timestamp
+        && data.updatedBy is string
+        && (!('checkInLocation' in data) || validGeoLocation(data.checkInLocation))
+        && (!('arrivedAt' in data) || data.arrivedAt == null || data.arrivedAt is timestamp)
+        && (!('deliveredAt' in data) || data.deliveredAt == null || data.deliveredAt is timestamp);
+    }
+
+    function validRouteEventData(data, eventId) {
+      return data.keys().hasAll([
+          'id',
+          'routeId',
+          'deliveryId',
+          'driverId',
+          'vehicleId',
+          'type',
+          'source',
+          'actorId',
+          'occurredAt',
+          'createdAt'
+        ])
+        && data.id == eventId
+        && data.routeId is string
+        && data.routeId.size() > 0
+        && data.deliveryId is string
+        && data.driverId is string
+        && data.vehicleId is string
+        && data.type in [
+          'route_created',
+          'route_assigned',
+          'route_started',
+          'route_completed',
+          'route_cancelled',
+          'delivery_check_in',
+          'delivery_completed',
+          'delivery_failed',
+          'delivery_cancelled',
+          'status_changed',
+          'note_added'
+        ]
+        && data.source in ['admin', 'driver', 'system']
+        && data.actorId is string
+        && data.occurredAt is timestamp
+        && data.createdAt is timestamp;
+    }
+
+    function deliveryBelongsToRoute(deliveryId, routeId) {
+      return deliveryId == '' || (
+        exists(/databases/$(database)/documents/deliveries/$(deliveryId))
+        && get(/databases/$(database)/documents/deliveries/$(deliveryId)).data.routeId == routeId
+        && get(/databases/$(database)/documents/deliveries/$(deliveryId)).data.driverId == request.auth.uid
+      );
+    }
+
+    function validSetting(data, settingId) {
+      return data.id == settingId
+        && data.kind == settingId
+        && settingId in ['delivery', 'routes', 'permissions', 'imports']
+        && data.version is int
+        && data.version > 0
+        && data.updatedAt is timestamp
+        && data.updatedBy is string
+        && (
+          (
+            settingId == 'delivery'
+            && data.keys().hasAll([
+              'checkInRadiusMeters',
+              'defaultProofRequirements',
+              'failureReasons',
+              'statusTransitions'
+            ])
+            && data.checkInRadiusMeters is int
+            && data.checkInRadiusMeters > 0
+            && validProofRequirements(data.defaultProofRequirements)
+            && data.failureReasons is list
+            && data.statusTransitions is map
+          )
+          || (
+            settingId == 'routes'
+            && data.keys().hasAll([
+              'gpsUpdateIntervalSeconds',
+              'gpsOfflineAfterSeconds',
+              'allowDriverReorderStops',
+              'allowRouteEditAfterStart',
+              'statusTransitions'
+            ])
+            && data.gpsUpdateIntervalSeconds is int
+            && data.gpsUpdateIntervalSeconds > 0
+            && data.gpsOfflineAfterSeconds is int
+            && data.gpsOfflineAfterSeconds >= data.gpsUpdateIntervalSeconds
+            && data.allowDriverReorderStops is bool
+            && data.allowRouteEditAfterStart is bool
+            && data.statusTransitions is map
+          )
+          || (
+            settingId == 'permissions'
+            && data.keys().hasAll(['rolePermissions'])
+            && data.rolePermissions is map
+          )
+          || (
+            settingId == 'imports'
+            && data.keys().hasAll([
+              'maxRows',
+              'requiredColumns',
+              'duplicateKey',
+              'allowPartialImport'
+            ])
+            && data.maxRows is int
+            && data.maxRows > 0
+            && data.requiredColumns is list
+            && data.duplicateKey is string
+            && data.allowPartialImport is bool
+          )
+        );
+    }
+
     match /users/{uid} {
       allow read: if isAdmin() || (signedIn() && uid == request.auth.uid);
       allow update: if isAdmin() || (
@@ -64,6 +330,97 @@ service cloud.firestore {
           'lastGpsUpdateAt'
         ])
       );
+    }
+
+    match /routes/{routeId} {
+      allow read: if isAdmin() || ownedExistingDriverData();
+      allow create: if isAdmin() && validRouteData(request.resource.data, routeId);
+      allow update: if (
+        isAdmin()
+        && validRouteData(request.resource.data, routeId)
+      ) || (
+        ownedExistingDriverData()
+        && request.resource.data.driverId == resource.data.driverId
+        && request.resource.data.vehicleId == resource.data.vehicleId
+        && request.resource.data.updatedBy == request.auth.uid
+        && validRouteData(request.resource.data, routeId)
+        && validDriverRouteTransition(resource.data.status, request.resource.data.status)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status',
+          'currentLocation',
+          'startedAt',
+          'completedAt',
+          'completedDeliveryCount',
+          'actualDistanceMeters',
+          'actualDurationSeconds',
+          'updatedAt',
+          'updatedBy'
+        ])
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /deliveries/{deliveryId} {
+      allow read: if isAdmin() || ownedExistingDriverData();
+      allow create: if isAdmin() && validDeliveryData(request.resource.data, deliveryId);
+      allow update: if (
+        isAdmin()
+        && validDeliveryData(request.resource.data, deliveryId)
+      ) || (
+        ownedExistingDriverData()
+        && request.resource.data.driverId == resource.data.driverId
+        && request.resource.data.routeId == resource.data.routeId
+        && request.resource.data.vehicleId == resource.data.vehicleId
+        && request.resource.data.updatedBy == request.auth.uid
+        && validDeliveryData(request.resource.data, deliveryId)
+        && validDriverDeliveryTransition(resource.data.status, request.resource.data.status)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status',
+          'arrivedAt',
+          'deliveredAt',
+          'checkInLocation',
+          'failure',
+          'proofStatus',
+          'deliveryProofId',
+          'notes',
+          'updatedAt',
+          'updatedBy'
+        ])
+        && (
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['proofStatus'])
+          || request.resource.data.proofStatus == 'submitted'
+        )
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /routeEvents/{eventId} {
+      allow read: if isAdmin() || (
+        isActiveUser()
+        && resource.data.driverId == request.auth.uid
+      );
+      allow create: if validRouteEventData(request.resource.data, eventId) && (
+        isAdmin()
+        || (
+          isActiveUser()
+          && request.resource.data.source == 'driver'
+          && request.resource.data.actorId == request.auth.uid
+          && request.resource.data.driverId == request.auth.uid
+          && ownsRoute(request.resource.data.routeId)
+          && deliveryBelongsToRoute(request.resource.data.deliveryId, request.resource.data.routeId)
+        )
+      );
+      allow update, delete: if false;
+    }
+
+    match /settings/{settingId} {
+      allow read: if isAdmin() || (
+        isActiveUser()
+        && settingId in ['delivery', 'routes']
+      );
+      allow create, update: if isAdmin()
+        && validSetting(request.resource.data, settingId);
+      allow delete: if false;
     }
 
     match /checklists/{checklistId} {

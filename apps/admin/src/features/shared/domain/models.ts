@@ -27,6 +27,42 @@ export type ProgrammedVehicleType =
 export type ChecklistType = 'departure' | 'arrival' | 'vehicle_daily' | 'chain_tensioner' | 'strap_ratchet';
 export type FuelType = 'diesel' | 'arla';
 export type EquipmentType = 'strap' | 'ratchet' | 'chain' | 'tensioner';
+export type RouteStatus = 'draft' | 'planned' | 'assigned' | 'in_progress' | 'completed' | 'cancelled';
+export type RouteOptimizationStatus = 'not_requested' | 'processing' | 'optimized' | 'failed';
+export type DeliveryStatus = 'pending' | 'in_route' | 'arrived' | 'delivered' | 'not_delivered' | 'cancelled';
+export type DeliveryProofStatus = 'pending' | 'submitted' | 'approved' | 'rejected';
+export type RouteEventSource = 'admin' | 'driver' | 'system';
+export type RouteEventType =
+  | 'route_created'
+  | 'route_assigned'
+  | 'route_started'
+  | 'route_completed'
+  | 'route_cancelled'
+  | 'delivery_check_in'
+  | 'delivery_completed'
+  | 'delivery_failed'
+  | 'delivery_cancelled'
+  | 'status_changed'
+  | 'note_added';
+
+export type GeoLocation = {
+  latitude: number;
+  longitude: number;
+  accuracyMeters?: number;
+  headingDegrees?: number;
+  speedKph?: number;
+  recordedAt?: Date | null;
+};
+
+export type AddressSnapshot = {
+  formattedAddress: string;
+  latitude: number;
+  longitude: number;
+  placeId?: string;
+  city?: string;
+  state?: string;
+  postalCode?: string;
+};
 
 export type AppUser = {
   uid: string;
@@ -86,6 +122,181 @@ export type Trip = {
   lastGpsUpdateAt?: Date | null;
   statusUpdatedAt?: Date | null;
 };
+
+export type RoutePlan = {
+  id: string;
+  code: string;
+  serviceDate: Date | null;
+  status: RouteStatus;
+  driverId: string;
+  driverName: string;
+  vehicleId: string;
+  vehiclePlate: string;
+  fleetId: string;
+  carrierId: string;
+  carrierName: string;
+  operationTypeId: string;
+  operationTypeName: string;
+  regionIds: string[];
+  startAddress: AddressSnapshot;
+  endAddress: AddressSnapshot;
+  deliveryCount: number;
+  completedDeliveryCount: number;
+  plannedDistanceMeters: number;
+  plannedDurationSeconds: number;
+  plannedCost: number;
+  actualDistanceMeters: number;
+  actualDurationSeconds: number;
+  actualCost: number;
+  optimization: {
+    status: RouteOptimizationStatus;
+    provider: string;
+    requestId: string;
+    optimizedAt: Date | null;
+    errorMessage: string;
+  };
+  currentLocation?: GeoLocation;
+  startedAt: Date | null;
+  completedAt: Date | null;
+  createdAt: Date | null;
+  createdBy: string;
+  updatedAt: Date | null;
+  updatedBy: string;
+};
+
+export type DeliveryFailure = {
+  reasonCode: string;
+  reasonLabel: string;
+  notes: string;
+  registeredAt: Date | null;
+};
+
+export type DeliveryProofRequirements = {
+  requirePhoto: boolean;
+  requireReceiverName: boolean;
+  requireReceiverDocument: boolean;
+  requireSignature: boolean;
+  requireLocation: boolean;
+};
+
+export type Delivery = {
+  id: string;
+  routeId: string;
+  orderNumber: string;
+  cteAccessKey: string;
+  cteNumber: string;
+  clientId: string;
+  clientName: string;
+  carrierId: string;
+  carrierName: string;
+  regionId: string;
+  regionName: string;
+  driverId: string;
+  driverName: string;
+  vehicleId: string;
+  vehiclePlate: string;
+  sequence: number;
+  status: DeliveryStatus;
+  address: AddressSnapshot;
+  scheduledAt: Date | null;
+  timeWindowStart: Date | null;
+  timeWindowEnd: Date | null;
+  estimatedArrivalAt: Date | null;
+  arrivedAt: Date | null;
+  deliveredAt: Date | null;
+  packageCount: number;
+  weightKg: number;
+  volumeM3: number;
+  notes: string;
+  proofRequirements: DeliveryProofRequirements;
+  proofStatus: DeliveryProofStatus;
+  deliveryProofId: string;
+  checkInLocation?: GeoLocation;
+  failure?: DeliveryFailure;
+  createdAt: Date | null;
+  createdBy: string;
+  updatedAt: Date | null;
+  updatedBy: string;
+};
+
+export type RouteEvent = {
+  id: string;
+  routeId: string;
+  deliveryId: string;
+  driverId: string;
+  vehicleId: string;
+  type: RouteEventType;
+  source: RouteEventSource;
+  actorId: string;
+  actorName: string;
+  fromStatus: string;
+  toStatus: string;
+  message: string;
+  metadata: Record<string, unknown>;
+  location?: GeoLocation;
+  occurredAt: Date | null;
+  createdAt: Date | null;
+};
+
+export type DeliveryFailureReasonSetting = {
+  code: string;
+  label: string;
+  active: boolean;
+  requireNotes: boolean;
+  requirePhoto: boolean;
+};
+
+export type DeliverySettings = {
+  id: 'delivery';
+  kind: 'delivery';
+  version: number;
+  checkInRadiusMeters: number;
+  defaultProofRequirements: DeliveryProofRequirements;
+  failureReasons: DeliveryFailureReasonSetting[];
+  statusTransitions: Partial<Record<DeliveryStatus, DeliveryStatus[]>>;
+  updatedAt: Date | null;
+  updatedBy: string;
+};
+
+export type RouteSettings = {
+  id: 'routes';
+  kind: 'routes';
+  version: number;
+  gpsUpdateIntervalSeconds: number;
+  gpsOfflineAfterSeconds: number;
+  allowDriverReorderStops: boolean;
+  allowRouteEditAfterStart: boolean;
+  statusTransitions: Partial<Record<RouteStatus, RouteStatus[]>>;
+  updatedAt: Date | null;
+  updatedBy: string;
+};
+
+export type PermissionSettings = {
+  id: 'permissions';
+  kind: 'permissions';
+  version: number;
+  rolePermissions: Record<string, string[]>;
+  updatedAt: Date | null;
+  updatedBy: string;
+};
+
+export type ImportSettings = {
+  id: 'imports';
+  kind: 'imports';
+  version: number;
+  maxRows: number;
+  requiredColumns: string[];
+  duplicateKey: string;
+  allowPartialImport: boolean;
+  updatedAt: Date | null;
+  updatedBy: string;
+};
+
+export type OperationalSettings =
+  | DeliverySettings
+  | RouteSettings
+  | PermissionSettings
+  | ImportSettings;
 
 export type Checklist = {
   id: string;

@@ -78,3 +78,81 @@ O banco NoSQL deve ser estruturado para minimizar leituras e evitar consultas co
 2. **Upload de Mídias (Storage):** Fotos de checklist e canhotos devem ser comprimidas no client-side antes do upload para economizar dados móveis. O app deve salvar o caminho local provisoriamente se estiver offline e realizar o upload para o Cloud Storage em segundo plano quando a conexão for reestabelecida.
 3. **Segurança de Acesso:** Motoristas só podem ler e escrever dados onde `driverId == auth.uid`. O setor administrativo tem acesso de leitura/escrita global em todas as coleções.
 4. **Separação de Responsabilidades:** Nunca misture lógica de UI com chamadas diretas do Firebase. Utilize uma camada de Serviços/Repositórios para abstrair as operações do Firestore e do Auth.
+
+## 5. Schema Operacional V2
+
+O schema V2 separa planejamento, entregas e auditoria. A coleção `trips` permanece ativa durante a migração e não deve ser removida até que as telas existentes passem a consumir `routes` e `deliveries`.
+
+### Coleção: `routes`
+* `id` (string, PK)
+* `code` (string, identificador visível)
+* `serviceDate` (timestamp)
+* `status` (string: `draft` | `planned` | `assigned` | `in_progress` | `completed` | `cancelled`)
+* `driverId`, `driverName` (string, ID e snapshot)
+* `vehicleId`, `vehiclePlate` (string, ID e snapshot)
+* `fleetId` (string)
+* `carrierId`, `carrierName` (string, ID e snapshot)
+* `operationTypeId`, `operationTypeName` (string, ID e snapshot)
+* `regionIds` (array de string)
+* `startAddress`, `endAddress` (map: `{ formattedAddress, latitude, longitude, placeId, city, state, postalCode }`)
+* `deliveryCount`, `completedDeliveryCount` (number)
+* `plannedDistanceMeters`, `plannedDurationSeconds`, `plannedCost` (number)
+* `actualDistanceMeters`, `actualDurationSeconds`, `actualCost` (number)
+* `optimization` (map: `{ status, provider, requestId, optimizedAt, errorMessage }`)
+* `currentLocation` (map GeoLocation, opcional)
+* `startedAt`, `completedAt`, `createdAt`, `updatedAt` (timestamp, nullable conforme etapa)
+* `createdBy`, `updatedBy` (string)
+
+### Coleção: `deliveries`
+* `id` (string, PK)
+* `routeId` (string, FK -> routes; vazio enquanto não roteirizada)
+* `orderNumber`, `cteAccessKey`, `cteNumber` (string)
+* `clientId`, `clientName` (string, ID e snapshot)
+* `carrierId`, `carrierName` (string, ID e snapshot)
+* `regionId`, `regionName` (string, ID e snapshot)
+* `driverId`, `driverName`, `vehicleId`, `vehiclePlate` (string, dados denormalizados para leitura offline)
+* `sequence` (number, ordem da parada)
+* `status` (string: `pending` | `in_route` | `arrived` | `delivered` | `not_delivered` | `cancelled`)
+* `address` (map AddressSnapshot)
+* `scheduledAt`, `timeWindowStart`, `timeWindowEnd`, `estimatedArrivalAt` (timestamp)
+* `arrivedAt`, `deliveredAt` (timestamp, nullable)
+* `packageCount`, `weightKg`, `volumeM3` (number)
+* `notes` (string)
+* `proofRequirements` (map: `{ requirePhoto, requireReceiverName, requireReceiverDocument, requireSignature, requireLocation }`)
+* `proofStatus` (string: `pending` | `submitted` | `approved` | `rejected`)
+* `deliveryProofId` (string, FK -> deliveryReceipts)
+* `checkInLocation` (map GeoLocation, opcional)
+* `failure` (map: `{ reasonCode, reasonLabel, notes, registeredAt }`, opcional)
+* `createdAt`, `updatedAt` (timestamp)
+* `createdBy`, `updatedBy` (string)
+
+### Coleção: `routeEvents`
+Coleção append-only usada para auditoria e sincronização offline.
+* `id` (string, PK gerada no client para suportar offline)
+* `routeId`, `deliveryId`, `driverId`, `vehicleId` (string)
+* `type` (string: eventos de rota, check-in, entrega, falha, cancelamento, mudança de status ou observação)
+* `source` (string: `admin` | `driver` | `system`)
+* `actorId`, `actorName` (string)
+* `fromStatus`, `toStatus`, `message` (string)
+* `metadata` (map)
+* `location` (map GeoLocation, opcional)
+* `occurredAt` (timestamp do dispositivo)
+* `createdAt` (timestamp do servidor)
+
+### Coleção: `settings`
+Documentos fixos, somente administradores podem alterar.
+* `settings/delivery`: campos obrigatórios, raio de check-in, motivos de não entrega e transições.
+* `settings/routes`: intervalo GPS, limite offline, edição e transições de rota.
+* `settings/permissions`: permissões por perfil de usuário.
+* `settings/imports`: colunas obrigatórias, limite de linhas e tratamento de duplicidade.
+
+### Objetos compartilhados
+* `GeoLocation`: `{ latitude, longitude, accuracyMeters, headingDegrees, speedKph, recordedAt }`.
+* `AddressSnapshot`: `{ formattedAddress, latitude, longitude, placeId, city, state, postalCode }`.
+
+### Regras do V2
+1. Snapshots de nomes e placas são obrigatórios para reduzir leituras e garantir histórico.
+2. Motoristas leem somente rotas, entregas e eventos associados ao próprio `driverId`.
+3. Eventos nunca podem ser atualizados ou excluídos.
+4. Motoristas não podem alterar atribuição, sequência, cliente, veículo ou requisitos de comprovante.
+5. Configurações são versionadas e escritas somente por administradores.
