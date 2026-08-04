@@ -1,5 +1,18 @@
 import { useEffect, useState } from 'react';
-import { Filter, LogOut, RefreshCw } from 'lucide-react';
+import {
+  ClipboardCheck,
+  Database,
+  FileCheck2,
+  Filter,
+  Fuel,
+  LogOut,
+  MapPinned,
+  RefreshCw,
+  Route,
+  Truck,
+  Users,
+  type LucideIcon,
+} from 'lucide-react';
 import { logoutAdmin, type AdminSession } from '../../auth/data/authRepository';
 import { ChecklistsPage } from '../../checklists/presentation/ChecklistsPage';
 import { AbastecimentoPage } from '../../fueling/presentation/AbastecimentoPage';
@@ -35,14 +48,30 @@ type AdminDashboardProps = {
 
 type AdminPage = 'scheduling' | 'routes' | 'checklists' | 'receipts' | 'fueling' | 'users' | 'vehicles';
 
-const navItems: Array<{ key: AdminPage; label: string }> = [
-  { key: 'scheduling', label: 'Programacao' },
-  { key: 'routes', label: 'Rotas' },
-  { key: 'checklists', label: 'Checklists' },
-  { key: 'receipts', label: 'Comprovantes' },
-  { key: 'fueling', label: 'Abastecimento' },
-  { key: 'users', label: 'Usuarios' },
-  { key: 'vehicles', label: 'Veiculos' },
+const navSections: Array<{
+  icon: LucideIcon;
+  items: Array<{ icon: LucideIcon; key: AdminPage; label: string }>;
+  label: string;
+}> = [
+  {
+    icon: Route,
+    label: 'Operacao',
+    items: [
+      { icon: Route, key: 'scheduling', label: 'Programacao' },
+      { icon: MapPinned, key: 'routes', label: 'Rotas' },
+      { icon: ClipboardCheck, key: 'checklists', label: 'Checklists' },
+      { icon: FileCheck2, key: 'receipts', label: 'Comprovantes' },
+      { icon: Fuel, key: 'fueling', label: 'Abastecimento' },
+    ],
+  },
+  {
+    icon: Database,
+    label: 'Cadastros',
+    items: [
+      { icon: Users, key: 'users', label: 'Usuarios' },
+      { icon: Truck, key: 'vehicles', label: 'Veiculos' },
+    ],
+  },
 ];
 
 const pageTitles: Record<AdminPage, string> = {
@@ -104,21 +133,45 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
             </div>
           </div>
 
-          <nav className="space-y-1 text-sm">
-            {navItems.map((item) => (
-              <button
-                className={`flex h-10 w-full items-center rounded-xl px-3 text-left ${
-                  activePage === item.key
-                    ? 'bg-avapex-yellow font-semibold text-avapex-black'
-                    : 'text-zinc-200 hover:bg-white/10'
-                }`}
-                key={item.key}
-                onClick={() => setActivePage(item.key)}
-                type="button"
-              >
-                {item.label}
-              </button>
-            ))}
+          <nav className="space-y-5 text-sm">
+            {navSections.map((section) => {
+              const SectionIcon = section.icon;
+              return (
+                <div key={section.label}>
+                  <div className="mb-2 flex items-center gap-2 px-3 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                    <SectionIcon size={14} />
+                    {section.label}
+                  </div>
+                  <div className="space-y-1">
+                    {section.items.map((item) => {
+                      const ItemIcon = item.icon;
+                      const isActive = activePage === item.key;
+                      return (
+                        <button
+                          className={`group flex h-11 w-full items-center gap-3 rounded-2xl px-3 text-left transition ${
+                            isActive
+                              ? 'bg-avapex-yellow font-semibold text-avapex-black shadow-[0_10px_24px_rgba(250,204,21,0.18)]'
+                              : 'text-zinc-200 hover:bg-white/10 hover:text-white'
+                          }`}
+                          key={item.key}
+                          onClick={() => setActivePage(item.key)}
+                          type="button"
+                        >
+                          <span
+                            className={`flex h-8 w-8 items-center justify-center rounded-xl transition ${
+                              isActive ? 'bg-avapex-black text-white' : 'bg-white/10 text-zinc-300 group-hover:bg-white/15'
+                            }`}
+                          >
+                            <ItemIcon size={17} />
+                          </span>
+                          <span>{item.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
           </nav>
         </div>
 
