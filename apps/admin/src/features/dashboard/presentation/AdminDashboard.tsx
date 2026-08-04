@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
+  ChevronDown,
   ClipboardCheck,
   Database,
   FileCheck2,
@@ -91,6 +92,7 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
   const [activePage, setActivePage] = useState<AdminPage>('scheduling');
   const [checklistFilterCount, setChecklistFilterCount] = useState(0);
   const [showChecklistFilters, setShowChecklistFilters] = useState(false);
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
 
   async function loadData() {
     setLoading(true);
@@ -133,16 +135,32 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
             </div>
           </div>
 
-          <nav className="space-y-5 text-sm">
+          <nav className="space-y-3 text-sm">
             {navSections.map((section) => {
               const SectionIcon = section.icon;
+              const isCollapsed = collapsedSections[section.label] ?? false;
               return (
                 <div key={section.label}>
-                  <div className="mb-2 flex items-center gap-2 px-3 text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                    <SectionIcon size={14} />
-                    {section.label}
-                  </div>
-                  <div className="space-y-1">
+                  <button
+                    className="mb-2 flex h-9 w-full items-center justify-between rounded-xl px-3 text-xs font-semibold uppercase tracking-wide text-zinc-400 transition hover:bg-white/10 hover:text-white"
+                    onClick={() =>
+                      setCollapsedSections((current) => ({
+                        ...current,
+                        [section.label]: !isCollapsed,
+                      }))
+                    }
+                    type="button"
+                  >
+                    <span className="flex items-center gap-2">
+                      <SectionIcon size={14} />
+                      {section.label}
+                    </span>
+                    <ChevronDown
+                      className={`transition-transform ${isCollapsed ? '-rotate-90' : 'rotate-0'}`}
+                      size={15}
+                    />
+                  </button>
+                  <div className={`space-y-1 overflow-hidden transition-all ${isCollapsed ? 'max-h-0 opacity-0' : 'max-h-80 opacity-100'}`}>
                     {section.items.map((item) => {
                       const ItemIcon = item.icon;
                       const isActive = activePage === item.key;
@@ -150,7 +168,7 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
                         <button
                           className={`group flex h-11 w-full items-center gap-3 rounded-2xl px-3 text-left transition ${
                             isActive
-                              ? 'bg-avapex-yellow font-semibold text-avapex-black shadow-[0_10px_24px_rgba(250,204,21,0.18)]'
+                              ? 'bg-white/12 font-semibold text-white ring-1 ring-white/10'
                               : 'text-zinc-200 hover:bg-white/10 hover:text-white'
                           }`}
                           key={item.key}
@@ -159,12 +177,13 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
                         >
                           <span
                             className={`flex h-8 w-8 items-center justify-center rounded-xl transition ${
-                              isActive ? 'bg-avapex-black text-white' : 'bg-white/10 text-zinc-300 group-hover:bg-white/15'
+                              isActive ? 'bg-white text-avapex-black' : 'bg-white/10 text-zinc-300 group-hover:bg-white/15'
                             }`}
                           >
                             <ItemIcon size={17} />
                           </span>
-                          <span>{item.label}</span>
+                          <span className="flex-1">{item.label}</span>
+                          {isActive ? <span className="h-2 w-2 rounded-full bg-avapex-yellow" /> : null}
                         </button>
                       );
                     })}
