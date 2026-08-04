@@ -425,12 +425,12 @@ export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: 
           </div>
 
           {loading ? (
-            <div className="grid gap-4 xl:grid-cols-2">
+            <div className="grid gap-3">
               <ProgrammingCardSkeleton />
               <ProgrammingCardSkeleton />
             </div>
           ) : filteredTrips.length > 0 ? (
-            <div className="grid gap-4 xl:grid-cols-2">
+            <div className="grid gap-3">
               {filteredTrips.map((trip) => (
                 <ProgrammingCard
                   busy={busyTripId === trip.id}
@@ -614,110 +614,81 @@ function ProgrammingCard({
   const gps = getGpsConnection(trip, currentTime);
 
   return (
-    <article className="ui-card flex h-full flex-col overflow-hidden">
-      <header className="flex items-start justify-between gap-4 border-b border-zinc-200 px-4 py-3.5">
-        <div className="min-w-0">
-          <p className="text-xs font-medium text-zinc-500">Solicitacao do cliente</p>
-          <div className="mt-1 flex flex-wrap items-center gap-2">
-            <h3 className="text-base font-semibold text-zinc-950">
-              {trip.customerRequestNumber || 'Sem numero'}
-            </h3>
-            <span className={operationTypeChipClass(operationType)}>{operationTypeLabel(operationType)}</span>
-            {trip.returnTrip ? <span className="ui-pill bg-yellow-50 text-yellow-800">Com retorno</span> : null}
+    <article className="ui-card w-full overflow-hidden">
+      <div className="grid xl:grid-cols-[minmax(260px,1.05fr)_minmax(410px,1.55fr)_minmax(300px,1fr)] xl:items-stretch">
+        <section className="min-w-0 border-b border-zinc-200 p-4 xl:border-b-0 xl:border-r">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[11px] font-medium text-zinc-500">Solicitacao</p>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <h3 className="truncate text-base font-semibold text-zinc-950">
+                  {trip.customerRequestNumber || 'Sem numero'}
+                </h3>
+                <span className={operationTypeChipClass(operationType)}>{operationTypeLabel(operationType)}</span>
+                {trip.returnTrip ? <span className="ui-pill bg-yellow-50 text-yellow-800">Retorno</span> : null}
+              </div>
+            </div>
+            <div className="flex shrink-0 flex-col items-end gap-1">
+              <span className={`ui-pill border ${gps.online ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-zinc-200 bg-zinc-100 text-zinc-600'}`}>
+                {gps.online ? <Wifi size={14} /> : <WifiOff size={14} />}
+                {gps.online ? 'Online' : 'Offline'}
+              </span>
+              <span className="text-[10px] text-zinc-500">{gps.lastUpdateLabel}</span>
+            </div>
           </div>
-        </div>
-        <div className="flex shrink-0 flex-col items-end gap-1.5">
-          <span
-            className={`ui-pill border ${
-              gps.online
-                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                : 'border-zinc-200 bg-zinc-100 text-zinc-600'
-            }`}
-          >
-            {gps.online ? <Wifi size={14} /> : <WifiOff size={14} />}
-            {gps.online ? 'GPS online' : 'GPS offline'}
-          </span>
-          <span className="text-[11px] text-zinc-500">{gps.lastUpdateLabel}</span>
-        </div>
-      </header>
 
-      <div className="flex-1 space-y-4 p-4">
-        <section className="flex items-start gap-3">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-zinc-900 text-white">
-            <MapPin size={17} />
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-medium text-zinc-500">Rota programada</p>
-            <p className="mt-1 break-words text-sm font-semibold text-zinc-950">
-              {trip.origin || '-'} <span className="px-1 text-zinc-400">-&gt;</span> {trip.destination || '-'}
-            </p>
-            {gps.mapUrl ? (
-              <a
-                className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-zinc-600 hover:text-zinc-950"
-                href={gps.mapUrl}
-                rel="noreferrer"
-                target="_blank"
-              >
-                <ExternalLink size={13} />
-                Ver ultima posicao
-              </a>
-            ) : null}
+          <div className="mt-3 flex items-start gap-2.5">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-zinc-900 text-white">
+              <MapPin size={15} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold text-zinc-950" title={`${trip.origin || '-'} -> ${trip.destination || '-'}`}>
+                {trip.origin || '-'} <span className="px-1 text-zinc-400">-&gt;</span> {trip.destination || '-'}
+              </p>
+              {gps.mapUrl ? (
+                <a className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium text-zinc-600 hover:text-zinc-950" href={gps.mapUrl} rel="noreferrer" target="_blank">
+                  <ExternalLink size={12} />
+                  Ultima posicao
+                </a>
+              ) : null}
+            </div>
           </div>
         </section>
 
-        <section className="grid grid-cols-2 gap-x-4 gap-y-3 border-y border-zinc-100 py-4 sm:grid-cols-3">
-          <CardInfo icon={<CalendarDays size={15} />} label="Programada" value={`${formatDateOnly(trip.scheduledAt)} ${formatTimeOnly(trip.scheduledAt)}`} />
-          <CardInfo icon={<CalendarClock size={15} />} label="Previsao" value={formatDateTimeShort(trip.expectedArrivalAt ?? null)} />
-          <CardInfo icon={<UserRound size={15} />} label="Motorista" value={driverName || '-'} />
-          <CardInfo icon={<Truck size={15} />} label="Veiculo" value={`${vehicleLabel || '-'} - ${programmedVehicleTypeLabel(trip.programmedVehicleType)}`} />
-          <CardInfo icon={<Route size={15} />} label="Operacao" value={operationTypeLabel(operationType)} />
-          <CardInfo icon={<Clock3 size={15} />} label="Etapa atualizada" value={formatRelativeDate(trip.statusUpdatedAt, currentTime)} />
+        <section className="min-w-0 border-b border-zinc-200 p-4 xl:border-b-0 xl:border-r">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
+            <CardInfo icon={<CalendarDays size={14} />} label="Programada" value={`${formatDateOnly(trip.scheduledAt)} ${formatTimeOnly(trip.scheduledAt)}`} />
+            <CardInfo icon={<CalendarClock size={14} />} label="Previsao" value={formatDateTimeShort(trip.expectedArrivalAt ?? null)} />
+            <CardInfo icon={<UserRound size={14} />} label="Motorista" value={driverName || '-'} />
+            <CardInfo icon={<Truck size={14} />} label="Veiculo" value={`${vehicleLabel || '-'} - ${programmedVehicleTypeLabel(trip.programmedVehicleType)}`} />
+            <CardInfo icon={<Route size={14} />} label="Operacao" value={operationTypeLabel(operationType)} />
+            <CardInfo icon={<Clock3 size={14} />} label="Atualizada" value={formatRelativeDate(trip.statusUpdatedAt, currentTime)} />
+          </div>
+          {trip.additionalInfo ? (
+            <p className="mt-3 truncate border-t border-zinc-100 pt-2 text-xs text-zinc-600" title={trip.additionalInfo}>{trip.additionalInfo}</p>
+          ) : null}
         </section>
 
-        <DeliveryProgress currentValue={currentStatus.value} operationType={operationType} />
-
-        {trip.additionalInfo ? (
-          <p className="border-t border-zinc-100 pt-3 text-sm leading-relaxed text-zinc-600">{trip.additionalInfo}</p>
-        ) : null}
+        <section className="flex min-w-0 flex-col justify-between gap-3 bg-zinc-50/60 p-4">
+          <DeliveryProgress currentValue={currentStatus.value} operationType={operationType} />
+          <div className="flex items-end gap-2">
+            <label className="min-w-0 flex-1">
+              <span className="mb-1 block text-[11px] font-medium text-zinc-600">Etapa da entrega</span>
+              <select className="ui-input h-9 w-full px-3 text-xs font-medium" disabled={busy} onChange={(event) => onStatusChange(event.target.value as DailyStatusValue)} value={currentStatus.value}>
+                {statusOptions.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </label>
+            <button aria-label="Editar programacao" className="ui-icon-button h-9 w-9 shrink-0 border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300 hover:bg-zinc-100" disabled={busy} onClick={onEdit} title="Editar programacao" type="button">
+              <Pencil size={15} />
+            </button>
+            <button aria-label="Excluir programacao" className="ui-icon-button h-9 w-9 shrink-0 border-red-200 bg-white text-red-600 hover:bg-red-50" disabled={busy} onClick={onDelete} title="Excluir programacao" type="button">
+              <Trash2 size={15} />
+            </button>
+          </div>
+        </section>
       </div>
-
-      <footer className="flex flex-col gap-3 border-t border-zinc-200 bg-zinc-50/70 px-4 py-3 sm:flex-row sm:items-end">
-        <label className="min-w-0 flex-1">
-          <span className="mb-1.5 block text-xs font-medium text-zinc-600">Etapa da entrega</span>
-          <select
-            className="ui-input h-10 w-full px-3 text-sm font-medium"
-            disabled={busy}
-            onChange={(event) => onStatusChange(event.target.value as DailyStatusValue)}
-            value={currentStatus.value}
-          >
-            {statusOptions.map((option) => (
-              <option key={option.value} value={option.value}>{option.label}</option>
-            ))}
-          </select>
-        </label>
-        <div className="flex justify-end gap-2">
-          <button
-            aria-label="Editar programacao"
-            className="ui-icon-button h-10 w-10 border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300 hover:bg-zinc-100"
-            disabled={busy}
-            onClick={onEdit}
-            title="Editar programacao"
-            type="button"
-          >
-            <Pencil size={16} />
-          </button>
-          <button
-            aria-label="Excluir programacao"
-            className="ui-icon-button h-10 w-10 border-red-200 bg-white text-red-600 hover:bg-red-50"
-            disabled={busy}
-            onClick={onDelete}
-            title="Excluir programacao"
-            type="button"
-          >
-            <Trash2 size={16} />
-          </button>
-        </div>
-      </footer>
     </article>
   );
 }
@@ -726,7 +697,7 @@ function CardInfo({ icon, label, value }: { icon: ReactNode; label: string; valu
   return (
     <div className="min-w-0">
       <p className="flex items-center gap-1.5 text-[11px] font-medium text-zinc-500">{icon}{label}</p>
-      <p className="mt-1 break-words text-sm font-medium text-zinc-900">{value}</p>
+      <p className="mt-0.5 truncate text-xs font-medium text-zinc-900" title={value}>{value}</p>
     </div>
   );
 }
@@ -737,8 +708,8 @@ function DeliveryProgress({ currentValue, operationType }: { currentValue: Daily
 
   return (
     <section>
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <p className="text-xs font-medium text-zinc-500">Andamento da entrega</p>
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <p className="text-[11px] font-medium text-zinc-500">Andamento</p>
         <strong className="text-xs text-zinc-900">{stages[currentIndex]?.label}</strong>
       </div>
       <ol className="grid gap-2" style={{ gridTemplateColumns: `repeat(${stages.length}, minmax(0, 1fr))` }}>
@@ -746,8 +717,8 @@ function DeliveryProgress({ currentValue, operationType }: { currentValue: Daily
           const completed = index < currentIndex;
           const active = index === currentIndex;
           return (
-            <li className="min-w-0 text-center" key={stage.value}>
-              <span className={`mx-auto flex h-7 w-7 items-center justify-center rounded-full border text-[10px] font-bold ${
+            <li className="min-w-0 text-center" key={stage.value} title={stage.label}>
+              <span className={`mx-auto flex h-6 w-6 items-center justify-center rounded-full border text-[10px] font-bold ${
                 completed
                   ? 'border-emerald-500 bg-emerald-500 text-white'
                   : active
@@ -755,9 +726,6 @@ function DeliveryProgress({ currentValue, operationType }: { currentValue: Daily
                     : 'border-zinc-200 bg-white text-zinc-400'
               }`}>
                 {completed ? <Check size={13} /> : index + 1}
-              </span>
-              <span className={`mt-2 hidden text-[10px] leading-tight sm:block ${active ? 'font-semibold text-zinc-900' : 'text-zinc-500'}`}>
-                {stage.label}
               </span>
             </li>
           );
@@ -769,15 +737,12 @@ function DeliveryProgress({ currentValue, operationType }: { currentValue: Daily
 
 function ProgrammingCardSkeleton() {
   return (
-    <div aria-label="Carregando programacao" className="ui-card animate-pulse p-4" role="status">
-      <span className="block h-4 w-36 rounded bg-zinc-100" />
-      <span className="mt-4 block h-10 rounded bg-zinc-100" />
-      <div className="mt-4 grid grid-cols-3 gap-3">
-        <span className="h-12 rounded bg-zinc-100" />
-        <span className="h-12 rounded bg-zinc-100" />
-        <span className="h-12 rounded bg-zinc-100" />
+    <div aria-label="Carregando programacao" className="ui-card grid animate-pulse gap-4 p-4 xl:grid-cols-[1fr_1.5fr_1fr]" role="status">
+      <span className="h-20 rounded bg-zinc-100" />
+      <div className="grid grid-cols-3 gap-3">
+        {Array.from({ length: 6 }).map((_, index) => <span className="h-8 rounded bg-zinc-100" key={index} />)}
       </div>
-      <span className="mt-4 block h-20 rounded bg-zinc-100" />
+      <span className="h-20 rounded bg-zinc-100" />
     </div>
   );
 }
