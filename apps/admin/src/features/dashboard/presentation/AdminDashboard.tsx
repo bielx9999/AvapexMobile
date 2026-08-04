@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
+  AlertTriangle,
   ClipboardCheck,
   Filter,
   Fuel,
@@ -9,12 +10,14 @@ import {
   Route,
   Truck,
   Users,
-  Wrench,
 } from 'lucide-react';
+import Chart from 'react-apexcharts';
+import type { ApexOptions } from 'apexcharts';
 import { logoutAdmin, type AdminSession } from '../../auth/data/authRepository';
 import { ChecklistsPage } from '../../checklists/presentation/ChecklistsPage';
 import { AbastecimentoPage } from '../../fueling/presentation/AbastecimentoPage';
 import { ComprovantesPage } from '../../receipts/presentation/ComprovantesPage';
+import { RotasPage } from '../../routes/presentation/RotasPage';
 import { ProgramacaoPage } from '../../scheduling/presentation/ProgramacaoPage';
 import { adminReadRepository } from '../../shared/data/firestoreCollections';
 import { UsersPage } from '../../users/presentation/UsersPage';
@@ -53,7 +56,7 @@ type AdminDashboardProps = {
   session: AdminSession;
 };
 
-type AdminPage = 'dashboard' | 'users' | 'vehicles' | 'checklists' | 'receipts' | 'fueling' | 'scheduling';
+type AdminPage = 'dashboard' | 'users' | 'vehicles' | 'checklists' | 'receipts' | 'fueling' | 'scheduling' | 'routes';
 
 export function AdminDashboard({ session }: AdminDashboardProps) {
   const [data, setData] = useState<DashboardData>(emptyData);
@@ -91,21 +94,8 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
     return () => window.clearTimeout(timeoutId);
   }, []);
 
-  const stats = useMemo(
-    () => [
-      { label: 'Motoristas', value: data.users.filter((user) => user.role === 'driver').length, icon: Users },
-      { label: 'Veiculos', value: data.vehicles.length, icon: Truck },
-      { label: 'Programacao', value: data.trips.length, icon: Route },
-      { label: 'Checklists', value: data.checklists.length, icon: ClipboardCheck },
-      { label: 'Comprovantes', value: data.receipts.length, icon: PackageCheck },
-      { label: 'Abastecimentos', value: data.fueling.length, icon: Fuel },
-      { label: 'Equipamentos', value: data.equipment.length, icon: Wrench },
-    ],
-    [data],
-  );
+  const dashboard = useMemo(() => buildDashboardView(data), [data]);
 
-  const recentChecklists = data.checklists.slice(0, 6);
-  const recentFueling = data.fueling.slice(0, 5);
   const pageTitle =
     activePage === 'users'
       ? 'Usuarios'
@@ -119,12 +109,15 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
               ? 'Abastecimento'
               : activePage === 'scheduling'
                 ? 'Programacao'
-                : 'Dashboard';
-  const navItems: Array<{ key: AdminPage | 'placeholder'; label: string }> = [
+                : activePage === 'routes'
+                  ? 'Rotas'
+                  : 'Dashboard';
+  const navItems: Array<{ key: AdminPage; label: string }> = [
     { key: 'dashboard', label: 'Dashboard' },
     { key: 'users', label: 'Usuarios' },
     { key: 'vehicles', label: 'Veiculos' },
     { key: 'scheduling', label: 'Programacao' },
+    { key: 'routes', label: 'Rotas' },
     { key: 'checklists', label: 'Checklists' },
     { key: 'receipts', label: 'Comprovantes' },
     { key: 'fueling', label: 'Abastecimento' },
@@ -152,9 +145,8 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
                     ? 'bg-avapex-yellow font-semibold text-avapex-black'
                     : 'text-zinc-200 hover:bg-white/10'
                 }`}
-                disabled={item.key === 'placeholder'}
                 key={item.label}
-                onClick={() => item.key !== 'placeholder' && setActivePage(item.key)}
+                onClick={() => setActivePage(item.key)}
                 type="button"
               >
                 {item.label}
@@ -246,99 +238,476 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
               users={data.users}
               vehicles={data.vehicles}
             />
+          ) : activePage === 'routes' ? (
+            <RotasPage loading={loading} trips={data.trips} />
           ) : (
-            <>
-
-          <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {stats.map((stat) => {
-              const Icon = stat.icon;
-              return (
-                <article className="ui-card p-4" key={stat.label}>
-                  <div className="mb-4 flex items-center justify-between">
-                    <span className="text-sm font-medium text-zinc-500">{stat.label}</span>
-                    <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-avapex-black text-white">
-                      <Icon size={18} />
-                    </span>
-                  </div>
-                  <strong className="text-3xl font-semibold">{loading ? '-' : stat.value}</strong>
-                </article>
-              );
-            })}
-          </section>
-
-          <section className="mt-6 grid gap-4 xl:grid-cols-[1.4fr_1fr]">
-            <div className="ui-card">
-              <div className="border-b border-zinc-200 px-4 py-3">
-                <h2 className="font-semibold">Checklists recentes</h2>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[720px] text-left text-sm">
-                  <thead className="bg-zinc-50 text-xs uppercase text-zinc-500">
-                    <tr>
-                      <th className="px-4 py-3">Data</th>
-                      <th className="px-4 py-3">Motorista</th>
-                      <th className="px-4 py-3">Modelo</th>
-                      <th className="px-4 py-3">Veiculo</th>
-                      <th className="px-4 py-3">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {recentChecklists.map((checklist) => (
-                      <tr className="border-t border-zinc-100" key={checklist.id}>
-                        <td className="px-4 py-3">{formatDate(checklist.createdAt)}</td>
-                        <td className="px-4 py-3">{checklist.driverName || checklist.driverId}</td>
-                        <td className="px-4 py-3">{checklistLabel(checklist.type)}</td>
-                        <td className="px-4 py-3">{checklist.vehiclePlate || checklist.vehicleId}</td>
-                        <td className="px-4 py-3">
-                          <span className={checklist.hasCriticalFailure ? 'text-red-700' : 'text-emerald-700'}>
-                            {checklist.hasCriticalFailure ? 'Reprovado' : 'Aprovado'}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                    {!loading && recentChecklists.length === 0 ? (
-                      <tr>
-                        <td className="px-4 py-6 text-center text-zinc-500" colSpan={5}>
-                          Nenhum checklist encontrado.
-                        </td>
-                      </tr>
-                    ) : null}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <div className="ui-card">
-              <div className="border-b border-zinc-200 px-4 py-3">
-                <h2 className="font-semibold">Abastecimentos recentes</h2>
-              </div>
-              <div className="divide-y divide-zinc-100">
-                {recentFueling.map((record) => (
-                  <article className="px-4 py-3" key={record.id}>
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="font-medium">{record.vehiclePlate}</p>
-                      <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-xs uppercase text-zinc-600">
-                        {record.fuelType}
-                      </span>
-                    </div>
-                    <p className="mt-1 text-sm text-zinc-500">
-                      {record.driverName} - {record.kmRegistered} KM
-                    </p>
-                    <p className="mt-1 text-xs text-zinc-400">{formatDate(record.createdAt)}</p>
-                  </article>
-                ))}
-                {!loading && recentFueling.length === 0 ? (
-                  <p className="px-4 py-6 text-center text-sm text-zinc-500">Nenhum abastecimento encontrado.</p>
-                ) : null}
-              </div>
-            </div>
-          </section>
-            </>
+            <DashboardHome dashboard={dashboard} loading={loading} onNavigate={setActivePage} />
           )}
         </div>
       </section>
     </main>
   );
+}
+
+type DashboardView = ReturnType<typeof buildDashboardView>;
+
+function DashboardHome({
+  dashboard,
+  loading,
+  onNavigate,
+}: {
+  dashboard: DashboardView;
+  loading: boolean;
+  onNavigate: (page: AdminPage) => void;
+}) {
+  return (
+    <div className="space-y-5">
+      <section className="grid gap-3 md:grid-cols-2 2xl:grid-cols-6">
+        <KpiCard
+          icon={<Truck size={20} />}
+          label="Cargas hoje"
+          meta={`${dashboard.tripsWithoutAssignment} sem atribuicao`}
+          tone={dashboard.tripsWithoutAssignment > 0 ? 'danger' : 'success'}
+          value={loading ? '-' : dashboard.tripsToday.length}
+          variation="Fluxo operacional"
+        />
+        <KpiCard
+          icon={<Route size={20} />}
+          label="Rotas em andamento"
+          meta={`${dashboard.routesPendingConfirmation} pendentes de envio`}
+          tone={dashboard.routesInProgress > 0 ? 'info' : 'dark'}
+          value={loading ? '-' : dashboard.routesInProgress}
+          variation="Google Maps"
+        />
+        <KpiCard
+          icon={<ClipboardCheck size={20} />}
+          label="Checklists aprovados"
+          meta={`${dashboard.vehiclesWithoutChecklist} veiculos sem checklist`}
+          tone={dashboard.checklistApprovalToday < 90 ? 'yellow' : 'success'}
+          value={loading ? '-' : `${dashboard.checklistApprovalToday}%`}
+          variation="Meta 95%"
+        />
+        <KpiCard
+          icon={<PackageCheck size={20} />}
+          label="Comprovantes pendentes"
+          meta={`${dashboard.receiptsPending} aguardando analise`}
+          tone={dashboard.receiptsPending > 0 ? 'yellow' : 'success'}
+          value={loading ? '-' : `${dashboard.receiptPendingPercent}%`}
+          variation="Fechamento de entrega"
+        />
+        <KpiCard
+          icon={<Fuel size={20} />}
+          label="Abastecimentos no mes"
+          meta="Litros/valor aguardam schema"
+          tone="dark"
+          value={loading ? '-' : dashboard.fuelingThisMonth.length}
+          variation="Base para km/l"
+        />
+        <KpiCard
+          icon={<AlertTriangle size={20} />}
+          label="Alertas ativos"
+          meta="Itens que pedem acao"
+          tone={dashboard.alerts.length > 0 ? 'danger' : 'success'}
+          value={loading ? '-' : dashboard.alerts.length}
+          variation="Agora"
+        />
+      </section>
+
+      <section className="grid gap-4 xl:grid-cols-[1fr_360px]">
+        <div className="grid gap-4 xl:grid-cols-2">
+          <ChartPanel title="Cargas por status" icon={<Route size={18} />}>
+            <StatusFunnelChart data={dashboard.tripStatusCounts} />
+          </ChartPanel>
+          <ChartPanel title="Cargas por motorista" icon={<Users size={18} />}>
+            <DriverBarChart data={dashboard.deliveriesByDriver} />
+          </ChartPanel>
+          <ChartPanel title="Abastecimentos por dia" icon={<Fuel size={18} />}>
+            <FuelingLineChart data={dashboard.fuelingByDay} />
+          </ChartPanel>
+          <ChartPanel title="Comprovantes por status" icon={<PackageCheck size={18} />}>
+            <ReceiptDonutChart delivered={dashboard.receiptsDelivered} failed={dashboard.receiptsFailed} pending={dashboard.receiptsPending} />
+          </ChartPanel>
+        </div>
+
+        <section className="ui-card overflow-hidden">
+          <div className="flex items-center gap-2 border-b border-zinc-200 px-4 py-3">
+            <span className="flex h-9 w-9 items-center justify-center rounded-2xl bg-red-50 text-red-700">
+              <AlertTriangle size={18} />
+            </span>
+            <h2 className="font-semibold">Alertas de acao</h2>
+          </div>
+          <div className="divide-y divide-zinc-100">
+            {dashboard.alerts.map((alert) => (
+              <article className="px-4 py-3" key={alert.title}>
+                <span className={`ui-pill ${alert.tone === 'danger' ? 'bg-red-50 text-red-700' : 'bg-yellow-50 text-yellow-800'}`}>
+                  {alert.area}
+                </span>
+                <p className="mt-2 text-sm font-semibold text-zinc-900">{alert.title}</p>
+                <p className="mt-1 text-xs text-zinc-500">{alert.description}</p>
+              </article>
+            ))}
+            {!loading && dashboard.alerts.length === 0 ? (
+              <p className="px-4 py-8 text-center text-sm text-zinc-500">Nenhuma acao critica agora.</p>
+            ) : null}
+          </div>
+        </section>
+      </section>
+
+      <section className="grid gap-4 xl:grid-cols-[1.3fr_1fr]">
+        <ActionTable
+          actionLabel="Abrir programacao"
+          headers={['Data', 'Solicitacao', 'Motorista', 'Veiculo', 'Status']}
+          onAction={() => onNavigate('scheduling')}
+          rows={dashboard.tripsToday.slice(0, 8).map((trip) => [
+            formatDate(trip.scheduledAt),
+            trip.customerRequestNumber || '-',
+            trip.driverName || trip.driverId || '-',
+            trip.vehiclePlate || trip.vehicleId || '-',
+            tripStatusLabel(trip),
+          ])}
+          title="Programacoes do dia"
+        />
+        <ActionTable
+          actionLabel="Abrir comprovantes"
+          headers={['Data', 'Motorista', 'CT-e', 'Status']}
+          onAction={() => onNavigate('receipts')}
+          rows={dashboard.pendingReceipts.slice(0, 8).map((receipt) => [
+            formatDate(receipt.createdAt),
+            receipt.driverName || receipt.driverId,
+            receipt.cteNumber || receipt.cteAccessKey || '-',
+            receiptStatusLabel(receipt),
+          ])}
+          title="Comprovantes pendentes"
+        />
+      </section>
+
+      <section className="grid gap-4 xl:grid-cols-2">
+        <ActionTable
+          actionLabel="Abrir abastecimento"
+          headers={['Data', 'Motorista', 'Veiculo', 'KM', 'Status']}
+          onAction={() => onNavigate('fueling')}
+          rows={dashboard.recentFueling.slice(0, 8).map((record) => [
+            formatDate(record.createdAt),
+            record.driverName || record.driverId,
+            record.vehiclePlate || record.vehicleId || '-',
+            formatNumber(record.kmRegistered),
+            fuelingStatusLabel(record.notificationStatus),
+          ])}
+          title="Abastecimentos recentes"
+        />
+        <ActionTable
+          actionLabel="Abrir rotas"
+          headers={['Carga', 'Origem', 'Destino', 'Motorista']}
+          onAction={() => onNavigate('routes')}
+          rows={dashboard.routeCandidates.slice(0, 8).map((trip) => [
+            trip.customerRequestNumber || '-',
+            trip.origin || '-',
+            trip.destination || '-',
+            trip.driverName || trip.driverId || '-',
+          ])}
+          title="Rotas para envio"
+        />
+      </section>
+    </div>
+  );
+}
+
+function buildDashboardView(data: DashboardData) {
+  const todayStart = startOfDay(new Date());
+  const todayEnd = endOfDay(new Date());
+  const monthStart = new Date(todayStart.getFullYear(), todayStart.getMonth(), 1);
+  const weekEnd = new Date(todayEnd);
+  weekEnd.setDate(weekEnd.getDate() + 7);
+
+  const tripsToday = data.trips.filter((trip) => isBetween(trip.scheduledAt, todayStart, todayEnd));
+  const tripsThisWeek = data.trips.filter((trip) => isBetween(trip.scheduledAt, todayStart, weekEnd));
+  const fuelingThisMonth = data.fueling.filter((record) => record.createdAt && record.createdAt >= monthStart);
+  const checklistsToday = data.checklists.filter((checklist) => isBetween(checklist.createdAt, todayStart, todayEnd));
+  const receiptsToday = data.receipts.filter((receipt) => isBetween(receipt.createdAt, todayStart, todayEnd));
+  const pendingReceipts = data.receipts.filter((receipt) => (receipt.adminStatus ?? 'pending') === 'pending');
+  const receiptsDelivered = data.receipts.filter((receipt) => receipt.adminStatus === 'delivered').length;
+  const receiptsFailed = data.receipts.filter((receipt) => receipt.adminStatus === 'failed').length;
+  const receiptsPending = pendingReceipts.length;
+  const receiptPendingPercent = data.receipts.length > 0 ? Math.round((receiptsPending / data.receipts.length) * 100) : 0;
+
+  const rejectedToday = checklistsToday.filter((checklist) => checklist.hasCriticalFailure).length;
+  const checklistApprovalToday = checklistsToday.length > 0 ? Math.round(((checklistsToday.length - rejectedToday) / checklistsToday.length) * 100) : 0;
+  const tripsWithoutAssignment = tripsToday.filter((trip) => !trip.driverId || !trip.vehicleId).length;
+  const routesInProgress = data.trips.filter((trip) => trip.programmingStatus === 'in_transit').length;
+  const routeCandidates = data.trips.filter((trip) => trip.origin && trip.destination && trip.driverId && trip.vehicleId);
+  const routesPendingConfirmation = routeCandidates.filter((trip) => trip.programmingStatus === 'loading' || trip.programmingStatus === 'unloading').length;
+
+  const checklistVehicleIdsToday = new Set(checklistsToday.map((checklist) => checklist.vehicleId).filter(Boolean));
+  const scheduledVehicleIdsToday = new Set(tripsToday.map((trip) => trip.vehicleId).filter(Boolean));
+  const vehiclesWithoutChecklist = [...scheduledVehicleIdsToday].filter((vehicleId) => !checklistVehicleIdsToday.has(vehicleId)).length;
+
+  const tripStatusCounts = [
+    { label: 'Aguardando', total: data.trips.filter((trip) => trip.programmingStatus === 'loading').length },
+    { label: 'Atribuido', total: data.trips.filter((trip) => trip.driverId && trip.vehicleId && trip.programmingStatus === 'loading').length },
+    { label: 'Em rota', total: routesInProgress },
+    { label: 'Entregue', total: data.trips.filter((trip) => trip.programmingStatus === 'released').length },
+    { label: 'Pendencia', total: data.trips.filter((trip) => trip.programmingStatus === 'awaiting_invoice').length + receiptsPending },
+  ];
+
+  const deliveriesByDriver = topCounts(
+    data.trips.filter((trip) => trip.programmingStatus === 'released'),
+    (trip) => trip.driverName || trip.driverId || 'Sem motorista',
+  );
+  const fuelingByDay = countByDate(fuelingThisMonth, (record) => record.createdAt);
+  const recentFueling = [...data.fueling].sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0));
+
+  const alerts = [
+    tripsWithoutAssignment > 0
+      ? {
+          area: 'Programacao',
+          description: 'Ha cargas no dia sem motorista ou veiculo vinculado.',
+          title: `${tripsWithoutAssignment} carga(s) sem atribuicao`,
+          tone: 'danger' as const,
+        }
+      : null,
+    vehiclesWithoutChecklist > 0
+      ? {
+          area: 'Checklist',
+          description: 'Veiculos com saida programada ainda nao possuem checklist hoje.',
+          title: `${vehiclesWithoutChecklist} veiculo(s) sem checklist`,
+          tone: 'danger' as const,
+        }
+      : null,
+    rejectedToday > 0
+      ? {
+          area: 'Checklist',
+          description: 'Checklists reprovados precisam de tratativa operacional.',
+          title: `${rejectedToday} checklist(s) reprovado(s) hoje`,
+          tone: 'danger' as const,
+        }
+      : null,
+    receiptsPending > 0
+      ? {
+          area: 'Comprovantes',
+          description: 'Comprovantes aguardando aprovacao ou falha.',
+          title: `${receiptsPending} comprovante(s) pendente(s)`,
+          tone: 'yellow' as const,
+        }
+      : null,
+    routesPendingConfirmation > 0
+      ? {
+          area: 'Rotas',
+          description: 'Cargas com origem/destino prontas para envio ao motorista.',
+          title: `${routesPendingConfirmation} rota(s) para enviar`,
+          tone: 'yellow' as const,
+        }
+      : null,
+  ].filter(Boolean) as Array<{ area: string; description: string; title: string; tone: 'danger' | 'yellow' }>;
+
+  return {
+    alerts,
+    checklistApprovalToday,
+    deliveriesByDriver,
+    fuelingByDay,
+    fuelingThisMonth,
+    pendingReceipts,
+    receiptPendingPercent,
+    receiptsDelivered,
+    receiptsFailed,
+    receiptsPending,
+    receiptsToday,
+    recentFueling,
+    routeCandidates,
+    routesInProgress,
+    routesPendingConfirmation,
+    tripsThisWeek,
+    tripsToday,
+    tripsWithoutAssignment,
+    tripStatusCounts,
+    vehiclesWithoutChecklist,
+  };
+}
+
+function KpiCard({
+  icon,
+  label,
+  meta,
+  tone,
+  value,
+  variation,
+}: {
+  icon: ReactNode;
+  label: string;
+  meta: string;
+  tone: 'dark' | 'success' | 'yellow' | 'danger' | 'info';
+  value: number | string;
+  variation: string;
+}) {
+  const toneClassNames = {
+    danger: 'bg-red-50 text-red-700 ring-red-100',
+    dark: 'bg-avapex-black text-white ring-zinc-200',
+    info: 'bg-sky-50 text-sky-700 ring-sky-100',
+    success: 'bg-emerald-50 text-emerald-700 ring-emerald-100',
+    yellow: 'bg-avapex-yellow text-avapex-black ring-yellow-100',
+  }[tone];
+
+  return (
+    <article className="ui-card p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase text-zinc-500">{label}</p>
+          <strong className="mt-3 block text-3xl font-semibold leading-none">{value}</strong>
+        </div>
+        <span className={`flex h-11 w-11 items-center justify-center rounded-2xl ring-1 ${toneClassNames}`}>
+          {icon}
+        </span>
+      </div>
+      <p className="mt-4 text-xs font-medium text-zinc-500">Meta: {meta}</p>
+      <p className="mt-1 text-xs text-zinc-400">{variation}</p>
+    </article>
+  );
+}
+
+function ChartPanel({ children, icon, title }: { children: ReactNode; icon: ReactNode; title: string }) {
+  return (
+    <section className="ui-card overflow-hidden p-3">
+      <div className="mb-2 flex items-center gap-2 px-1">
+        <span className="flex h-9 w-9 items-center justify-center rounded-2xl bg-zinc-100 text-avapex-black ring-1 ring-zinc-200">
+          {icon}
+        </span>
+        <h2 className="text-sm font-semibold">{title}</h2>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function StatusFunnelChart({ data }: { data: Array<{ label: string; total: number }> }) {
+  const options: ApexOptions = {
+    chart: { fontFamily: 'Inter, system-ui, sans-serif', toolbar: { show: false } },
+    colors: ['#1F1C1C'],
+    dataLabels: { enabled: true },
+    plotOptions: { bar: { borderRadius: 7, horizontal: true } },
+    xaxis: { categories: data.map((item) => item.label), labels: { show: false } },
+  };
+  return <Chart height={245} options={options} series={[{ data: data.map((item) => item.total), name: 'Cargas' }]} type="bar" />;
+}
+
+function DriverBarChart({ data }: { data: Array<{ label: string; total: number }> }) {
+  const options: ApexOptions = {
+    chart: { fontFamily: 'Inter, system-ui, sans-serif', toolbar: { show: false } },
+    colors: ['#FACC15'],
+    dataLabels: { enabled: true, style: { colors: ['#111111'] } },
+    plotOptions: { bar: { borderRadius: 7, horizontal: true } },
+    xaxis: { categories: data.map((item) => item.label), labels: { show: false } },
+    yaxis: { labels: { maxWidth: 150 } },
+  };
+  return data.length ? <Chart height={245} options={options} series={[{ data: data.map((item) => item.total), name: 'Entregas' }]} type="bar" /> : <EmptyPanel />;
+}
+
+function FuelingLineChart({ data }: { data: Array<{ date: string; total: number }> }) {
+  const options: ApexOptions = {
+    chart: { fontFamily: 'Inter, system-ui, sans-serif', toolbar: { show: false } },
+    colors: ['#FACC15'],
+    dataLabels: { enabled: false },
+    stroke: { curve: 'smooth', width: 2.5 },
+    xaxis: { labels: { format: 'dd/MM' }, type: 'datetime' },
+  };
+  const seriesData = data.map((item) => ({ x: new Date(`${item.date}T12:00:00`).getTime(), y: item.total }));
+  return data.length ? <Chart height={245} options={options} series={[{ data: seriesData, name: 'Abastecimentos' }]} type="line" /> : <EmptyPanel />;
+}
+
+function ReceiptDonutChart({ delivered, failed, pending }: { delivered: number; failed: number; pending: number }) {
+  const options: ApexOptions = {
+    chart: { fontFamily: 'Inter, system-ui, sans-serif' },
+    colors: ['#22C55E', '#EAB308', '#EF4444'],
+    labels: ['Entregues', 'Pendentes', 'Falhas'],
+    legend: { position: 'bottom' },
+  };
+  return delivered + pending + failed > 0 ? <Chart height={245} options={options} series={[delivered, pending, failed]} type="donut" /> : <EmptyPanel />;
+}
+
+function ActionTable({
+  actionLabel,
+  headers,
+  onAction,
+  rows,
+  title,
+}: {
+  actionLabel: string;
+  headers: string[];
+  onAction: () => void;
+  rows: string[][];
+  title: string;
+}) {
+  return (
+    <section className="ui-card overflow-hidden">
+      <div className="flex items-center justify-between gap-3 border-b border-zinc-200 px-4 py-3">
+        <h2 className="font-semibold">{title}</h2>
+        <button className="text-sm font-semibold text-avapex-black hover:underline" onClick={onAction} type="button">
+          {actionLabel}
+        </button>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[620px] text-left text-sm">
+          <thead className="bg-zinc-50 text-xs uppercase text-zinc-500">
+            <tr>
+              {headers.map((header) => <th className="px-4 py-3" key={header}>{header}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, index) => (
+              <tr className="border-t border-zinc-100" key={`${row.join('-')}-${index}`}>
+                {row.map((cell, cellIndex) => (
+                  <td className="px-4 py-3" key={`${cell}-${cellIndex}`}>{cell}</td>
+                ))}
+              </tr>
+            ))}
+            {rows.length === 0 ? (
+              <tr>
+                <td className="px-4 py-8 text-center text-zinc-500" colSpan={headers.length}>
+                  Nenhum registro para exibir.
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function EmptyPanel() {
+  return <p className="rounded-2xl bg-zinc-50 px-4 py-16 text-center text-sm text-zinc-500">Sem dados no periodo.</p>;
+}
+
+function startOfDay(value: Date) {
+  return new Date(value.getFullYear(), value.getMonth(), value.getDate(), 0, 0, 0, 0);
+}
+
+function endOfDay(value: Date) {
+  return new Date(value.getFullYear(), value.getMonth(), value.getDate(), 23, 59, 59, 999);
+}
+
+function isBetween(value: Date | null, start: Date, end: Date) {
+  return Boolean(value && value >= start && value <= end);
+}
+
+function topCounts<T>(items: T[], getKey: (item: T) => string) {
+  const counts = new Map<string, number>();
+  for (const item of items) {
+    const key = getKey(item);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return [...counts.entries()].map(([label, total]) => ({ label, total })).sort((a, b) => b.total - a.total).slice(0, 8);
+}
+
+function countByDate<T>(items: T[], getDate: (item: T) => Date | null) {
+  const counts = new Map<string, number>();
+  for (const item of items) {
+    const date = getDate(item);
+    if (!date) {
+      continue;
+    }
+    const key = date.toISOString().slice(0, 10);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return [...counts.entries()].map(([date, total]) => ({ date, total })).sort((a, b) => a.date.localeCompare(b.date));
 }
 
 function formatDate(value: Date | null) {
@@ -351,14 +720,42 @@ function formatDate(value: Date | null) {
   }).format(value);
 }
 
-function checklistLabel(type: Checklist['type']) {
-  const labels: Record<Checklist['type'], string> = {
-    departure: 'Saida',
-    arrival: 'Chegada',
-    vehicle_daily: 'Veiculo',
-    chain_tensioner: 'Corrente/Tensionador',
-    strap_ratchet: 'Cinta/Catraca',
-  };
-  return labels[type] ?? type;
+function formatNumber(value: number) {
+  return new Intl.NumberFormat('pt-BR').format(value);
 }
 
+function tripStatusLabel(trip: Trip) {
+  if (trip.programmingStatus === 'released') {
+    return 'Entregue';
+  }
+  if (trip.programmingStatus === 'in_transit') {
+    return 'Em rota';
+  }
+  if (trip.programmingStatus === 'awaiting_invoice') {
+    return 'Com pendencia';
+  }
+  if (trip.programmingStatus === 'unloading') {
+    return 'Descarga';
+  }
+  return 'Aguardando';
+}
+
+function receiptStatusLabel(receipt: DeliveryReceipt) {
+  if (receipt.adminStatus === 'delivered') {
+    return 'Entregue';
+  }
+  if (receipt.adminStatus === 'failed') {
+    return 'Falha';
+  }
+  return 'Pendente';
+}
+
+function fuelingStatusLabel(status: string) {
+  if (status === 'sent_whatsapp') {
+    return 'Enviado';
+  }
+  if (status === 'failed_whatsapp') {
+    return 'Falha';
+  }
+  return 'Pendente';
+}
