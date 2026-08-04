@@ -2,10 +2,8 @@ import { FormEvent, type ReactNode, useEffect, useMemo, useState } from 'react';
 import {
   CalendarDays,
   CalendarClock,
-  Check,
   ClipboardList,
   Clock3,
-  ExternalLink,
   FileText,
   MapPin,
   Pencil,
@@ -20,7 +18,7 @@ import {
   X,
 } from 'lucide-react';
 import { adminWriteRepository } from '../../shared/data/firestoreCollections';
-import { EmptyState, ErrorBanner, MetricCard, type MetricTone } from '../../shared/presentation/ui';
+import { EmptyState, ErrorBanner } from '../../shared/presentation/ui';
 import type {
   AppUser,
   ProgrammingOperationType,
@@ -49,12 +47,12 @@ type DailyStatusOption = {
   value: DailyStatusValue;
 };
 
-const stageCards: Array<{ status: ProgrammingStatus; label: string; tone: MetricTone }> = [
-  { status: 'in_transit', label: 'Em transito', tone: 'info' },
-  { status: 'loading', label: 'Carregando', tone: 'accent' },
-  { status: 'unloading', label: 'Descarregando', tone: 'neutral' },
-  { status: 'awaiting_invoice', label: 'Aguardando NF', tone: 'warning' },
-  { status: 'released', label: 'Liberado', tone: 'success' },
+const stageCards: Array<{ status: ProgrammingStatus; label: string }> = [
+  { status: 'in_transit', label: 'Em transito' },
+  { status: 'loading', label: 'Carregando' },
+  { status: 'unloading', label: 'Descarregando' },
+  { status: 'awaiting_invoice', label: 'Aguardando NF' },
+  { status: 'released', label: 'Liberado' },
 ];
 
 const dailyStatusOptions: DailyStatusOption[] = [
@@ -360,17 +358,20 @@ export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: 
     }
   }
 
+  const totalProgrammingCount = stats.reduce((total, item) => total + item.total, 0);
+
   return (
     <div className="space-y-4">
       <ErrorBanner message={error} />
 
       <section className="grid grid-cols-2 gap-3 xl:grid-cols-5">
         {stats.map((item) => (
-          <MetricCard
+          <ProgrammingMetric
             icon={statusIcon(item.status)}
             key={item.status}
             label={item.label}
-            tone={item.tone}
+            percentage={totalProgrammingCount > 0 ? Math.round((item.total / totalProgrammingCount) * 100) : 0}
+            status={item.status}
             value={loading ? '-' : item.total}
           />
         ))}
@@ -416,21 +417,14 @@ export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: 
           </div>
         </div>
 
-        <div className="bg-zinc-50/50 p-4">
-          <div className="mb-3 grid gap-3 md:grid-cols-4">
-            <SummaryStrip label="Hoje" value={formatDateOnly(new Date())} />
-            <SummaryStrip label="Exibindo" value={`${filteredTrips.length} registros`} />
-            <SummaryStrip label="Periodo" value={`${formatFilterDate(startDate)} ate ${formatFilterDate(endDate)}`} />
-            <SummaryStrip label="Modelo" value="Carga / Descarga" highlighted />
-          </div>
-
+        <div className="bg-zinc-50/70 p-3">
           {loading ? (
-            <div className="grid gap-3">
+            <div className="grid gap-2">
               <ProgrammingCardSkeleton />
               <ProgrammingCardSkeleton />
             </div>
           ) : filteredTrips.length > 0 ? (
-            <div className="grid gap-3">
+            <div className="grid gap-2">
               {filteredTrips.map((trip) => (
                 <ProgrammingCard
                   busy={busyTripId === trip.id}
@@ -614,78 +608,57 @@ function ProgrammingCard({
   const gps = getGpsConnection(trip, currentTime);
 
   return (
-    <article className="ui-card w-full overflow-hidden">
-      <div className="grid xl:grid-cols-[minmax(260px,1.05fr)_minmax(410px,1.55fr)_minmax(300px,1fr)] xl:items-stretch">
-        <section className="min-w-0 border-b border-zinc-200 p-4 xl:border-b-0 xl:border-r">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-[11px] font-medium text-zinc-500">Solicitacao</p>
-              <div className="mt-1 flex flex-wrap items-center gap-2">
-                <h3 className="truncate text-base font-semibold text-zinc-950">
-                  {trip.customerRequestNumber || 'Sem numero'}
-                </h3>
-                <span className={operationTypeChipClass(operationType)}>{operationTypeLabel(operationType)}</span>
-                {trip.returnTrip ? <span className="ui-pill bg-yellow-50 text-yellow-800">Retorno</span> : null}
-              </div>
-            </div>
-            <div className="flex shrink-0 flex-col items-end gap-1">
-              <span className={`ui-pill border ${gps.online ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-zinc-200 bg-zinc-100 text-zinc-600'}`}>
-                {gps.online ? <Wifi size={14} /> : <WifiOff size={14} />}
-                {gps.online ? 'Online' : 'Offline'}
-              </span>
-              <span className="text-[10px] text-zinc-500">{gps.lastUpdateLabel}</span>
-            </div>
+    <article className={`w-full overflow-hidden rounded-md border border-zinc-200 border-l-4 bg-white shadow-sm ${statusBorderClass(trip.programmingStatus ?? 'loading')}`}>
+      <div className="grid xl:grid-cols-[minmax(220px,1.05fr)_150px_minmax(290px,1.4fr)_minmax(300px,1.3fr)]">
+        <section className="min-w-0 border-b border-zinc-200 px-3 py-3 xl:border-b-0 xl:border-r">
+          <div className="flex items-start gap-2">
+            <h3 className="min-w-0 flex-1 text-[11px] font-bold uppercase leading-tight text-zinc-900">Programacao - {trip.customerRequestNumber || 'Sem numero'}</h3>
+            <span className={operationTypeChipClass(operationType)}>{operationTypeLabel(operationType)}</span>
           </div>
-
-          <div className="mt-3 flex items-start gap-2.5">
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-zinc-900 text-white">
-              <MapPin size={15} />
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold text-zinc-950" title={`${trip.origin || '-'} -> ${trip.destination || '-'}`}>
-                {trip.origin || '-'} <span className="px-1 text-zinc-400">-&gt;</span> {trip.destination || '-'}
-              </p>
-              {gps.mapUrl ? (
-                <a className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium text-zinc-600 hover:text-zinc-950" href={gps.mapUrl} rel="noreferrer" target="_blank">
-                  <ExternalLink size={12} />
-                  Ultima posicao
-                </a>
-              ) : null}
-            </div>
-          </div>
+          <p className="mt-1 truncate text-[11px] text-zinc-500" title={`${vehicleLabel} | ${programmedVehicleTypeLabel(trip.programmedVehicleType)} | ${driverName}`}>
+            {vehicleLabel || 'Sem veiculo'} | {programmedVehicleTypeLabel(trip.programmedVehicleType)} | {driverName || 'Sem motorista'}
+          </p>
+          <p className="mt-1.5 truncate text-xs font-semibold text-zinc-800" title={`${trip.origin || '-'} -> ${trip.destination || '-'}`}>
+            {trip.origin || '-'} <span className="px-1 text-zinc-400">-&gt;</span> {trip.destination || '-'}
+          </p>
+          <p className="mt-1 truncate text-[11px] text-zinc-500" title={trip.additionalInfo || ''}>
+            {trip.additionalInfo || (trip.returnTrip ? 'Programacao com retorno' : 'Sem informacoes adicionais')}
+          </p>
         </section>
 
-        <section className="min-w-0 border-b border-zinc-200 p-4 xl:border-b-0 xl:border-r">
-          <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
-            <CardInfo icon={<CalendarDays size={14} />} label="Programada" value={`${formatDateOnly(trip.scheduledAt)} ${formatTimeOnly(trip.scheduledAt)}`} />
-            <CardInfo icon={<CalendarClock size={14} />} label="Previsao" value={formatDateTimeShort(trip.expectedArrivalAt ?? null)} />
-            <CardInfo icon={<UserRound size={14} />} label="Motorista" value={driverName || '-'} />
-            <CardInfo icon={<Truck size={14} />} label="Veiculo" value={`${vehicleLabel || '-'} - ${programmedVehicleTypeLabel(trip.programmedVehicleType)}`} />
-            <CardInfo icon={<Route size={14} />} label="Operacao" value={operationTypeLabel(operationType)} />
-            <CardInfo icon={<Clock3 size={14} />} label="Atualizada" value={formatRelativeDate(trip.statusUpdatedAt, currentTime)} />
-          </div>
-          {trip.additionalInfo ? (
-            <p className="mt-3 truncate border-t border-zinc-100 pt-2 text-xs text-zinc-600" title={trip.additionalInfo}>{trip.additionalInfo}</p>
+        <section className="min-w-0 border-b border-zinc-200 px-3 py-3 xl:border-b-0 xl:border-r">
+          <strong className="block text-[10px] font-bold uppercase leading-tight text-zinc-800" title={currentStatus.label}>{currentStatus.label}</strong>
+          <p className={`mt-1 flex items-center gap-1 text-xs font-semibold ${gps.online ? 'text-emerald-600' : 'text-red-600'}`}>
+            {gps.online ? <Wifi size={13} /> : <WifiOff size={13} />}
+            {gps.online ? 'ONLINE' : 'OFFLINE'}
+          </p>
+          <p className="mt-1 text-[10px] text-zinc-500">{gps.lastUpdateLabel}</p>
+          {gps.mapUrl ? (
+            <a className="mt-1.5 inline-flex items-center gap-1 text-[10px] font-medium text-zinc-600 hover:text-zinc-950" href={gps.mapUrl} rel="noreferrer" target="_blank">
+              <MapPin size={11} /> Ultima posicao
+            </a>
           ) : null}
         </section>
 
-        <section className="flex min-w-0 flex-col justify-between gap-3 bg-zinc-50/60 p-4">
+        <section className="min-w-0 border-b border-zinc-200 px-3 py-3 xl:border-b-0 xl:border-r">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4 xl:grid-cols-2 2xl:grid-cols-4">
+            <CardInfo icon={<CalendarDays size={15} />} label="Programada" value={`${formatDateOnly(trip.scheduledAt)} ${formatTimeOnly(trip.scheduledAt)}`} />
+            <CardInfo icon={<CalendarClock size={15} />} label="Previsao" value={formatDateTimeShort(trip.expectedArrivalAt ?? null)} />
+            <CardInfo icon={<Truck size={15} />} label="Veiculo" value={`${vehicleLabel || '-'} - ${programmedVehicleTypeLabel(trip.programmedVehicleType)}`} />
+            <CardInfo icon={<Clock3 size={15} />} label="Atualizada" value={formatRelativeDate(trip.statusUpdatedAt, currentTime)} />
+          </div>
+        </section>
+
+        <section className="flex min-w-0 flex-col justify-between gap-2 bg-zinc-50/40 px-3 py-3">
           <DeliveryProgress currentValue={currentStatus.value} operationType={operationType} />
-          <div className="flex items-end gap-2">
-            <label className="min-w-0 flex-1">
-              <span className="mb-1 block text-[11px] font-medium text-zinc-600">Etapa da entrega</span>
-              <select className="ui-input h-9 w-full px-3 text-xs font-medium" disabled={busy} onChange={(event) => onStatusChange(event.target.value as DailyStatusValue)} value={currentStatus.value}>
-                {statusOptions.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </select>
-            </label>
-            <button aria-label="Editar programacao" className="ui-icon-button h-9 w-9 shrink-0 border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300 hover:bg-zinc-100" disabled={busy} onClick={onEdit} title="Editar programacao" type="button">
-              <Pencil size={15} />
-            </button>
-            <button aria-label="Excluir programacao" className="ui-icon-button h-9 w-9 shrink-0 border-red-200 bg-white text-red-600 hover:bg-red-50" disabled={busy} onClick={onDelete} title="Excluir programacao" type="button">
-              <Trash2 size={15} />
-            </button>
+          <div className="flex items-center gap-2">
+            <select aria-label="Etapa da entrega" className="ui-input h-8 min-w-0 flex-1 px-2 text-[11px] font-semibold" disabled={busy} onChange={(event) => onStatusChange(event.target.value as DailyStatusValue)} value={currentStatus.value}>
+              {statusOptions.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+            <button aria-label="Editar programacao" className="ui-icon-button h-8 w-8 shrink-0 border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-100" disabled={busy} onClick={onEdit} title="Editar programacao" type="button"><Pencil size={14} /></button>
+            <button aria-label="Excluir programacao" className="ui-icon-button h-8 w-8 shrink-0 border-red-200 bg-white text-red-600 hover:bg-red-50" disabled={busy} onClick={onDelete} title="Excluir programacao" type="button"><Trash2 size={14} /></button>
           </div>
         </section>
       </div>
@@ -697,7 +670,7 @@ function CardInfo({ icon, label, value }: { icon: ReactNode; label: string; valu
   return (
     <div className="min-w-0">
       <p className="flex items-center gap-1.5 text-[11px] font-medium text-zinc-500">{icon}{label}</p>
-      <p className="mt-0.5 truncate text-xs font-medium text-zinc-900" title={value}>{value}</p>
+      <p className="mt-0.5 truncate text-[11px] font-semibold text-zinc-900" title={value}>{value}</p>
     </div>
   );
 }
@@ -708,24 +681,24 @@ function DeliveryProgress({ currentValue, operationType }: { currentValue: Daily
 
   return (
     <section>
-      <div className="mb-2 flex items-center justify-between gap-3">
-        <p className="text-[11px] font-medium text-zinc-500">Andamento</p>
-        <strong className="text-xs text-zinc-900">{stages[currentIndex]?.label}</strong>
+      <div className="mb-1.5 flex items-center justify-between gap-3">
+        <p className="text-[10px] font-medium text-zinc-500">Andamento</p>
+        <strong className="truncate text-[10px] text-zinc-800">{stages[currentIndex]?.label}</strong>
       </div>
-      <ol className="grid gap-2" style={{ gridTemplateColumns: `repeat(${stages.length}, minmax(0, 1fr))` }}>
+      <ol className="grid gap-1" style={{ gridTemplateColumns: `repeat(${stages.length}, minmax(0, 1fr))` }}>
         {stages.map((stage, index) => {
           const completed = index < currentIndex;
           const active = index === currentIndex;
           return (
             <li className="min-w-0 text-center" key={stage.value} title={stage.label}>
-              <span className={`mx-auto flex h-6 w-6 items-center justify-center rounded-full border text-[10px] font-bold ${
+              <span className={`flex h-5 w-full items-center justify-center rounded-sm border text-[9px] font-bold ${
                 completed
                   ? 'border-emerald-500 bg-emerald-500 text-white'
                   : active
-                    ? 'border-zinc-900 bg-zinc-900 text-white ring-4 ring-zinc-100'
-                    : 'border-zinc-200 bg-white text-zinc-400'
+                    ? 'border-zinc-900 bg-zinc-900 text-white'
+                    : 'border-zinc-200 bg-zinc-200 text-zinc-500'
               }`}>
-                {completed ? <Check size={13} /> : index + 1}
+                {index + 1}
               </span>
             </li>
           );
@@ -737,21 +710,26 @@ function DeliveryProgress({ currentValue, operationType }: { currentValue: Daily
 
 function ProgrammingCardSkeleton() {
   return (
-    <div aria-label="Carregando programacao" className="ui-card grid animate-pulse gap-4 p-4 xl:grid-cols-[1fr_1.5fr_1fr]" role="status">
-      <span className="h-20 rounded bg-zinc-100" />
-      <div className="grid grid-cols-3 gap-3">
-        {Array.from({ length: 6 }).map((_, index) => <span className="h-8 rounded bg-zinc-100" key={index} />)}
-      </div>
-      <span className="h-20 rounded bg-zinc-100" />
+    <div aria-label="Carregando programacao" className="grid animate-pulse gap-3 rounded-md border border-zinc-200 border-l-4 border-l-zinc-300 bg-white p-3 xl:grid-cols-[1fr_150px_1.4fr_1.3fr]" role="status">
+      <span className="h-16 rounded bg-zinc-100" />
+      <span className="h-16 rounded bg-zinc-100" />
+      <div className="grid grid-cols-4 gap-2">{Array.from({ length: 4 }).map((_, index) => <span className="h-12 rounded bg-zinc-100" key={index} />)}</div>
+      <span className="h-16 rounded bg-zinc-100" />
     </div>
   );
 }
 
-function SummaryStrip({ highlighted, label, value }: { highlighted?: boolean; label: string; value: string }) {
+function ProgrammingMetric({ icon, label, percentage, status, value }: { icon: ReactNode; label: string; percentage: number; status: ProgrammingStatus; value: number | string }) {
   return (
-    <div className={`rounded-lg border px-3 py-2.5 ${highlighted ? 'border-yellow-200 bg-yellow-50 text-avapex-black' : 'border-zinc-200 bg-white text-zinc-900'}`}>
-      <span className="block text-[11px] font-semibold uppercase text-zinc-500">{label}</span>
-      <strong className="mt-1 block text-sm">{value}</strong>
+    <div className="flex min-h-20 items-center gap-3 rounded-md border border-zinc-200 bg-white px-4 py-3 shadow-sm">
+      <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-md ${metricIconClass(status)}`}>{icon}</span>
+      <div className="min-w-0 flex-1">
+        <span className="block truncate text-[11px] font-medium text-zinc-500">{label}</span>
+        <div className="mt-0.5 flex items-baseline justify-between gap-2">
+          <strong className="text-xl font-semibold text-zinc-950">{value}</strong>
+          <span className="text-xs font-medium text-zinc-500">{percentage}%</span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -807,6 +785,22 @@ function statusIcon(status: ProgrammingStatus) {
   return <ClipboardList size={20} />;
 }
 
+function statusBorderClass(status: ProgrammingStatus) {
+  if (status === 'in_transit') return 'border-l-cyan-400';
+  if (status === 'unloading') return 'border-l-lime-500';
+  if (status === 'awaiting_invoice') return 'border-l-amber-400';
+  if (status === 'released') return 'border-l-emerald-500';
+  return 'border-l-yellow-400';
+}
+
+function metricIconClass(status: ProgrammingStatus) {
+  if (status === 'in_transit') return 'bg-cyan-50 text-cyan-700';
+  if (status === 'unloading') return 'bg-lime-50 text-lime-700';
+  if (status === 'awaiting_invoice') return 'bg-amber-50 text-amber-700';
+  if (status === 'released') return 'bg-emerald-50 text-emerald-700';
+  return 'bg-yellow-50 text-yellow-700';
+}
+
 function findDailyStatusOption(trip: Trip) {
   if ((trip.programmingStatus ?? 'loading') === 'awaiting_invoice') {
     return dailyStatusOptions.find((option) => option.value === 'awaiting_invoice') ?? dailyStatusOptions[6];
@@ -835,8 +829,8 @@ function operationTypeLabel(type?: ProgrammingOperationType) {
 
 function operationTypeChipClass(type?: ProgrammingOperationType) {
   return type === 'unloading'
-    ? 'rounded-full bg-zinc-900 px-2.5 py-1 text-[11px] font-semibold text-white'
-    : 'rounded-full bg-avapex-yellow px-2.5 py-1 text-[11px] font-semibold text-avapex-black';
+    ? 'rounded-full bg-zinc-900 px-2 py-0.5 text-[9px] font-semibold text-white'
+    : 'rounded-full bg-avapex-yellow px-2 py-0.5 text-[9px] font-semibold text-avapex-black';
 }
 
 function programmedVehicleTypeLabel(type?: ProgrammedVehicleType) {
@@ -881,13 +875,6 @@ function formatRelativeDate(value: Date | null | undefined, currentTime: number)
     dateStyle: 'short',
     timeStyle: 'short',
   }).format(value);
-}
-
-function formatFilterDate(value: string) {
-  if (!value) {
-    return '-';
-  }
-  return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short' }).format(new Date(`${value}T00:00:00`));
 }
 
 function formatDateOnly(value: Date | null) {
