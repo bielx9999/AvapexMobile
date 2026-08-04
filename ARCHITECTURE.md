@@ -43,6 +43,12 @@ O banco NoSQL deve ser estruturado para minimizar leituras e evitar consultas co
 * `startedAt` (timestamp, null)
 * `completedAt` (timestamp, null)
 * `deliveryDocs` (array de strings - URLs das fotos de canhotos/NF no Storage)
+* `programmingStatus` (string: "loading" | "in_transit" | "unloading" | "awaiting_invoice" | "released")
+* `operationalStatus` (string, etapa detalhada registrada pelo motorista)
+* `operationType` (string: "loading" | "unloading")
+* `statusUpdatedAt` (timestamp, null - ultima atualizacao da etapa)
+* `gpsLocation` (map: `{ latitude, longitude, accuracy, display }`, opcional)
+* `lastGpsUpdateAt` (timestamp, null - heartbeat usado para calcular GPS online/offline)
 
 ### Coleção: `checklists`
 * `id` (string, PK)

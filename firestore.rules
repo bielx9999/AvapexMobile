@@ -55,7 +55,13 @@ service cloud.firestore {
           'status',
           'startedAt',
           'completedAt',
-          'deliveryDocs'
+          'deliveryDocs',
+          'programmingStatus',
+          'operationalStatus',
+          'operationType',
+          'statusUpdatedAt',
+          'gpsLocation',
+          'lastGpsUpdateAt'
         ])
       );
     }

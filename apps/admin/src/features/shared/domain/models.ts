@@ -82,6 +82,9 @@ export type Trip = {
   returnSourceTripId?: string;
   unloadingGeneratedTripId?: string;
   unloadingSourceTripId?: string;
+  gpsLocation?: Record<string, unknown>;
+  lastGpsUpdateAt?: Date | null;
+  statusUpdatedAt?: Date | null;
 };
 
 export type Checklist = {

@@ -6,6 +6,7 @@ import '../../features/fueling/presentation/fueling_page.dart';
 import '../../features/profile/presentation/profile_page.dart';
 import '../../features/receipts/presentation/delivery_receipts_page.dart';
 import '../../features/trips/presentation/driver_home_page.dart';
+import '../../features/trips/application/trip_providers.dart';
 import '../../features/users/application/user_providers.dart';
 import '../providers/firebase_providers.dart';
 
@@ -77,6 +78,7 @@ final class _AppShellState extends ConsumerState<AppShell> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(tripGpsHeartbeatControllerProvider);
     final isWide = MediaQuery.sizeOf(context).width >= 760;
 
     if (!isWide) {

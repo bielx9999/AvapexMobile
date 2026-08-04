@@ -1,8 +1,11 @@
-import { FormEvent, type ReactNode, useMemo, useState } from 'react';
+import { FormEvent, type ReactNode, useEffect, useMemo, useState } from 'react';
 import {
+  CalendarDays,
   CalendarClock,
+  Check,
   ClipboardList,
   Clock3,
+  ExternalLink,
   FileText,
   MapPin,
   Pencil,
@@ -12,10 +15,12 @@ import {
   Trash2,
   Truck,
   UserRound,
+  Wifi,
+  WifiOff,
   X,
 } from 'lucide-react';
 import { adminWriteRepository } from '../../shared/data/firestoreCollections';
-import { ErrorBanner, MetricCard, type MetricTone } from '../../shared/presentation/ui';
+import { EmptyState, ErrorBanner, MetricCard, type MetricTone } from '../../shared/presentation/ui';
 import type {
   AppUser,
   ProgrammingOperationType,
@@ -59,7 +64,7 @@ const dailyStatusOptions: DailyStatusOption[] = [
   { value: 'loading', label: 'CARREGANDO', programmingStatus: 'loading', operationalStatus: 'loading', operationType: 'loading' },
   { value: 'waiting_unloading', label: 'AGUARDANDO DESCARGA', programmingStatus: 'unloading', operationalStatus: 'waiting_unloading', operationType: 'unloading' },
   { value: 'unloading', label: 'DESCARREGANDO', programmingStatus: 'unloading', operationalStatus: 'unloading', operationType: 'unloading' },
-  { value: 'awaiting_invoice', label: 'AGUARDANDO NF', programmingStatus: 'awaiting_invoice' },
+  { value: 'awaiting_invoice', label: 'AGUARDANDO NF', programmingStatus: 'awaiting_invoice', operationType: 'unloading' },
   { value: 'released_unloading', label: 'LIBERADO DA DESCARGA', programmingStatus: 'released', operationalStatus: 'released_unloading', operationType: 'unloading' },
   { value: 'released_loading', label: 'LIBERADO DA CARGA', programmingStatus: 'released', operationalStatus: 'released_loading', operationType: 'loading' },
 ];
@@ -105,6 +110,12 @@ export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: 
   const [submitting, setSubmitting] = useState(false);
   const [busyTripId, setBusyTripId] = useState('');
   const [error, setError] = useState('');
+  const [currentTime, setCurrentTime] = useState(() => Date.now());
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => setCurrentTime(Date.now()), 30_000);
+    return () => window.clearInterval(intervalId);
+  }, []);
 
   const drivers = useMemo(
     () => users.filter((user) => user.role === 'driver' && user.status === 'active').sort((a, b) => a.name.localeCompare(b.name)),
@@ -413,86 +424,35 @@ export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: 
             <SummaryStrip label="Modelo" value="Carga / Descarga" highlighted />
           </div>
 
-          <div className="overflow-hidden rounded-lg border border-zinc-200 bg-white">
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[1580px] border-separate border-spacing-0 text-left text-xs">
-                <thead className="sticky top-0 z-10 bg-zinc-950 text-[11px] uppercase text-white">
-                  <tr>
-                    <SpreadsheetHeader>Data sol</SpreadsheetHeader>
-                    <SpreadsheetHeader>Horario</SpreadsheetHeader>
-                    <SpreadsheetHeader>Previsao</SpreadsheetHeader>
-                    <SpreadsheetHeader>Tipo</SpreadsheetHeader>
-                    <SpreadsheetHeader>Origem</SpreadsheetHeader>
-                    <SpreadsheetHeader>Destino</SpreadsheetHeader>
-                    <SpreadsheetHeader>Inf. adicional</SpreadsheetHeader>
-                    <SpreadsheetHeader>Solicitacao</SpreadsheetHeader>
-                    <SpreadsheetHeader>Retorno</SpreadsheetHeader>
-                    <SpreadsheetHeader>Veiculo</SpreadsheetHeader>
-                    <SpreadsheetHeader>Motorista</SpreadsheetHeader>
-                    <SpreadsheetHeader>Placa</SpreadsheetHeader>
-                    <SpreadsheetHeader>Status</SpreadsheetHeader>
-                    <SpreadsheetHeader className="text-right">Acoes</SpreadsheetHeader>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredTrips.map((trip) => {
-                    const currentStatus = findDailyStatusOption(trip);
-                    return (
-                      <tr className="group bg-white transition hover:bg-yellow-50/55" key={trip.id}>
-                        <SpreadsheetCell>{formatDateOnly(trip.scheduledAt)}</SpreadsheetCell>
-                        <SpreadsheetCell>{formatTimeOnly(trip.scheduledAt)}</SpreadsheetCell>
-                        <SpreadsheetCell>{formatDateTimeShort(trip.expectedArrivalAt ?? null)}</SpreadsheetCell>
-                        <SpreadsheetCell>
-                          <span className={operationTypeChipClass(trip.operationType)}>{operationTypeLabel(trip.operationType)}</span>
-                        </SpreadsheetCell>
-                        <SpreadsheetCell className="font-medium">{trip.origin || '-'}</SpreadsheetCell>
-                        <SpreadsheetCell className="font-medium">{trip.destination || '-'}</SpreadsheetCell>
-                        <SpreadsheetCell className="max-w-[210px] truncate" title={trip.additionalInfo || ''}>{trip.additionalInfo || '-'}</SpreadsheetCell>
-                        <SpreadsheetCell className="font-semibold">{trip.customerRequestNumber || '-'}</SpreadsheetCell>
-                        <SpreadsheetCell>
-                          <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${trip.returnTrip ? 'bg-avapex-yellow text-avapex-black' : 'bg-zinc-100 text-zinc-600'}`}>
-                            {trip.returnTrip ? 'SIM' : 'NAO'}
-                          </span>
-                        </SpreadsheetCell>
-                        <SpreadsheetCell>{programmedVehicleTypeLabel(trip.programmedVehicleType)}</SpreadsheetCell>
-                        <SpreadsheetCell>{trip.driverName || driverNames.get(trip.driverId) || trip.driverId}</SpreadsheetCell>
-                        <SpreadsheetCell className="font-semibold">{trip.vehiclePlate || vehicleNames.get(trip.vehicleId) || trip.vehicleId}</SpreadsheetCell>
-                        <SpreadsheetCell>
-                          <select
-                            className="h-9 w-full rounded-full border border-zinc-200 bg-zinc-50 px-3 text-xs font-semibold uppercase text-zinc-800 outline-none transition focus:border-avapex-yellow focus:bg-white focus:ring-2 focus:ring-avapex-yellow/30"
-                            disabled={busyTripId === trip.id}
-                            value={currentStatus.value}
-                            onChange={(event) => void updateDailyStatus(trip, event.target.value as DailyStatusValue)}
-                          >
-                            {dailyStatusOptions.map((option) => (
-                              <option key={option.value} value={option.value}>{option.label}</option>
-                            ))}
-                          </select>
-                        </SpreadsheetCell>
-                        <SpreadsheetCell className="text-right">
-                          <div className="flex justify-end gap-2">
-                            <button className="ui-icon-button inline-flex h-9 w-9 items-center justify-center border-zinc-200 bg-white text-zinc-700 shadow-sm hover:border-avapex-yellow hover:bg-avapex-yellow" disabled={busyTripId === trip.id} onClick={() => openEditForm(trip)} title="Editar programacao" type="button">
-                              <Pencil size={15} />
-                            </button>
-                            <button className="ui-icon-button inline-flex h-9 w-9 items-center justify-center border-red-100 bg-white text-red-600 shadow-sm hover:border-red-200 hover:bg-red-50" disabled={busyTripId === trip.id} onClick={() => void deleteTrip(trip)} title="Excluir programacao" type="button">
-                              <Trash2 size={15} />
-                            </button>
-                          </div>
-                        </SpreadsheetCell>
-                      </tr>
-                    );
-                  })}
-                  {!loading && filteredTrips.length === 0 ? (
-                    <tr>
-                      <td className="px-4 py-8 text-center text-sm text-zinc-500" colSpan={14}>
-                        Nenhuma programacao encontrada.
-                      </td>
-                    </tr>
-                  ) : null}
-                </tbody>
-              </table>
+          {loading ? (
+            <div className="grid gap-4 xl:grid-cols-2">
+              <ProgrammingCardSkeleton />
+              <ProgrammingCardSkeleton />
             </div>
-          </div>
+          ) : filteredTrips.length > 0 ? (
+            <div className="grid gap-4 xl:grid-cols-2">
+              {filteredTrips.map((trip) => (
+                <ProgrammingCard
+                  busy={busyTripId === trip.id}
+                  currentTime={currentTime}
+                  driverName={trip.driverName || driverNames.get(trip.driverId) || trip.driverId}
+                  key={trip.id}
+                  onDelete={() => void deleteTrip(trip)}
+                  onEdit={() => openEditForm(trip)}
+                  onStatusChange={(value) => void updateDailyStatus(trip, value)}
+                  trip={trip}
+                  vehicleLabel={trip.vehiclePlate || vehicleNames.get(trip.vehicleId) || trip.vehicleId}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-lg border border-zinc-200 bg-white">
+              <EmptyState
+                description="Ajuste o periodo ou os filtros para consultar outras cargas."
+                title="Nenhuma programacao encontrada"
+              />
+            </div>
+          )}
         </div>
       </section>
 
@@ -627,19 +587,198 @@ export function ProgramacaoPage({ loading, onChanged, trips, users, vehicles }: 
   );
 }
 
-function SpreadsheetHeader({ children, className = '' }: { children: ReactNode; className?: string }) {
+type ProgrammingCardProps = {
+  busy: boolean;
+  currentTime: number;
+  driverName: string;
+  onDelete: () => void;
+  onEdit: () => void;
+  onStatusChange: (value: DailyStatusValue) => void;
+  trip: Trip;
+  vehicleLabel: string;
+};
+
+function ProgrammingCard({
+  busy,
+  currentTime,
+  driverName,
+  onDelete,
+  onEdit,
+  onStatusChange,
+  trip,
+  vehicleLabel,
+}: ProgrammingCardProps) {
+  const currentStatus = findDailyStatusOption(trip);
+  const operationType = trip.operationType ?? 'loading';
+  const statusOptions = dailyStatusOptions.filter((option) => option.operationType === operationType);
+  const gps = getGpsConnection(trip, currentTime);
+
   return (
-    <th className={`border-b border-r border-white/10 px-3 py-3 text-left font-semibold last:border-r-0 ${className}`}>
-      {children}
-    </th>
+    <article className="ui-card flex h-full flex-col overflow-hidden">
+      <header className="flex items-start justify-between gap-4 border-b border-zinc-200 px-4 py-3.5">
+        <div className="min-w-0">
+          <p className="text-xs font-medium text-zinc-500">Solicitacao do cliente</p>
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            <h3 className="text-base font-semibold text-zinc-950">
+              {trip.customerRequestNumber || 'Sem numero'}
+            </h3>
+            <span className={operationTypeChipClass(operationType)}>{operationTypeLabel(operationType)}</span>
+            {trip.returnTrip ? <span className="ui-pill bg-yellow-50 text-yellow-800">Com retorno</span> : null}
+          </div>
+        </div>
+        <div className="flex shrink-0 flex-col items-end gap-1.5">
+          <span
+            className={`ui-pill border ${
+              gps.online
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                : 'border-zinc-200 bg-zinc-100 text-zinc-600'
+            }`}
+          >
+            {gps.online ? <Wifi size={14} /> : <WifiOff size={14} />}
+            {gps.online ? 'GPS online' : 'GPS offline'}
+          </span>
+          <span className="text-[11px] text-zinc-500">{gps.lastUpdateLabel}</span>
+        </div>
+      </header>
+
+      <div className="flex-1 space-y-4 p-4">
+        <section className="flex items-start gap-3">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-zinc-900 text-white">
+            <MapPin size={17} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-medium text-zinc-500">Rota programada</p>
+            <p className="mt-1 break-words text-sm font-semibold text-zinc-950">
+              {trip.origin || '-'} <span className="px-1 text-zinc-400">-&gt;</span> {trip.destination || '-'}
+            </p>
+            {gps.mapUrl ? (
+              <a
+                className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-zinc-600 hover:text-zinc-950"
+                href={gps.mapUrl}
+                rel="noreferrer"
+                target="_blank"
+              >
+                <ExternalLink size={13} />
+                Ver ultima posicao
+              </a>
+            ) : null}
+          </div>
+        </section>
+
+        <section className="grid grid-cols-2 gap-x-4 gap-y-3 border-y border-zinc-100 py-4 sm:grid-cols-3">
+          <CardInfo icon={<CalendarDays size={15} />} label="Programada" value={`${formatDateOnly(trip.scheduledAt)} ${formatTimeOnly(trip.scheduledAt)}`} />
+          <CardInfo icon={<CalendarClock size={15} />} label="Previsao" value={formatDateTimeShort(trip.expectedArrivalAt ?? null)} />
+          <CardInfo icon={<UserRound size={15} />} label="Motorista" value={driverName || '-'} />
+          <CardInfo icon={<Truck size={15} />} label="Veiculo" value={`${vehicleLabel || '-'} - ${programmedVehicleTypeLabel(trip.programmedVehicleType)}`} />
+          <CardInfo icon={<Route size={15} />} label="Operacao" value={operationTypeLabel(operationType)} />
+          <CardInfo icon={<Clock3 size={15} />} label="Etapa atualizada" value={formatRelativeDate(trip.statusUpdatedAt, currentTime)} />
+        </section>
+
+        <DeliveryProgress currentValue={currentStatus.value} operationType={operationType} />
+
+        {trip.additionalInfo ? (
+          <p className="border-t border-zinc-100 pt-3 text-sm leading-relaxed text-zinc-600">{trip.additionalInfo}</p>
+        ) : null}
+      </div>
+
+      <footer className="flex flex-col gap-3 border-t border-zinc-200 bg-zinc-50/70 px-4 py-3 sm:flex-row sm:items-end">
+        <label className="min-w-0 flex-1">
+          <span className="mb-1.5 block text-xs font-medium text-zinc-600">Etapa da entrega</span>
+          <select
+            className="ui-input h-10 w-full px-3 text-sm font-medium"
+            disabled={busy}
+            onChange={(event) => onStatusChange(event.target.value as DailyStatusValue)}
+            value={currentStatus.value}
+          >
+            {statusOptions.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </select>
+        </label>
+        <div className="flex justify-end gap-2">
+          <button
+            aria-label="Editar programacao"
+            className="ui-icon-button h-10 w-10 border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300 hover:bg-zinc-100"
+            disabled={busy}
+            onClick={onEdit}
+            title="Editar programacao"
+            type="button"
+          >
+            <Pencil size={16} />
+          </button>
+          <button
+            aria-label="Excluir programacao"
+            className="ui-icon-button h-10 w-10 border-red-200 bg-white text-red-600 hover:bg-red-50"
+            disabled={busy}
+            onClick={onDelete}
+            title="Excluir programacao"
+            type="button"
+          >
+            <Trash2 size={16} />
+          </button>
+        </div>
+      </footer>
+    </article>
   );
 }
 
-function SpreadsheetCell({ children, className = '', title }: { children: ReactNode; className?: string; title?: string }) {
+function CardInfo({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
   return (
-    <td className={`border-b border-zinc-100 px-3 py-3 align-middle text-zinc-800 ${className}`} title={title}>
-      {children}
-    </td>
+    <div className="min-w-0">
+      <p className="flex items-center gap-1.5 text-[11px] font-medium text-zinc-500">{icon}{label}</p>
+      <p className="mt-1 break-words text-sm font-medium text-zinc-900">{value}</p>
+    </div>
+  );
+}
+
+function DeliveryProgress({ currentValue, operationType }: { currentValue: DailyStatusValue; operationType: ProgrammingOperationType }) {
+  const stages = dailyStatusOptions.filter((option) => option.operationType === operationType);
+  const currentIndex = Math.max(0, stages.findIndex((stage) => stage.value === currentValue));
+
+  return (
+    <section>
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <p className="text-xs font-medium text-zinc-500">Andamento da entrega</p>
+        <strong className="text-xs text-zinc-900">{stages[currentIndex]?.label}</strong>
+      </div>
+      <ol className="grid gap-2" style={{ gridTemplateColumns: `repeat(${stages.length}, minmax(0, 1fr))` }}>
+        {stages.map((stage, index) => {
+          const completed = index < currentIndex;
+          const active = index === currentIndex;
+          return (
+            <li className="min-w-0 text-center" key={stage.value}>
+              <span className={`mx-auto flex h-7 w-7 items-center justify-center rounded-full border text-[10px] font-bold ${
+                completed
+                  ? 'border-emerald-500 bg-emerald-500 text-white'
+                  : active
+                    ? 'border-zinc-900 bg-zinc-900 text-white ring-4 ring-zinc-100'
+                    : 'border-zinc-200 bg-white text-zinc-400'
+              }`}>
+                {completed ? <Check size={13} /> : index + 1}
+              </span>
+              <span className={`mt-2 hidden text-[10px] leading-tight sm:block ${active ? 'font-semibold text-zinc-900' : 'text-zinc-500'}`}>
+                {stage.label}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+    </section>
+  );
+}
+
+function ProgrammingCardSkeleton() {
+  return (
+    <div aria-label="Carregando programacao" className="ui-card animate-pulse p-4" role="status">
+      <span className="block h-4 w-36 rounded bg-zinc-100" />
+      <span className="mt-4 block h-10 rounded bg-zinc-100" />
+      <div className="mt-4 grid grid-cols-3 gap-3">
+        <span className="h-12 rounded bg-zinc-100" />
+        <span className="h-12 rounded bg-zinc-100" />
+        <span className="h-12 rounded bg-zinc-100" />
+      </div>
+      <span className="mt-4 block h-20 rounded bg-zinc-100" />
+    </div>
   );
 }
 
@@ -737,6 +876,46 @@ function operationTypeChipClass(type?: ProgrammingOperationType) {
 
 function programmedVehicleTypeLabel(type?: ProgrammedVehicleType) {
   return programmedVehicleOptions.find((option) => option.value === type)?.label ?? '-';
+}
+
+function getGpsConnection(trip: Trip, currentTime: number) {
+  const latitude = typeof trip.gpsLocation?.latitude === 'number' ? trip.gpsLocation.latitude : null;
+  const longitude = typeof trip.gpsLocation?.longitude === 'number' ? trip.gpsLocation.longitude : null;
+  const hasCoordinates = latitude !== null && longitude !== null;
+  const elapsed = trip.lastGpsUpdateAt ? currentTime - trip.lastGpsUpdateAt.getTime() : Number.POSITIVE_INFINITY;
+  const online = hasCoordinates && elapsed >= 0 && elapsed <= 3 * 60_000;
+  const mapUrl = hasCoordinates
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${latitude},${longitude}`)}`
+    : '';
+
+  return {
+    lastUpdateLabel: trip.lastGpsUpdateAt
+      ? formatRelativeDate(trip.lastGpsUpdateAt, currentTime)
+      : 'Sem sinal registrado',
+    mapUrl,
+    online,
+  };
+}
+
+function formatRelativeDate(value: Date | null | undefined, currentTime: number) {
+  if (!value) {
+    return '-';
+  }
+  const elapsedMinutes = Math.max(0, Math.floor((currentTime - value.getTime()) / 60_000));
+  if (elapsedMinutes < 1) {
+    return 'Atualizado agora';
+  }
+  if (elapsedMinutes < 60) {
+    return `Ha ${elapsedMinutes} min`;
+  }
+  const elapsedHours = Math.floor(elapsedMinutes / 60);
+  if (elapsedHours < 24) {
+    return `Ha ${elapsedHours} h`;
+  }
+  return new Intl.DateTimeFormat('pt-BR', {
+    dateStyle: 'short',
+    timeStyle: 'short',
+  }).format(value);
 }
 
 function formatFilterDate(value: string) {

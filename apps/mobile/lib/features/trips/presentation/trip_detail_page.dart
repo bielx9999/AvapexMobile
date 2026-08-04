@@ -80,7 +80,9 @@ final class _TripSummary extends StatelessWidget {
             _InfoRow(
               icon: Icons.local_shipping_outlined,
               label: 'Veiculo',
-              value: trip.vehicleId,
+              value: trip.vehiclePlate.isNotEmpty
+                  ? trip.vehiclePlate
+                  : trip.vehicleId,
             ),
             _InfoRow(
               icon: Icons.event_outlined,
@@ -89,8 +91,8 @@ final class _TripSummary extends StatelessWidget {
             ),
             _InfoRow(
               icon: Icons.flag_outlined,
-              label: 'Status',
-              value: _statusLabel(trip.status),
+              label: 'Etapa atual',
+              value: trip.progress.label,
             ),
           ],
         ),
@@ -110,24 +112,32 @@ final class _TripActions extends ConsumerStatefulWidget {
 
 final class _TripActionsState extends ConsumerState<_TripActions> {
   var _isUpdating = false;
+  late TripProgress _selectedProgress;
 
-  Future<void> _updateStatus(TripStatus status) async {
+  @override
+  void initState() {
+    super.initState();
+    _selectedProgress = widget.trip.progress;
+  }
+
+  Future<void> _updateProgress() async {
+    if (_selectedProgress == widget.trip.progress) {
+      return;
+    }
     setState(() => _isUpdating = true);
     try {
       await ref
           .read(tripRepositoryProvider)
-          .updateStatusForCurrentDriver(
-            widget.trip.id,
-            status,
-            startedAt: status == TripStatus.inProgress ? DateTime.now() : null,
-            completedAt: status == TripStatus.completed ? DateTime.now() : null,
-          );
+          .updateProgressForCurrentDriver(widget.trip, _selectedProgress);
       if (!mounted) {
         return;
       }
+      final messenger = ScaffoldMessenger.of(context);
       Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Viagem marcada como ${_statusLabel(status)}.')),
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Etapa registrada: ${_selectedProgress.label}.'),
+        ),
       );
     } on FirebaseFailure catch (failure) {
       if (!mounted) {
@@ -154,26 +164,67 @@ final class _TripActionsState extends ConsumerState<_TripActions> {
   @override
   Widget build(BuildContext context) {
     final trip = widget.trip;
+    final progressOptions = TripProgress.optionsFor(trip.operationType);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (trip.status == TripStatus.pending)
-          FilledButton.icon(
-            onPressed: _isUpdating
-                ? null
-                : () => _updateStatus(TripStatus.inProgress),
-            icon: const Icon(Icons.play_arrow),
-            label: const Text('Iniciar viagem'),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Atualizar etapa da entrega',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<TripProgress>(
+                  initialValue: _selectedProgress,
+                  decoration: const InputDecoration(
+                    labelText: 'Etapa atual',
+                    prefixIcon: Icon(Icons.route_outlined),
+                  ),
+                  items: [
+                    for (final progress in progressOptions)
+                      DropdownMenuItem(
+                        value: progress,
+                        child: Text(progress.label),
+                      ),
+                  ],
+                  onChanged: _isUpdating || trip.progress.isFinished
+                      ? null
+                      : (value) {
+                          if (value != null) {
+                            setState(() => _selectedProgress = value);
+                          }
+                        },
+                ),
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  onPressed:
+                      _isUpdating ||
+                          trip.progress.isFinished ||
+                          _selectedProgress == trip.progress
+                      ? null
+                      : _updateProgress,
+                  icon: _isUpdating
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.sync_outlined),
+                  label: Text(
+                    _isUpdating ? 'Registrando...' : 'Registrar etapa',
+                  ),
+                ),
+              ],
+            ),
           ),
-        if (trip.status == TripStatus.inProgress)
-          FilledButton.icon(
-            onPressed: _isUpdating
-                ? null
-                : () => _updateStatus(TripStatus.completed),
-            icon: const Icon(Icons.check),
-            label: const Text('Concluir viagem'),
-          ),
+        ),
         const SizedBox(height: 10),
         OutlinedButton.icon(
           onPressed: () => _openChecklist(ChecklistType.departure),
@@ -448,15 +499,6 @@ String _checklistTitle(ChecklistType type) {
     ChecklistType.vehicleDaily => 'Checklist de veiculo',
     ChecklistType.chainTensioner => 'Checklist de corrente/tensionador',
     ChecklistType.strapRatchet => 'Checklist de cinta/catraca',
-  };
-}
-
-String _statusLabel(TripStatus status) {
-  return switch (status) {
-    TripStatus.pending => 'Pendente',
-    TripStatus.inProgress => 'Em rota',
-    TripStatus.completed => 'Concluida',
-    TripStatus.cancelled => 'Cancelada',
   };
 }
 

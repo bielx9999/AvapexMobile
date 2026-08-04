@@ -30,6 +30,34 @@ void main() {
     expect(trip.deliveryDocs, ['storage-url']);
   });
 
+  test('Trip converts delivery progress and GPS heartbeat', () {
+    final heartbeatAt = DateTime.utc(2026, 8, 4, 15, 30);
+
+    final trip = Trip.fromFirestore({
+      'id': 'trip-2',
+      'driverId': 'driver-1',
+      'vehicleId': 'ABC1D23',
+      'origin': 'Campinas',
+      'destination': 'Sao Paulo',
+      'status': 'in_progress',
+      'operationType': 'unloading',
+      'programmingStatus': 'unloading',
+      'operationalStatus': 'waiting_unloading',
+      'scheduledAt': Timestamp.fromDate(DateTime.utc(2026, 8, 4)),
+      'gpsLocation': {'latitude': -23.55, 'longitude': -46.63},
+      'lastGpsUpdateAt': Timestamp.fromDate(heartbeatAt),
+    });
+
+    expect(trip.operationType, TripOperationType.unloading);
+    expect(trip.progress, TripProgress.waitingUnloading);
+    expect(trip.programmingStatus, TripProgrammingStatus.unloading);
+    expect(trip.gpsLocation['latitude'], -23.55);
+    expect(
+      trip.lastGpsUpdateAt?.millisecondsSinceEpoch,
+      heartbeatAt.millisecondsSinceEpoch,
+    );
+  });
+
   test('Driver user requires CNH data', () {
     expect(
       () => AppUser.fromFirestore({

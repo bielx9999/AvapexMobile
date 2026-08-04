@@ -92,6 +92,59 @@ final class TripRepository {
     }
   }
 
+  Future<void> updateProgressForCurrentDriver(
+    Trip trip,
+    TripProgress progress,
+  ) async {
+    try {
+      final uid = _requireCurrentUserId();
+      if (trip.driverId != uid) {
+        throw const FirebaseFailure(
+          code: FirebaseFailureCode.permissionDenied,
+          message: 'Viagem inexistente ou nao pertence ao motorista atual.',
+        );
+      }
+
+      final data = <String, Object?>{
+        'status': progress.tripStatus.value,
+        'programmingStatus': progress.programmingStatus.value,
+        'operationalStatus': progress.operationalStatusValue,
+        'operationType': progress.operationType.value,
+        'statusUpdatedAt': FieldValue.serverTimestamp(),
+      };
+      if (progress.tripStatus == TripStatus.inProgress &&
+          trip.startedAt == null) {
+        data['startedAt'] = FieldValue.serverTimestamp();
+        data['completedAt'] = null;
+      }
+      if (progress.isFinished) {
+        data['completedAt'] = FieldValue.serverTimestamp();
+      }
+
+      await _trips
+          .doc(trip.id)
+          .update(data)
+          .timeout(const Duration(seconds: 10));
+    } on Object catch (error, stackTrace) {
+      throw FirebaseFailure.fromException(error, stackTrace);
+    }
+  }
+
+  Future<void> updateGpsHeartbeatForCurrentDriver(
+    String tripId,
+    Map<String, dynamic> location,
+  ) async {
+    try {
+      _requireCurrentUserId();
+      await _trips.doc(tripId).update({
+        'gpsLocation': location,
+        'lastGpsUpdateAt': FieldValue.serverTimestamp(),
+      });
+    } on Object catch (error, stackTrace) {
+      throw FirebaseFailure.fromException(error, stackTrace);
+    }
+  }
+
   String _requireCurrentUserId() {
     final uid = _auth.currentUser?.uid;
     if (uid == null || uid.isEmpty) {

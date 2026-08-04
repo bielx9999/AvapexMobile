@@ -5,6 +5,7 @@ import {
   doc,
   getDocs,
   limit,
+  onSnapshot,
   orderBy,
   query,
   serverTimestamp,
@@ -14,6 +15,7 @@ import {
   writeBatch,
   type DocumentData,
   type QueryConstraint,
+  type Unsubscribe,
 } from 'firebase/firestore';
 import { firestore } from '../../../core/firebase/firebaseConfig';
 import { makeConverter } from '../../../core/firebase/firestoreConverters';
@@ -112,6 +114,14 @@ export const adminReadRepository = {
     }
     return listCollection<DriverEquipment>('driverEquipments', constraints, 'Erro ao listar equipamentos.');
   },
+  watchTrips(onData: (trips: Trip[]) => void, onError: (error: Error) => void): Unsubscribe {
+    const tripsQuery = query(typedCollection<Trip>('trips'), orderBy('scheduledAt', 'desc'), limit(200));
+    return onSnapshot(
+      tripsQuery,
+      (snapshot) => onData(snapshot.docs.map((document) => document.data())),
+      (error) => onError(mapFirebaseError(error, 'Erro ao acompanhar viagens em tempo real.')),
+    );
+  },
 };
 
 export const adminWriteRepository = {
@@ -174,6 +184,7 @@ export const adminWriteRepository = {
         operationType: trip.operationType ?? 'loading',
         expectedArrivalAt: trip.expectedArrivalAt ?? null,
         additionalInfo: trip.additionalInfo?.trim() ?? '',
+        statusUpdatedAt: serverTimestamp(),
       };
 
       if (trip.id) {
@@ -303,6 +314,7 @@ export const adminWriteRepository = {
         operationType: operationType ?? trip.operationType ?? 'loading',
         programmingStatus,
         status,
+        statusUpdatedAt: serverTimestamp(),
       };
       if (status === 'in_progress') {
         data.startedAt = serverTimestamp();

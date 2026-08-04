@@ -122,6 +122,9 @@ export function mapTrip(id: string, data: Record<string, unknown>): Trip {
       typeof data.unloadingGeneratedTripId === 'string' ? data.unloadingGeneratedTripId : undefined,
     unloadingSourceTripId:
       typeof data.unloadingSourceTripId === 'string' ? data.unloadingSourceTripId : undefined,
+    gpsLocation: data.gpsLocation ? readRecord(data.gpsLocation) : undefined,
+    lastGpsUpdateAt: readDate(data.lastGpsUpdateAt),
+    statusUpdatedAt: readDate(data.statusUpdatedAt),
   };
 }
 

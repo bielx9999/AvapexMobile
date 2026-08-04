@@ -435,6 +435,7 @@ final class _TripCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = _statusColor(trip.status);
+    final gpsOnline = _isGpsOnline(trip);
 
     return Card(
       child: InkWell(
@@ -445,37 +446,32 @@ final class _TripCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
+              Text(
+                '${trip.origin} -> ${trip.destination}',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
                 children: [
-                  Expanded(
-                    child: Text(
-                      '${trip.origin} -> ${trip.destination}',
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
+                  _TripChip(
+                    color: color,
+                    icon: Icons.route_outlined,
+                    label: trip.progress.label,
                   ),
-                  const SizedBox(width: 12),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 6,
+                  if (trip.status == TripStatus.inProgress)
+                    _TripChip(
+                      color: gpsOnline
+                          ? const Color(0xFF0A8F5B)
+                          : const Color(0xFF777777),
+                      icon: gpsOnline ? Icons.wifi : Icons.wifi_off,
+                      label: gpsOnline ? 'GPS conectado' : 'GPS offline',
                     ),
-                    decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Text(
-                      _statusLabel(trip.status),
-                      style: TextStyle(
-                        color: color,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
                 ],
               ),
               const SizedBox(height: 12),
@@ -493,7 +489,7 @@ final class _TripCard extends StatelessWidget {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Veiculo: ${trip.vehicleId}',
+                      'Veiculo: ${trip.vehiclePlate.isNotEmpty ? trip.vehiclePlate : trip.vehicleId}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -516,15 +512,6 @@ final class _TripCard extends StatelessWidget {
     };
   }
 
-  String _statusLabel(TripStatus status) {
-    return switch (status) {
-      TripStatus.pending => 'Pendente',
-      TripStatus.inProgress => 'Em rota',
-      TripStatus.completed => 'Concluida',
-      TripStatus.cancelled => 'Cancelada',
-    };
-  }
-
   String _formatDateTime(DateTime value) {
     final date = value.toLocal();
     final day = date.day.toString().padLeft(2, '0');
@@ -533,6 +520,53 @@ final class _TripCard extends StatelessWidget {
     final minute = date.minute.toString().padLeft(2, '0');
     return '$day/$month/${date.year} $hour:$minute';
   }
+}
+
+final class _TripChip extends StatelessWidget {
+  const _TripChip({
+    required this.color,
+    required this.icon,
+    required this.label,
+  });
+
+  final Color color;
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: color, size: 15),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.w700,
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+bool _isGpsOnline(Trip trip) {
+  final lastUpdate = trip.lastGpsUpdateAt;
+  if (lastUpdate == null || trip.gpsLocation.isEmpty) {
+    return false;
+  }
+  return DateTime.now().difference(lastUpdate.toLocal()).abs() <=
+      const Duration(minutes: 3);
 }
 
 final class _EmptyTrips extends StatelessWidget {

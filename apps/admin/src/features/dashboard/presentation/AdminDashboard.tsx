@@ -90,6 +90,13 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
     return () => window.clearTimeout(timeoutId);
   }, []);
 
+  useEffect(() => {
+    return adminReadRepository.watchTrips(
+      (trips) => setData((current) => ({ ...current, trips })),
+      (watchError) => setError(watchError.message),
+    );
+  }, []);
+
   const currentPage = pageConfig[activePage];
   const headerActions = (
     <>
