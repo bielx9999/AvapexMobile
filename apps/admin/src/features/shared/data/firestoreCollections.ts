@@ -1,13 +1,16 @@
 import {
   addDoc,
   collection,
+  deleteDoc,
   deleteField,
   doc,
   getDocs,
+  increment,
   limit,
   onSnapshot,
   orderBy,
   query,
+  runTransaction,
   serverTimestamp,
   setDoc,
   updateDoc,
@@ -26,9 +29,12 @@ import {
   mapDeliveryReceipt,
   mapDriverEquipment,
   mapFuelingRecord,
+  mapLocality,
   mapOperationalSettings,
   mapRoute,
   mapRouteEvent,
+  mapRouteTemplate,
+  mapRouteVersion,
   mapTrip,
   mapUser,
   mapVehicle,
@@ -40,10 +46,15 @@ import type {
   DeliveryReceipt,
   DriverEquipment,
   FuelingRecord,
+  Locality,
   OperationalSettings,
   RouteEvent,
   RoutePlan,
+  RouteTemplate,
+  RouteVersion,
+  RouteVersionDefinition,
   Trip,
+  TripRouteSnapshot,
   Vehicle,
 } from '../domain/models';
 
@@ -59,6 +70,9 @@ const converters = {
   deliveryReceipts: makeConverter<DeliveryReceipt>(mapDeliveryReceipt),
   fuelingRecords: makeConverter<FuelingRecord>(mapFuelingRecord),
   driverEquipments: makeConverter<DriverEquipment>(mapDriverEquipment),
+  localities: makeConverter<Locality>(mapLocality),
+  routeTemplates: makeConverter<RouteTemplate>(mapRouteTemplate),
+  routeVersions: makeConverter<RouteVersion>(mapRouteVersion),
 };
 
 function typedCollection<T>(path: keyof typeof converters) {
@@ -110,6 +124,17 @@ function defaultOperationalStatus(programmingStatus: NonNullable<Trip['programmi
   return undefined;
 }
 
+type LocalityWrite = Omit<Locality, 'id' | 'createdAt' | 'createdBy' | 'updatedAt' | 'updatedBy'> & { id?: string };
+
+type RouteTemplateWrite = {
+  id?: string;
+  name: string;
+  description: string;
+  notes: string;
+  status: RouteTemplate['status'];
+  definition: Omit<RouteVersionDefinition, 'version'>;
+};
+
 export const adminReadRepository = {
   users: () => listCollection<AppUser>('users', [orderBy('createdAt', 'desc'), limit(200)], 'Erro ao listar usuarios.'),
   vehicles: () => listCollection<Vehicle>('vehicles', [orderBy('plate', 'asc'), limit(200)], 'Erro ao listar veiculos.'),
@@ -130,6 +155,13 @@ export const adminReadRepository = {
     }
     return listCollection<DriverEquipment>('driverEquipments', constraints, 'Erro ao listar equipamentos.');
   },
+  localities: () => listCollection<Locality>('localities', [orderBy('normalizedCity', 'asc'), limit(2000)], 'Erro ao listar localidades.'),
+  routeTemplates: () => listCollection<RouteTemplate>('routeTemplates', [orderBy('updatedAt', 'desc'), limit(500)], 'Erro ao listar rotas cadastradas.'),
+  routeVersions: (routeTemplateId: string) => listCollection<RouteVersion>(
+    'routeVersions',
+    [where('routeTemplateId', '==', routeTemplateId), orderBy('version', 'desc'), limit(100)],
+    'Erro ao listar versoes da rota.',
+  ),
   watchTrips(onData: (trips: Trip[]) => void, onError: (error: Error) => void): Unsubscribe {
     const tripsQuery = query(typedCollection<Trip>('trips'), orderBy('scheduledAt', 'desc'), limit(200));
     return onSnapshot(
@@ -154,11 +186,221 @@ export const adminReadRepository = {
       (error) => onError(mapFirebaseError(error, 'Erro ao acompanhar entregas em tempo real.')),
     );
   },
+  watchLocalities(onData: (localities: Locality[]) => void, onError: (error: Error) => void): Unsubscribe {
+    const localitiesQuery = query(typedCollection<Locality>('localities'), orderBy('normalizedCity', 'asc'), limit(2000));
+    return onSnapshot(
+      localitiesQuery,
+      (snapshot) => onData(snapshot.docs.map((document) => document.data())),
+      (error) => onError(mapFirebaseError(error, 'Erro ao acompanhar localidades.')),
+    );
+  },
+  watchRouteTemplates(onData: (routes: RouteTemplate[]) => void, onError: (error: Error) => void): Unsubscribe {
+    const routesQuery = query(typedCollection<RouteTemplate>('routeTemplates'), orderBy('updatedAt', 'desc'), limit(500));
+    return onSnapshot(
+      routesQuery,
+      (snapshot) => onData(snapshot.docs.map((document) => document.data())),
+      (error) => onError(mapFirebaseError(error, 'Erro ao acompanhar rotas cadastradas.')),
+    );
+  },
 };
 
 export const adminWriteRepository = {
   createTripId() {
     return doc(collection(firestore, 'trips')).id;
+  },
+
+  createLocalityId() {
+    return doc(collection(firestore, 'localities')).id;
+  },
+
+  async saveLocality(locality: LocalityWrite) {
+    try {
+      const actorId = auth.currentUser?.uid ?? '';
+      const reference = locality.reference.trim();
+      const city = locality.city.trim();
+      const uf = locality.uf.trim().toUpperCase();
+      const address = locality.address.trim();
+      const id = locality.id?.trim() || this.createLocalityId();
+      const referenceDoc = doc(firestore, 'localities', id);
+      const data: DocumentData = {
+        id,
+        reference,
+        normalizedReference: normalizeSearchText(reference),
+        city,
+        normalizedCity: normalizeSearchText(city),
+        uf,
+        address,
+        normalizedAddress: normalizeSearchText(address),
+        latitude: locality.latitude,
+        longitude: locality.longitude,
+        originalCoordinates: locality.originalCoordinates.trim(),
+        status: locality.status,
+        needsReview: locality.needsReview,
+        source: locality.source,
+        sourceRow: locality.sourceRow,
+        fingerprint: buildLocalityFingerprint({
+          reference,
+          city,
+          uf,
+          address,
+          latitude: locality.latitude,
+          longitude: locality.longitude,
+        }),
+        updatedAt: serverTimestamp(),
+        updatedBy: actorId,
+      };
+      if (!locality.id) {
+        data.createdAt = serverTimestamp();
+        data.createdBy = actorId;
+      }
+      await setDoc(referenceDoc, data, { merge: true });
+      return id;
+    } catch (error) {
+      throw mapFirebaseError(error, 'Erro ao salvar localidade.');
+    }
+  },
+
+  async importLocalities(localities: LocalityWrite[]) {
+    try {
+      const actorId = auth.currentUser?.uid ?? '';
+      const chunks = chunk(localities, 450);
+      for (const items of chunks) {
+        const batch = writeBatch(firestore);
+        for (const locality of items) {
+          const id = locality.id?.trim() || doc(collection(firestore, 'localities')).id;
+          const reference = locality.reference.trim();
+          const city = locality.city.trim();
+          const uf = locality.uf.trim().toUpperCase();
+          const address = locality.address.trim();
+          batch.set(doc(firestore, 'localities', id), {
+            id,
+            reference,
+            normalizedReference: normalizeSearchText(reference),
+            city,
+            normalizedCity: normalizeSearchText(city),
+            uf,
+            address,
+            normalizedAddress: normalizeSearchText(address),
+            latitude: locality.latitude,
+            longitude: locality.longitude,
+            originalCoordinates: locality.originalCoordinates.trim(),
+            status: locality.status,
+            needsReview: locality.needsReview,
+            source: 'import',
+            sourceRow: locality.sourceRow,
+            fingerprint: buildLocalityFingerprint({ reference, city, uf, address, latitude: locality.latitude, longitude: locality.longitude }),
+            createdAt: serverTimestamp(),
+            createdBy: actorId,
+            updatedAt: serverTimestamp(),
+            updatedBy: actorId,
+          });
+        }
+        await batch.commit();
+      }
+      return localities.length;
+    } catch (error) {
+      throw mapFirebaseError(error, 'Erro ao importar localidades.');
+    }
+  },
+
+  async setLocalityStatus(localityId: string, status: Locality['status']) {
+    try {
+      await updateDoc(doc(firestore, 'localities', localityId), {
+        status,
+        updatedAt: serverTimestamp(),
+        updatedBy: auth.currentUser?.uid ?? '',
+      });
+    } catch (error) {
+      throw mapFirebaseError(error, 'Erro ao atualizar localidade.');
+    }
+  },
+
+  async deleteLocality(localityId: string) {
+    try {
+      const [routeUse, tripUse] = await Promise.all([
+        getDocs(query(collection(firestore, 'routeVersions'), where('locationIds', 'array-contains', localityId), limit(1))),
+        getDocs(query(collection(firestore, 'trips'), where('routeLocationIds', 'array-contains', localityId), limit(1))),
+      ]);
+      if (!routeUse.empty || !tripUse.empty) {
+        throw new Error('A localidade possui historico. Inative o cadastro em vez de excluir.');
+      }
+      await deleteDoc(doc(firestore, 'localities', localityId));
+    } catch (error) {
+      throw mapFirebaseError(error, 'Erro ao excluir localidade.');
+    }
+  },
+
+  async saveRouteTemplate(route: RouteTemplateWrite) {
+    try {
+      const actorId = auth.currentUser?.uid ?? '';
+      const templateRef = route.id
+        ? doc(firestore, 'routeTemplates', route.id)
+        : doc(collection(firestore, 'routeTemplates'));
+      return await runTransaction(firestore, async (transaction) => {
+        const existing = route.id ? await transaction.get(templateRef) : null;
+        const currentVersion = existing?.exists() && typeof existing.data().currentVersion?.version === 'number'
+          ? existing.data().currentVersion.version
+          : 0;
+        const version = currentVersion + 1;
+        const versionRef = doc(collection(firestore, 'routeVersions'));
+        const definition = serializeRouteDefinition({ ...route.definition, version });
+        transaction.set(versionRef, {
+          id: versionRef.id,
+          routeTemplateId: templateRef.id,
+          ...definition,
+          createdAt: serverTimestamp(),
+          createdBy: actorId,
+        });
+        transaction.set(templateRef, {
+          id: templateRef.id,
+          name: route.name.trim(),
+          normalizedName: normalizeSearchText(route.name),
+          description: route.description.trim(),
+          notes: route.notes.trim(),
+          status: route.status,
+          currentVersionId: versionRef.id,
+          currentVersion: definition,
+          usedCount: existing?.exists() && typeof existing.data().usedCount === 'number' ? existing.data().usedCount : 0,
+          createdAt: existing?.exists() ? existing.data().createdAt : serverTimestamp(),
+          createdBy: existing?.exists() ? existing.data().createdBy : actorId,
+          updatedAt: serverTimestamp(),
+          updatedBy: actorId,
+        });
+        return { id: templateRef.id, versionId: versionRef.id, version };
+      });
+    } catch (error) {
+      throw mapFirebaseError(error, 'Erro ao salvar rota cadastrada.');
+    }
+  },
+
+  async setRouteTemplateStatus(routeId: string, status: RouteTemplate['status']) {
+    try {
+      await updateDoc(doc(firestore, 'routeTemplates', routeId), {
+        status,
+        updatedAt: serverTimestamp(),
+        updatedBy: auth.currentUser?.uid ?? '',
+      });
+    } catch (error) {
+      throw mapFirebaseError(error, 'Erro ao atualizar rota cadastrada.');
+    }
+  },
+
+  async deleteRouteTemplate(routeId: string) {
+    try {
+      const usedTrips = await getDocs(query(collection(firestore, 'trips'), where('routeTemplateId', '==', routeId), limit(1)));
+      if (!usedTrips.empty) {
+        throw new Error('A rota ja foi utilizada. Inative o cadastro para preservar o historico.');
+      }
+      const versions = await getDocs(query(collection(firestore, 'routeVersions'), where('routeTemplateId', '==', routeId), limit(450)));
+      const batch = writeBatch(firestore);
+      for (const version of versions.docs) {
+        batch.delete(version.ref);
+      }
+      batch.delete(doc(firestore, 'routeTemplates', routeId));
+      await batch.commit();
+    } catch (error) {
+      throw mapFirebaseError(error, 'Erro ao excluir rota cadastrada.');
+    }
   },
 
   async markDeliveryReceiptDelivered(receipt: DeliveryReceipt) {
@@ -286,6 +528,10 @@ export const adminWriteRepository = {
         })),
         routeId: trip.routeId?.trim() ?? '',
         routeName: trip.routeName?.trim() ?? '',
+        routeTemplateId: trip.routeTemplateId?.trim() ?? '',
+        routeVersionId: trip.routeVersionId?.trim() ?? '',
+        routeSnapshot: trip.routeSnapshot ? serializeTripRouteSnapshot(trip.routeSnapshot) : null,
+        routeLocationIds: trip.routeSnapshot?.locationIds ?? [],
         originLocationId: trip.originLocationId?.trim() ?? '',
         destinationLocationId: trip.destinationLocationId?.trim() ?? '',
         originLocation: trip.originLocation ?? null,
@@ -324,6 +570,9 @@ export const adminWriteRepository = {
           completedAt: null,
           deliveryDocs: [],
         });
+        if (trip.routeTemplateId) {
+          batch.update(doc(firestore, 'routeTemplates', trip.routeTemplateId), { usedCount: increment(1) });
+        }
         batch.set(unloadingRef, {
           ...data,
           id: unloadingRef.id,
@@ -353,6 +602,7 @@ export const adminWriteRepository = {
             originLocationId: data.destinationLocationId ?? '',
             destinationLocationId: data.originLocationId ?? '',
             routeName: data.routeName ? `${data.routeName} - Retorno` : '',
+            routeSnapshot: data.routeSnapshot ? reverseRouteSnapshot(data.routeSnapshot as TripRouteSnapshot) : null,
             routeStops: returnStops,
             status: 'pending',
             scheduledAt: scheduledGeneratedAt,
@@ -382,6 +632,7 @@ export const adminWriteRepository = {
             originLocationId: data.destinationLocationId ?? '',
             destinationLocationId: data.originLocationId ?? '',
             routeName: data.routeName ? `${data.routeName} - Retorno` : '',
+            routeSnapshot: data.routeSnapshot ? reverseRouteSnapshot(data.routeSnapshot as TripRouteSnapshot) : null,
             routeStops: returnStops,
             status: 'in_progress',
             scheduledAt: scheduledReturnUnloadingAt,
@@ -408,6 +659,9 @@ export const adminWriteRepository = {
           completedAt: null,
           deliveryDocs: [],
         });
+        if (trip.routeTemplateId) {
+          await updateDoc(doc(firestore, 'routeTemplates', trip.routeTemplateId), { usedCount: increment(1) });
+        }
         return trip.id;
       }
 
@@ -418,6 +672,9 @@ export const adminWriteRepository = {
         deliveryDocs: [],
       });
       await updateDoc(created, { id: created.id });
+      if (trip.routeTemplateId) {
+        await updateDoc(doc(firestore, 'routeTemplates', trip.routeTemplateId), { usedCount: increment(1) });
+      }
       return created.id;
     } catch (error) {
       throw mapFirebaseError(error, 'Erro ao salvar programacao.');
@@ -538,6 +795,116 @@ export const adminWriteRepository = {
     }
   },
 };
+
+function serializeRouteDefinition(definition: RouteVersionDefinition) {
+  return {
+    version: Math.max(1, Math.trunc(definition.version)),
+    points: definition.points.map((point, index) => ({
+      id: point.id,
+      type: point.type,
+      sequence: index,
+      locationId: point.locationId,
+      reference: point.reference,
+      city: point.city,
+      uf: point.uf,
+      address: point.address,
+      latitude: point.latitude,
+      longitude: point.longitude,
+    })),
+    locationIds: [...new Set(definition.locationIds.filter(Boolean))],
+    distanceMeters: Math.max(0, Math.round(definition.distanceMeters)),
+    durationSeconds: Math.max(0, Math.round(definition.durationSeconds)),
+    encodedPolyline: definition.encodedPolyline,
+    path: definition.path.map((point) => ({ latitude: point.latitude, longitude: point.longitude })),
+  };
+}
+
+function serializeTripRouteSnapshot(snapshot: TripRouteSnapshot) {
+  return {
+    routeTemplateId: snapshot.routeTemplateId,
+    routeVersionId: snapshot.routeVersionId,
+    name: snapshot.name,
+    ...serializeRouteDefinition(snapshot),
+  };
+}
+
+function reverseRouteSnapshot(snapshot: TripRouteSnapshot): TripRouteSnapshot {
+  const points = [...snapshot.points].reverse().map((point, index, items) => ({
+    ...point,
+    id: `${point.id}-return`,
+    sequence: index,
+    type: index === 0 ? 'origin' as const : index === items.length - 1 ? 'destination' as const : point.type,
+  }));
+  return {
+    ...snapshot,
+    name: snapshot.name ? `${snapshot.name} - Retorno` : 'Rota de retorno',
+    points,
+    locationIds: points.map((point) => point.locationId).filter(Boolean),
+    path: [...snapshot.path].reverse(),
+    encodedPolyline: encodePolyline([...snapshot.path].reverse()),
+  };
+}
+
+function encodePolyline(path: Array<{ latitude: number; longitude: number }>) {
+  let previousLatitude = 0;
+  let previousLongitude = 0;
+  let result = '';
+  for (const point of path) {
+    const latitude = Math.round(point.latitude * 1e5);
+    const longitude = Math.round(point.longitude * 1e5);
+    result += encodePolylineValue(latitude - previousLatitude);
+    result += encodePolylineValue(longitude - previousLongitude);
+    previousLatitude = latitude;
+    previousLongitude = longitude;
+  }
+  return result;
+}
+
+function encodePolylineValue(value: number) {
+  let encoded = '';
+  let shifted = value < 0 ? ~(value << 1) : value << 1;
+  while (shifted >= 0x20) {
+    encoded += String.fromCharCode((0x20 | (shifted & 0x1f)) + 63);
+    shifted >>= 5;
+  }
+  return encoded + String.fromCharCode(shifted + 63);
+}
+
+function normalizeSearchText(value: string) {
+  return value
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, ' ')
+    .trim();
+}
+
+function buildLocalityFingerprint(value: {
+  reference: string;
+  city: string;
+  uf: string;
+  address: string;
+  latitude: number | null;
+  longitude: number | null;
+}) {
+  return [
+    normalizeSearchText(value.reference),
+    normalizeSearchText(value.city),
+    value.uf.toUpperCase(),
+    normalizeSearchText(value.address),
+    value.latitude?.toFixed(5) ?? '',
+    value.longitude?.toFixed(5) ?? '',
+  ].join('|');
+}
+
+function chunk<T>(items: T[], size: number) {
+  const result: T[][] = [];
+  for (let index = 0; index < items.length; index += size) {
+    result.push(items.slice(index, index + size));
+  }
+  return result;
+}
 
 function addDeliveryProofEvent(
   batch: ReturnType<typeof writeBatch>,

@@ -1,6 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:http/http.dart' as http;
-import 'package:http/testing.dart';
 import 'package:logistica_avapex_mobile/features/trips/data/models/trip_model.dart';
 import 'package:logistica_avapex_mobile/features/trips/data/services/trip_route_service.dart';
 
@@ -10,9 +8,9 @@ void main() {
     final uri = TripRouteService.googleMapsDirectionsUri(trip);
 
     expect(uri.host, 'www.google.com');
-    expect(uri.queryParameters['origin'], 'Guarulhos - SP');
-    expect(uri.queryParameters['destination'], 'Santos - SP');
-    expect(uri.queryParameters['waypoints'], 'Cubatao - SP');
+    expect(uri.queryParameters['origin'], '-23.4,-46.5');
+    expect(uri.queryParameters['destination'], '-23.95,-46.33');
+    expect(uri.queryParameters['waypoints'], '-23.9,-46.4');
   });
 
   test('builds an in-app static map only when a key is configured', () {
@@ -35,28 +33,9 @@ void main() {
     expect(uri.queryParameters['destination'], '-23.95,-46.33');
   });
 
-  test('uses the Directions API polyline in the route preview', () async {
-    final client = MockClient((request) async {
-      expect(request.url.path, '/maps/api/directions/json');
-      expect(request.url.queryParameters['waypoints'], 'Cubatao - SP');
-      return http.Response(
-        '{"status":"OK","routes":[{"overview_polyline":{"points":"encoded-route"}}]}',
-        200,
-      );
-    });
+  test('uses the saved immutable polyline in the route preview', () async {
+    final mapUri = TripRouteService.staticMapUri(_trip(), apiKey: 'test-key');
 
-    final polyline = await TripRouteService.fetchRoutePolyline(
-      _trip(),
-      apiKey: 'test-key',
-      client: client,
-    );
-    final mapUri = TripRouteService.staticMapUri(
-      _trip(),
-      apiKey: 'test-key',
-      encodedPolyline: polyline,
-    );
-
-    expect(polyline, 'encoded-route');
     expect(mapUri.toString(), contains('enc%3Aencoded-route'));
   });
 }
@@ -88,5 +67,59 @@ Trip _trip({bool structured = false}) {
         longitude: structured ? -46.4 : null,
       ),
     ],
+    routeTemplateId: 'route-template-1',
+    routeVersionId: 'route-version-1',
+    routeSnapshot: TripRouteSnapshot(
+      routeTemplateId: 'route-template-1',
+      routeVersionId: 'route-version-1',
+      name: 'Guarulhos - Santos',
+      version: 1,
+      points: const [
+        TripRoutePoint(
+          id: 'origin',
+          type: TripRoutePointType.origin,
+          sequence: 0,
+          locationId: 'guarulhos',
+          reference: 'Matriz',
+          city: 'Guarulhos',
+          uf: 'SP',
+          address: 'Guarulhos - SP',
+          latitude: -23.4,
+          longitude: -46.5,
+        ),
+        TripRoutePoint(
+          id: 'stop',
+          type: TripRoutePointType.stop,
+          sequence: 1,
+          locationId: 'cubatao',
+          reference: 'Cliente',
+          city: 'Cubatao',
+          uf: 'SP',
+          address: 'Cubatao - SP',
+          latitude: -23.9,
+          longitude: -46.4,
+        ),
+        TripRoutePoint(
+          id: 'destination',
+          type: TripRoutePointType.destination,
+          sequence: 2,
+          locationId: 'santos',
+          reference: 'Porto',
+          city: 'Santos',
+          uf: 'SP',
+          address: 'Santos - SP',
+          latitude: -23.95,
+          longitude: -46.33,
+        ),
+      ],
+      locationIds: const ['guarulhos', 'cubatao', 'santos'],
+      distanceMeters: 95000,
+      durationSeconds: 7200,
+      encodedPolyline: 'encoded-route',
+      path: const [
+        (latitude: -23.4, longitude: -46.5),
+        (latitude: -23.95, longitude: -46.33),
+      ],
+    ),
   );
 }

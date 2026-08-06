@@ -186,3 +186,56 @@ Documentos fixos, somente administradores podem alterar.
 5. Configurações são versionadas e escritas somente por administradores.
 6. A criação de um comprovante e a atualização de `deliveries.proofStatus`/`deliveryProofId` acontecem no mesmo batch.
 7. Aprovação ou rejeição administrativa atualiza comprovante e entrega atomicamente e gera um `routeEvent` imutável.
+
+## 6. Localidades e Rotas Planejadas
+
+O catálogo de rotas planejadas é separado da coleção operacional `routes`. A coleção `routes` continua representando execuções acompanhadas por motorista, data e GPS. Templates reutilizáveis ficam em `routeTemplates` e cada alteração gera uma versão imutável em `routeVersions`.
+
+### Coleção: `localities`
+* `id` (string, PK gerada pelo Firestore; a referência importada nunca é chave única)
+* `reference`, `normalizedReference` (string)
+* `city`, `normalizedCity`, `uf` (string)
+* `address`, `normalizedAddress` (string)
+* `latitude`, `longitude` (number ou null)
+* `originalCoordinates` (string)
+* `status` (string: `active` | `inactive`)
+* `needsReview` (boolean)
+* `source` (string: `import` | `manual`)
+* `sourceRow` (number ou null)
+* `fingerprint` (string composta para detectar apenas duplicidades exatas)
+* `createdAt`, `updatedAt` (timestamp)
+* `createdBy`, `updatedBy` (string)
+
+### Coleção: `routeTemplates`
+* `id` (string, PK)
+* `name`, `normalizedName`, `description`, `notes` (string)
+* `status` (string: `active` | `inactive`)
+* `currentVersionId` (string, FK -> routeVersions)
+* `currentVersion` (map denormalizado da versão atual para listagem sem leitura adicional)
+* `usedCount` (number)
+* `createdAt`, `updatedAt` (timestamp)
+* `createdBy`, `updatedBy` (string)
+
+### Coleção: `routeVersions`
+Versões são append-only: podem ser criadas ou excluídas junto de um template nunca utilizado, mas não podem ser alteradas.
+* `id` (string, PK)
+* `routeTemplateId` (string, FK -> routeTemplates)
+* `version` (number incremental)
+* `points` (array ordenado de `{ id, type, sequence, locationId, reference, city, uf, address, latitude, longitude }`)
+* `locationIds` (array de string para integridade e consultas de relacionamento)
+* `distanceMeters`, `durationSeconds` (number)
+* `encodedPolyline` (string)
+* `path` (array de `{ latitude, longitude }`)
+* `createdAt` (timestamp)
+* `createdBy` (string)
+
+Tipos de ponto permitidos: `origin`, `stop`, `via` e `destination`. Pontos `via` podem ter `locationId` vazio e servem apenas para preservar o trajeto planejado.
+
+### Snapshot em `trips`
+Ao selecionar uma rota na Programação, a viagem recebe `routeTemplateId`, `routeVersionId` e `routeSnapshot`. O snapshot repete nome, versão, pontos, IDs de localidades, distância, duração, polyline e path. Ele é a fonte da rota no mobile e nunca acompanha edições futuras do template.
+
+### Regras de acesso
+1. Somente administradores ativos leem ou alteram `localities`, `routeTemplates` e `routeVersions`.
+2. Motoristas recebem a rota exclusivamente pelo snapshot da própria viagem atribuída.
+3. Localidades com `needsReview == true`, coordenadas ausentes ou status inativo não podem ser escolhidas no Roteirizador.
+4. Templates já usados não são excluídos; devem ser inativados para preservar o histórico.

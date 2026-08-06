@@ -9,12 +9,71 @@ import type {
   DriverEquipment,
   FuelingRecord,
   GeoLocation,
+  Locality,
   OperationalSettings,
   RouteEvent,
   RoutePlan,
+  RouteTemplate,
+  RouteTemplatePoint,
+  RouteVersion,
+  RouteVersionDefinition,
   Trip,
+  TripRouteSnapshot,
   Vehicle,
 } from '../domain/models';
+
+export function mapLocality(id: string, data: Record<string, unknown>): Locality {
+  return {
+    id: readString(data.id, id),
+    reference: readString(data.reference),
+    normalizedReference: readString(data.normalizedReference),
+    city: readString(data.city),
+    normalizedCity: readString(data.normalizedCity),
+    uf: readString(data.uf),
+    address: readString(data.address),
+    normalizedAddress: readString(data.normalizedAddress),
+    latitude: readNullableNumber(data.latitude),
+    longitude: readNullableNumber(data.longitude),
+    originalCoordinates: readString(data.originalCoordinates),
+    status: data.status === 'inactive' ? 'inactive' : 'active',
+    needsReview: readBoolean(data.needsReview),
+    source: data.source === 'import' ? 'import' : 'manual',
+    sourceRow: readNullableNumber(data.sourceRow),
+    fingerprint: readString(data.fingerprint),
+    createdAt: readDate(data.createdAt),
+    createdBy: readString(data.createdBy),
+    updatedAt: readDate(data.updatedAt),
+    updatedBy: readString(data.updatedBy),
+  };
+}
+
+export function mapRouteTemplate(id: string, data: Record<string, unknown>): RouteTemplate {
+  return {
+    id: readString(data.id, id),
+    name: readString(data.name),
+    normalizedName: readString(data.normalizedName),
+    description: readString(data.description),
+    notes: readString(data.notes),
+    status: data.status === 'inactive' ? 'inactive' : 'active',
+    currentVersionId: readString(data.currentVersionId),
+    currentVersion: mapRouteVersionDefinition(data.currentVersion),
+    usedCount: readNumber(data.usedCount),
+    createdAt: readDate(data.createdAt),
+    createdBy: readString(data.createdBy),
+    updatedAt: readDate(data.updatedAt),
+    updatedBy: readString(data.updatedBy),
+  };
+}
+
+export function mapRouteVersion(id: string, data: Record<string, unknown>): RouteVersion {
+  return {
+    id: readString(data.id, id),
+    routeTemplateId: readString(data.routeTemplateId),
+    ...mapRouteVersionDefinition(data),
+    createdAt: readDate(data.createdAt),
+    createdBy: readString(data.createdBy),
+  };
+}
 
 export function mapUser(id: string, data: Record<string, unknown>): AppUser {
   const cnh = readRecord(data.cnh);
@@ -208,6 +267,9 @@ export function mapTrip(id: string, data: Record<string, unknown>): Trip {
     originLocation: data.originLocation ? mapAddress(data.originLocation) : undefined,
     destinationLocation: data.destinationLocation ? mapAddress(data.destinationLocation) : undefined,
     routeStops,
+    routeTemplateId: readString(data.routeTemplateId),
+    routeVersionId: readString(data.routeVersionId),
+    routeSnapshot: mapTripRouteSnapshot(data.routeSnapshot),
   };
 }
 
@@ -514,8 +576,70 @@ function readNumber(value: unknown, fallback = 0) {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 }
 
+function readNullableNumber(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
 function readBoolean(value: unknown, fallback = false) {
   return typeof value === 'boolean' ? value : fallback;
+}
+
+function mapRouteVersionDefinition(value: unknown): RouteVersionDefinition {
+  const data = readRecord(value);
+  const points = Array.isArray(data.points)
+    ? data.points.map(mapRouteTemplatePoint).filter((point) => point.id && point.address)
+    : [];
+  const path = Array.isArray(data.path)
+    ? data.path
+        .map((item) => readRecord(item))
+        .map((item) => ({ latitude: readNumber(item.latitude), longitude: readNumber(item.longitude) }))
+        .filter((item) => validCoordinate(item.latitude, item.longitude))
+    : [];
+  return {
+    version: Math.max(0, Math.trunc(readNumber(data.version))),
+    points,
+    locationIds: readStringList(data.locationIds),
+    distanceMeters: Math.max(0, readNumber(data.distanceMeters)),
+    durationSeconds: Math.max(0, readNumber(data.durationSeconds)),
+    encodedPolyline: readString(data.encodedPolyline),
+    path,
+  };
+}
+
+function mapRouteTemplatePoint(value: unknown): RouteTemplatePoint {
+  const data = readRecord(value);
+  const type = data.type === 'stop' || data.type === 'via' || data.type === 'destination'
+    ? data.type
+    : 'origin';
+  return {
+    id: readString(data.id),
+    type,
+    sequence: Math.max(0, Math.trunc(readNumber(data.sequence))),
+    locationId: readString(data.locationId),
+    reference: readString(data.reference),
+    city: readString(data.city),
+    uf: readString(data.uf),
+    address: readString(data.address),
+    latitude: readNumber(data.latitude),
+    longitude: readNumber(data.longitude),
+  };
+}
+
+function mapTripRouteSnapshot(value: unknown): TripRouteSnapshot | undefined {
+  const data = readRecord(value);
+  if (!readString(data.routeTemplateId) || !readString(data.routeVersionId)) {
+    return undefined;
+  }
+  return {
+    routeTemplateId: readString(data.routeTemplateId),
+    routeVersionId: readString(data.routeVersionId),
+    name: readString(data.name),
+    ...mapRouteVersionDefinition(data),
+  };
+}
+
+function validCoordinate(latitude: number, longitude: number) {
+  return latitude >= -90 && latitude <= 90 && longitude >= -180 && longitude <= 180;
 }
 
 function mapAddress(value: unknown): AddressSnapshot {

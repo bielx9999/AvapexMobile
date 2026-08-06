@@ -123,6 +123,14 @@
         { "fieldPath": "deliveryId", "order": "ASCENDING" },
         { "fieldPath": "occurredAt", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "routeVersions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "routeTemplateId", "order": "ASCENDING" },
+        { "fieldPath": "version", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

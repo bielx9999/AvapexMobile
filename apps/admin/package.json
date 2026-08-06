@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "preview": "vite preview --host 0.0.0.0",
     "test:rules": "node --test tests/firestore.rules.test.mjs",
+    "test:localities": "node --experimental-strip-types --test tests/locality-import.test.mjs",
     "test:storage-rules": "node --test tests/storage.rules.test.mjs"
   },
   "dependencies": {
@@ -20,6 +21,7 @@
     "react": "^19.2.0",
     "react-apexcharts": "^2.1.1",
     "react-dom": "^19.2.0",
+    "read-excel-file": "^9.3.5",
     "vite": "^7.2.6"
   },
   "devDependencies": {

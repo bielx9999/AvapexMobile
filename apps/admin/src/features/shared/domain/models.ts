@@ -30,6 +30,10 @@ export type FuelType = 'diesel' | 'arla';
 export type EquipmentType = 'strap' | 'ratchet' | 'chain' | 'tensioner';
 export type RouteStatus = 'draft' | 'planned' | 'assigned' | 'in_progress' | 'completed' | 'cancelled';
 export type RouteOptimizationStatus = 'not_requested' | 'processing' | 'optimized' | 'failed';
+export type LocalityStatus = 'active' | 'inactive';
+export type LocalitySource = 'import' | 'manual';
+export type RouteTemplateStatus = 'active' | 'inactive';
+export type RoutePointType = 'origin' | 'stop' | 'via' | 'destination';
 export type DeliveryStatus = 'pending' | 'in_route' | 'arrived' | 'delivered' | 'not_delivered' | 'cancelled';
 export type DeliveryProofStatus = 'pending' | 'submitted' | 'approved' | 'rejected';
 export type RouteEventSource = 'admin' | 'driver' | 'system';
@@ -90,6 +94,81 @@ export type TripRouteStop = {
   longitude?: number;
   locationId?: string;
   order?: number;
+};
+
+export type Locality = {
+  id: string;
+  reference: string;
+  normalizedReference: string;
+  city: string;
+  normalizedCity: string;
+  uf: string;
+  address: string;
+  normalizedAddress: string;
+  latitude: number | null;
+  longitude: number | null;
+  originalCoordinates: string;
+  status: LocalityStatus;
+  needsReview: boolean;
+  source: LocalitySource;
+  sourceRow: number | null;
+  fingerprint: string;
+  createdAt: Date | null;
+  createdBy: string;
+  updatedAt: Date | null;
+  updatedBy: string;
+};
+
+export type RouteTemplatePoint = {
+  id: string;
+  type: RoutePointType;
+  sequence: number;
+  locationId: string;
+  reference: string;
+  city: string;
+  uf: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+};
+
+export type RouteVersionDefinition = {
+  version: number;
+  points: RouteTemplatePoint[];
+  locationIds: string[];
+  distanceMeters: number;
+  durationSeconds: number;
+  encodedPolyline: string;
+  path: Array<{ latitude: number; longitude: number }>;
+};
+
+export type RouteVersion = RouteVersionDefinition & {
+  id: string;
+  routeTemplateId: string;
+  createdAt: Date | null;
+  createdBy: string;
+};
+
+export type RouteTemplate = {
+  id: string;
+  name: string;
+  normalizedName: string;
+  description: string;
+  notes: string;
+  status: RouteTemplateStatus;
+  currentVersionId: string;
+  currentVersion: RouteVersionDefinition;
+  usedCount: number;
+  createdAt: Date | null;
+  createdBy: string;
+  updatedAt: Date | null;
+  updatedBy: string;
+};
+
+export type TripRouteSnapshot = RouteVersionDefinition & {
+  routeTemplateId: string;
+  routeVersionId: string;
+  name: string;
 };
 
 export type AppUser = {
@@ -169,6 +248,9 @@ export type Trip = {
   originLocation?: AddressSnapshot;
   destinationLocation?: AddressSnapshot;
   routeStops?: TripRouteStop[];
+  routeTemplateId?: string;
+  routeVersionId?: string;
+  routeSnapshot?: TripRouteSnapshot;
 };
 
 export type RoutePlan = {

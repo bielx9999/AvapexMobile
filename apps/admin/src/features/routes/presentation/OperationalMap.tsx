@@ -1,6 +1,6 @@
-import { importLibrary, setOptions } from '@googlemaps/js-api-loader';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { MapPin, Navigation, Route as RouteIcon, Truck } from 'lucide-react';
+import { ensureGoogleMaps, googleMapsMapId } from '../../../core/googleMaps/googleMapsLoader';
 import type { Delivery, GeoLocation, RoutePlan, Trip } from '../../shared/domain/models';
 
 type OperationalMapProps = {
@@ -31,8 +31,6 @@ type GoogleMapsLibraries = {
 
 const defaultCenter: Coordinates = { lat: -23.5505, lng: -46.6333 };
 const onlineWindowMs = 3 * 60 * 1000;
-const googleMapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY?.trim() ?? '';
-const googleMapsMapId = import.meta.env.VITE_GOOGLE_MAPS_MAP_ID?.trim() || 'DEMO_MAP_ID';
 let googleMapsLibrariesPromise: Promise<GoogleMapsLibraries> | null = null;
 
 export function OperationalMap({ deliveries, routes, trips }: OperationalMapProps) {
@@ -338,20 +336,8 @@ function GoogleOperationalMap({
 }
 
 function loadGoogleMaps() {
-  if (!googleMapsApiKey) {
-    return Promise.reject(new Error('Configure VITE_GOOGLE_MAPS_API_KEY para exibir o mapa.'));
-  }
   if (!googleMapsLibrariesPromise) {
-    setOptions({
-      key: googleMapsApiKey,
-      language: 'pt-BR',
-      region: 'BR',
-      v: 'weekly',
-    });
-    googleMapsLibrariesPromise = Promise.all([
-      importLibrary('maps'),
-      importLibrary('marker'),
-    ]).then(() => ({
+    googleMapsLibrariesPromise = ensureGoogleMaps(['maps', 'marker']).then(() => ({
       AdvancedMarkerElement: google.maps.marker.AdvancedMarkerElement,
       InfoWindow: google.maps.InfoWindow,
       LatLngBounds: google.maps.LatLngBounds,

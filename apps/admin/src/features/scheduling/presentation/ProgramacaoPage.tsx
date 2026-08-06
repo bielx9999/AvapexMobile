@@ -19,10 +19,10 @@ import { adminWriteRepository } from '../../shared/data/firestoreCollections';
 import { EmptyState, ErrorBanner } from '../../shared/presentation/ui';
 import type {
   AppUser,
-  Delivery,
+  Locality,
   ProgrammingOperationType,
   ProgrammingStatus,
-  RoutePlan,
+  RouteTemplate,
   Trip,
   Vehicle,
 } from '../../shared/domain/models';
@@ -37,8 +37,8 @@ import {
 type ProgramacaoPageProps = {
   loading: boolean;
   onChanged: () => Promise<void>;
-  deliveries: Delivery[];
-  routes: RoutePlan[];
+  localities: Locality[];
+  routeTemplates: RouteTemplate[];
   trips: Trip[];
   users: AppUser[];
   vehicles: Vehicle[];
@@ -52,7 +52,7 @@ const stageCards: Array<{ status: ProgrammingStatus; label: string }> = [
   { status: 'released', label: 'Liberado' },
 ];
 
-export function ProgramacaoPage({ deliveries, loading, onChanged, routes, trips, users, vehicles }: ProgramacaoPageProps) {
+export function ProgramacaoPage({ loading, localities, onChanged, routeTemplates, trips, users, vehicles }: ProgramacaoPageProps) {
   const today = new Date().toISOString().slice(0, 10);
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | DailyStatusValue>('all');
@@ -342,12 +342,12 @@ export function ProgramacaoPage({ deliveries, loading, onChanged, routes, trips,
       {showForm ? (
         <ProgramacaoForm
           clientNames={clientNames}
-          deliveries={deliveries}
           drivers={drivers}
           editingTrip={editingTrip}
+          localities={localities}
           onCancel={closeForm}
           onSaved={handleFormSaved}
-          routes={routes}
+          routeTemplates={routeTemplates}
           vehicles={activeVehicles}
         />
       ) : null}

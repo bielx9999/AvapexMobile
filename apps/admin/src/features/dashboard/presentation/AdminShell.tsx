@@ -8,7 +8,9 @@ import {
   Fuel,
   LogOut,
   MapPinned,
+  MapPin,
   Menu,
+  Navigation,
   PanelLeftClose,
   PanelLeftOpen,
   Route,
@@ -20,7 +22,7 @@ import {
 import avapexLogo from '../../../assets/images/avapex_transportes_logo.png';
 import { logoutAdmin, type AdminSession } from '../../auth/data/authRepository';
 
-export type AdminPage = 'scheduling' | 'routes' | 'checklists' | 'receipts' | 'fueling' | 'users' | 'vehicles';
+export type AdminPage = 'scheduling' | 'route-planner' | 'routes' | 'checklists' | 'receipts' | 'fueling' | 'users' | 'vehicles' | 'localities';
 
 type NavSection = {
   icon: LucideIcon;
@@ -34,6 +36,7 @@ const navSections: NavSection[] = [
     label: 'Operacao',
     items: [
       { icon: Route, key: 'scheduling', label: 'Programacao' },
+      { icon: Navigation, key: 'route-planner', label: 'Roteirizador' },
       { icon: MapPinned, key: 'routes', label: 'Rotas' },
       { icon: ClipboardCheck, key: 'checklists', label: 'Checklists' },
       { icon: FileCheck2, key: 'receipts', label: 'Comprovantes' },
@@ -46,6 +49,7 @@ const navSections: NavSection[] = [
     items: [
       { icon: Users, key: 'users', label: 'Usuarios' },
       { icon: Truck, key: 'vehicles', label: 'Veiculos' },
+      { icon: MapPin, key: 'localities', label: 'Localidades' },
     ],
   },
 ];

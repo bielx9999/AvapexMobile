@@ -17,13 +17,14 @@ import { adminWriteRepository } from '../../../shared/data/firestoreCollections'
 import type {
   AddressSnapshot,
   AppUser,
-  Delivery,
+  Locality,
   ProgrammingOperationType,
   ProgrammedVehicleType,
-  RoutePlan,
+  RouteTemplate,
   Trip,
   TripCteDocument,
   TripRouteStop,
+  TripRouteSnapshot,
   Vehicle,
 } from '../../../shared/domain/models';
 import {
@@ -37,12 +38,12 @@ import { SearchableCombobox, type ComboboxOption } from './SearchableCombobox';
 
 type ProgramacaoFormProps = {
   clientNames: string[];
-  deliveries: Delivery[];
   drivers: AppUser[];
   editingTrip: Trip | null;
+  localities: Locality[];
   onCancel: () => void;
   onSaved: (result: { created: boolean; operationType: ProgrammingOperationType; returnTrip: boolean; scheduledAt: Date }) => Promise<void>;
-  routes: RoutePlan[];
+  routeTemplates: RouteTemplate[];
   vehicles: Vehicle[];
 };
 
@@ -53,14 +54,18 @@ type ProgramacaoFormState = {
   customerRequestNumber: string;
   destination: string;
   destinationLocation?: AddressSnapshot;
+  destinationLocationId: string;
   driverId: string;
   expectedArrivalAt: string;
   operationType: ProgrammingOperationType;
   origin: string;
   originLocation?: AddressSnapshot;
+  originLocationId: string;
   returnTrip: boolean;
-  routeId: string;
+  routeTemplateId: string;
+  routeVersionId: string;
   routeName: string;
+  routeSnapshot?: TripRouteSnapshot;
   routeStops: TripRouteStop[];
   scheduledAt: string;
   statusValue: DailyStatusValue;
@@ -69,12 +74,12 @@ type ProgramacaoFormState = {
 
 export function ProgramacaoForm({
   clientNames,
-  deliveries,
   drivers,
   editingTrip,
+  localities,
   onCancel,
   onSaved,
-  routes,
+  routeTemplates,
   vehicles,
 }: ProgramacaoFormProps) {
   const [form, setForm] = useState<ProgramacaoFormState>(() => initialForm(editingTrip));
@@ -83,8 +88,8 @@ export function ProgramacaoForm({
   const [submitError, setSubmitError] = useState('');
 
   const selectedVehicle = vehicles.find((vehicle) => vehicle.id === form.vehicleId);
-  const selectedRoute = routes.find((route) => route.id === form.routeId);
-  const locationSnapshots = useMemo(() => collectLocationSnapshots(routes), [routes]);
+  const selectedRoute = routeTemplates.find((route) => route.id === form.routeTemplateId);
+  const locationSnapshots = useMemo(() => collectLocationSnapshots(localities), [localities]);
   const clientOptions = useMemo<ComboboxOption[]>(
     () => clientNames.map((name) => ({ label: name, value: name })),
     [clientNames],
@@ -108,13 +113,13 @@ export function ProgramacaoForm({
     [vehicles],
   );
   const routeOptions = useMemo<ComboboxOption[]>(
-    () => routes.map((routePlan) => ({
-      value: routePlan.id,
-      label: routePlan.code || `${routePlan.startAddress.formattedAddress} - ${routePlan.endAddress.formattedAddress}`,
-      description: `${routePlan.startAddress.formattedAddress} -> ${routePlan.endAddress.formattedAddress}`,
-      searchText: `${routePlan.code} ${routePlan.startAddress.formattedAddress} ${routePlan.endAddress.formattedAddress}`,
+    () => routeTemplates.filter((routeTemplate) => routeTemplate.status === 'active' || routeTemplate.id === form.routeTemplateId).map((routeTemplate) => ({
+      value: routeTemplate.id,
+      label: routeTemplate.name,
+      description: routeDescription(routeTemplate),
+      searchText: `${routeTemplate.name} ${routeTemplate.description} ${routeDescription(routeTemplate)}`,
     })),
-    [routes],
+    [form.routeTemplateId, routeTemplates],
   );
   const locationOptions = useMemo<ComboboxOption[]>(
     () => locationSnapshots.map((location) => ({
@@ -148,47 +153,70 @@ export function ProgramacaoForm({
     }));
   }
 
-  function selectRoute(routeId: string) {
-    if (!routeId) {
-      setForm((current) => ({ ...current, routeId: '', routeName: '', routeStops: [] }));
+  function selectRoute(routeTemplateId: string) {
+    if (!routeTemplateId) {
+      setForm((current) => ({
+        ...current,
+        routeTemplateId: '',
+        routeVersionId: '',
+        routeName: '',
+        routeSnapshot: undefined,
+        routeStops: [],
+      }));
       return;
     }
-    const routePlan = routes.find((route) => route.id === routeId);
-    if (!routePlan) {
+    const routeTemplate = routeTemplates.find((route) => route.id === routeTemplateId);
+    if (!routeTemplate) {
       return;
     }
-    const routeStops = deliveries
-      .filter((delivery) => delivery.routeId === routeId)
-      .sort((a, b) => a.sequence - b.sequence)
-      .map<TripRouteStop>((delivery, index) => ({
-        name: delivery.clientName || `Parada ${index + 1}`,
-        address: delivery.address.formattedAddress,
-        latitude: delivery.address.latitude,
-        longitude: delivery.address.longitude,
-        locationId: '',
+    const definition = routeTemplate.currentVersion;
+    const originPoint = definition.points.find((point) => point.type === 'origin');
+    const destinationPoint = definition.points.find((point) => point.type === 'destination');
+    if (!originPoint || !destinationPoint) {
+      return;
+    }
+    const routeStops = definition.points
+      .filter((point) => point.type === 'stop')
+      .map<TripRouteStop>((point, index) => ({
+        name: point.reference || `Parada ${index + 1}`,
+        address: point.address,
+        latitude: point.latitude,
+        longitude: point.longitude,
+        locationId: point.locationId,
         order: index + 1,
-      }))
-      .filter((stop) => stop.address !== routePlan.startAddress.formattedAddress && stop.address !== routePlan.endAddress.formattedAddress);
+      }));
+    const routeSnapshot: TripRouteSnapshot = {
+      routeTemplateId: routeTemplate.id,
+      routeVersionId: routeTemplate.currentVersionId,
+      name: routeTemplate.name,
+      ...definition,
+    };
 
     setForm((current) => ({
       ...current,
-      routeId,
-      routeName: routePlan.code,
-      origin: routePlan.startAddress.formattedAddress,
-      destination: routePlan.endAddress.formattedAddress,
-      originLocation: routePlan.startAddress,
-      destinationLocation: routePlan.endAddress,
+      routeTemplateId,
+      routeVersionId: routeTemplate.currentVersionId,
+      routeName: routeTemplate.name,
+      routeSnapshot,
+      origin: originPoint.address,
+      destination: destinationPoint.address,
+      originLocationId: originPoint.locationId,
+      destinationLocationId: destinationPoint.locationId,
+      originLocation: pointAddress(originPoint),
+      destinationLocation: pointAddress(destinationPoint),
       routeStops,
     }));
-    setErrors((current) => ({ ...current, routeId: '', origin: '', destination: '' }));
+    setErrors((current) => ({ ...current, routeTemplateId: '', origin: '', destination: '' }));
   }
 
   function selectLocation(field: 'origin' | 'destination', value: string) {
     const snapshot = locationSnapshots.find((location) => location.formattedAddress === value);
+    const localityId = localities.find((locality) => locality.address === value)?.id ?? '';
     setForm((current) => ({
       ...current,
       [field]: value,
       [field === 'origin' ? 'originLocation' : 'destinationLocation']: snapshot,
+      [field === 'origin' ? 'originLocationId' : 'destinationLocationId']: localityId,
     }));
     setErrors((current) => ({ ...current, [field]: '' }));
   }
@@ -244,7 +272,7 @@ export function ProgramacaoForm({
         customerRequestNumber: form.customerRequestNumber,
         destination: form.destination,
         destinationLocation: form.destinationLocation,
-        destinationLocationId: editingTrip?.destinationLocationId ?? '',
+        destinationLocationId: form.destinationLocationId,
         driverId: form.driverId,
         driverName: driver.name || driver.email,
         driverRejection: assignmentChanged ? null : editingTrip?.driverRejection,
@@ -258,13 +286,16 @@ export function ProgramacaoForm({
         operationalStatus: selectedStatus.operationalStatus,
         origin: form.origin,
         originLocation: form.originLocation,
-        originLocationId: editingTrip?.originLocationId ?? '',
+        originLocationId: form.originLocationId,
         programmedVehicleType: inferProgrammedVehicleType(vehicle, editingTrip?.programmedVehicleType),
         programmingStatus: selectedStatus.programmingStatus,
         returnTrip: form.returnTrip,
-        routeId: form.routeId,
+        routeId: editingTrip?.routeId ?? '',
         routeName: form.routeName,
         routeStops: form.routeStops,
+        routeTemplateId: form.routeTemplateId,
+        routeVersionId: form.routeVersionId,
+        routeSnapshot: form.routeSnapshot,
         scheduledAt,
         status: selectedStatus.programmingStatus === 'released' ? 'completed' : selectedStatus.programmingStatus === 'loading' ? 'pending' : 'in_progress',
         vehicleId: form.vehicleId,
@@ -337,12 +368,12 @@ export function ProgramacaoForm({
             </FormSection>
 
             <FormSection description="Selecione uma rota existente ou use localidades ja conhecidas pelo sistema." icon={<Route size={18} />} title="Rota da viagem">
-              <SearchableCombobox icon={<Route size={15} />} label="Rota cadastrada" onChange={selectRoute} options={routeOptions} placeholder="Selecione uma rota" value={form.routeId} />
+              <SearchableCombobox icon={<Route size={15} />} label="Rota cadastrada" onChange={selectRoute} options={routeOptions} placeholder="Selecione uma rota" value={form.routeTemplateId} />
               <div className="mt-4 grid gap-4 md:grid-cols-2">
-                <SearchableCombobox allowCustom disabled={Boolean(form.routeId)} error={errors.origin} icon={<MapPin size={15} />} label="Origem" onChange={(value) => selectLocation('origin', value)} options={locationOptions} placeholder="Selecione uma localidade" required value={form.origin} />
-                <SearchableCombobox allowCustom disabled={Boolean(form.routeId)} error={errors.destination} icon={<MapPin size={15} />} label="Destino" onChange={(value) => selectLocation('destination', value)} options={locationOptions} placeholder="Selecione uma localidade" required value={form.destination} />
+                <SearchableCombobox allowCustom disabled={Boolean(form.routeTemplateId)} error={errors.origin} icon={<MapPin size={15} />} label="Origem" onChange={(value) => selectLocation('origin', value)} options={locationOptions} placeholder="Selecione uma localidade" required value={form.origin} />
+                <SearchableCombobox allowCustom disabled={Boolean(form.routeTemplateId)} error={errors.destination} icon={<MapPin size={15} />} label="Destino" onChange={(value) => selectLocation('destination', value)} options={locationOptions} placeholder="Selecione uma localidade" required value={form.destination} />
               </div>
-              {selectedRoute ? <RoutePreview route={selectedRoute} stops={form.routeStops} /> : null}
+              {selectedRoute && form.routeSnapshot ? <RoutePreview definition={form.routeSnapshot} name={form.routeName} stops={form.routeStops} /> : null}
             </FormSection>
 
             <CteDocumentSection documents={form.cteDocuments} errors={errors} onChange={(documents) => updateField('cteDocuments', documents)} />
@@ -382,14 +413,18 @@ function initialForm(trip: Trip | null): ProgramacaoFormState {
     customerRequestNumber: trip?.customerRequestNumber ?? '',
     destination: trip?.destination ?? '',
     destinationLocation: trip?.destinationLocation,
+    destinationLocationId: trip?.destinationLocationId ?? '',
     driverId: trip?.driverId ?? '',
     expectedArrivalAt: formatDateTimeInput(trip?.expectedArrivalAt ?? null),
     operationType: trip?.operationType ?? currentStatus.operationType ?? 'loading',
     origin: trip?.origin ?? '',
     originLocation: trip?.originLocation,
+    originLocationId: trip?.originLocationId ?? '',
     returnTrip: trip?.returnTrip ?? false,
-    routeId: trip?.routeId ?? '',
+    routeTemplateId: trip?.routeTemplateId ?? '',
+    routeVersionId: trip?.routeVersionId ?? '',
     routeName: trip?.routeName ?? '',
+    routeSnapshot: trip?.routeSnapshot,
     routeStops: trip?.routeStops ?? [],
     scheduledAt: formatDateTimeInput(trip?.scheduledAt ?? new Date()),
     statusValue: currentStatus.value,
@@ -465,17 +500,19 @@ function SelectField({ children, icon, label, onChange, value }: { children: Rea
   );
 }
 
-function RoutePreview({ route, stops }: { route: RoutePlan; stops: TripRouteStop[] }) {
-  const points = [route.startAddress.formattedAddress, ...stops.map((stop) => stop.address), route.endAddress.formattedAddress];
+function RoutePreview({ definition, name, stops }: { definition: TripRouteSnapshot; name: string; stops: TripRouteStop[] }) {
+  const origin = definition.points.find((point) => point.type === 'origin');
+  const destination = definition.points.find((point) => point.type === 'destination');
+  const points = [origin?.address ?? '', ...stops.map((stop) => stop.address), destination?.address ?? ''].filter(Boolean);
   return (
     <div className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <strong className="text-sm text-zinc-900">Rota selecionada</strong>
-        <span className="text-xs font-medium text-zinc-500">
-          {points.length} pontos
-          {route.plannedDistanceMeters > 0 ? ` - ${Math.round(route.plannedDistanceMeters / 1000)} km` : ''}
-          {route.plannedDurationSeconds > 0 ? ` - ${formatDuration(route.plannedDurationSeconds)}` : ''}
-        </span>
+        <strong className="text-sm text-zinc-900">{name || 'Rota selecionada'}</strong>
+        <div className="flex items-center gap-3"><span className="text-xs font-medium text-zinc-500">
+            {points.length} pontos
+            {definition.distanceMeters > 0 ? ` - ${Math.round(definition.distanceMeters / 1000)} km` : ''}
+            {definition.durationSeconds > 0 ? ` - ${formatDuration(definition.durationSeconds)}` : ''}
+          </span><a className="inline-flex items-center gap-1 text-xs font-semibold text-zinc-800 underline decoration-zinc-300 underline-offset-4 hover:text-zinc-950" href={googleMapsRouteUrl(definition)} rel="noreferrer" target="_blank"><Navigation size={14} />Visualizar mapa</a></div>
       </div>
       <ol className="mt-3 space-y-0">
         {points.map((point, index) => (
@@ -496,13 +533,54 @@ function VehicleFact({ label, value }: { label: string; value: string }) {
   return <div><span className="block text-[11px] font-medium uppercase text-zinc-500">{label}</span><strong className="mt-0.5 block text-sm text-zinc-900">{value}</strong></div>;
 }
 
-function collectLocationSnapshots(routes: RoutePlan[]) {
+function collectLocationSnapshots(localities: Locality[]) {
   const unique = new Map<string, AddressSnapshot>();
-  for (const route of routes) {
-    unique.set(route.startAddress.formattedAddress.trim().toLocaleLowerCase('pt-BR'), route.startAddress);
-    unique.set(route.endAddress.formattedAddress.trim().toLocaleLowerCase('pt-BR'), route.endAddress);
+  for (const locality of localities) {
+    if (locality.status !== 'active' || locality.latitude === null || locality.longitude === null) continue;
+    const snapshot: AddressSnapshot = {
+      formattedAddress: locality.address,
+      city: locality.city,
+      state: locality.uf,
+      postalCode: '',
+      latitude: locality.latitude,
+      longitude: locality.longitude,
+    };
+    unique.set(locality.address.trim().toLocaleLowerCase('pt-BR'), snapshot);
   }
   return [...unique.values()].filter((location) => location.formattedAddress.trim()).sort((a, b) => a.formattedAddress.localeCompare(b.formattedAddress));
+}
+
+function pointAddress(point: RouteTemplate['currentVersion']['points'][number]): AddressSnapshot {
+  return {
+    formattedAddress: point.address,
+    city: point.city,
+    state: point.uf,
+    postalCode: '',
+    latitude: point.latitude,
+    longitude: point.longitude,
+  };
+}
+
+function routeDescription(routeTemplate: RouteTemplate) {
+  const origin = routeTemplate.currentVersion.points.find((point) => point.type === 'origin');
+  const destination = routeTemplate.currentVersion.points.find((point) => point.type === 'destination');
+  return `${origin?.reference ?? '-'} -> ${destination?.reference ?? '-'}`;
+}
+
+function googleMapsRouteUrl(route: TripRouteSnapshot) {
+  const points = [...route.points].sort((a, b) => a.sequence - b.sequence);
+  const origin = points[0];
+  const destination = points.at(-1);
+  const parameters = new URLSearchParams({
+    api: '1',
+    origin: `${origin?.latitude ?? ''},${origin?.longitude ?? ''}`,
+    destination: `${destination?.latitude ?? ''},${destination?.longitude ?? ''}`,
+    travelmode: 'driving',
+  });
+  if (points.length > 2) {
+    parameters.set('waypoints', points.slice(1, -1).map((point) => `${point.latitude},${point.longitude}`).join('|'));
+  }
+  return `https://www.google.com/maps/dir/?${parameters.toString()}`;
 }
 
 function inferProgrammedVehicleType(vehicle: Vehicle, fallback?: ProgrammedVehicleType): ProgrammedVehicleType {

@@ -286,23 +286,44 @@ final class _RouteSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final points = <({String label, String value})>[
-      (label: 'Origem', value: trip.origin),
-      for (var index = 0; index < trip.routeStops.length; index++)
-        (
-          label: trip.routeStops[index].name.isEmpty
-              ? 'Parada ${index + 1}'
-              : trip.routeStops[index].name,
-          value: trip.routeStops[index].address,
-        ),
-      (label: 'Destino', value: trip.destination),
-    ];
+    final points = _routeDisplayPoints(trip);
+    final routeSnapshot = trip.routeSnapshot;
 
     return _SectionCard(
       title: 'Rota',
       icon: LucideIcons.mapPinned,
       child: Column(
         children: [
+          if (routeSnapshot != null) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF5F5F5),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _RouteFact(
+                      label: 'Distancia',
+                      value: _formatRouteDistance(routeSnapshot.distanceMeters),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _RouteFact(
+                      label: 'Tempo estimado',
+                      value: _formatRouteDuration(
+                        routeSnapshot.durationSeconds,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           for (var index = 0; index < points.length; index++) ...[
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -371,6 +392,80 @@ final class _RouteSection extends StatelessWidget {
   }
 }
 
+final class _RouteFact extends StatelessWidget {
+  const _RouteFact({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            color: Color(0xFF666666),
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(value, style: const TextStyle(fontWeight: FontWeight.w800)),
+      ],
+    );
+  }
+}
+
+List<({String label, String value})> _routeDisplayPoints(Trip trip) {
+  final snapshotPoints = trip.routeSnapshot?.points
+      .where((point) => point.type != TripRoutePointType.via)
+      .toList(growable: false);
+  if (snapshotPoints != null && snapshotPoints.length >= 2) {
+    var stopIndex = 0;
+    return snapshotPoints
+        .map((point) {
+          final label = switch (point.type) {
+            TripRoutePointType.origin => 'Origem',
+            TripRoutePointType.destination => 'Destino',
+            TripRoutePointType.stop =>
+              point.reference.isNotEmpty
+                  ? point.reference
+                  : 'Parada ${++stopIndex}',
+            TripRoutePointType.via => '',
+          };
+          if (point.type == TripRoutePointType.stop &&
+              point.reference.isNotEmpty) {
+            stopIndex++;
+          }
+          return (label: label, value: point.address);
+        })
+        .toList(growable: false);
+  }
+  return <({String label, String value})>[
+    (label: 'Origem', value: trip.origin),
+    for (var index = 0; index < trip.routeStops.length; index++)
+      (
+        label: trip.routeStops[index].name.isEmpty
+            ? 'Parada ${index + 1}'
+            : trip.routeStops[index].name,
+        value: trip.routeStops[index].address,
+      ),
+    (label: 'Destino', value: trip.destination),
+  ];
+}
+
+String _formatRouteDistance(int meters) {
+  return '${(meters / 1000).toStringAsFixed(meters >= 100000 ? 0 : 1)} km';
+}
+
+String _formatRouteDuration(int seconds) {
+  final hours = seconds ~/ 3600;
+  final minutes = ((seconds % 3600) / 60).round();
+  return hours > 0 ? '${hours}h ${minutes}min' : '${minutes}min';
+}
+
 final class _MapSection extends StatefulWidget {
   const _MapSection({required this.trip, required this.onOpenMaps});
 
@@ -390,6 +485,7 @@ final class _MapSectionState extends State<_MapSection> {
     if (oldWidget.trip.id != widget.trip.id ||
         oldWidget.trip.origin != widget.trip.origin ||
         oldWidget.trip.destination != widget.trip.destination ||
+        oldWidget.trip.routeVersionId != widget.trip.routeVersionId ||
         oldWidget.trip.routeStops.length != widget.trip.routeStops.length) {
       _mapUri = TripRouteService.routePreviewUri(widget.trip);
     }

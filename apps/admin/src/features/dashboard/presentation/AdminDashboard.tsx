@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useState } from 'react';
 import { Filter, RefreshCw } from 'lucide-react';
 import type { AdminSession } from '../../auth/data/authRepository';
 import { adminReadRepository } from '../../shared/data/firestoreCollections';
-import type { AppUser, Checklist, Delivery, DeliveryReceipt, FuelingRecord, RoutePlan, Trip, Vehicle } from '../../shared/domain/models';
+import type { AppUser, Checklist, Delivery, DeliveryReceipt, FuelingRecord, Locality, RoutePlan, RouteTemplate, Trip, Vehicle } from '../../shared/domain/models';
 import { ErrorBanner, PageSkeleton } from '../../shared/presentation/ui';
 import { AdminShell, type AdminPage } from './AdminShell';
 
@@ -16,6 +16,8 @@ const ComprovantesPage = lazy(async () => ({
   default: (await import('../../receipts/presentation/ComprovantesPage')).ComprovantesPage,
 }));
 const RotasPage = lazy(async () => ({ default: (await import('../../routes/presentation/RotasPage')).RotasPage }));
+const RoutePlannerPage = lazy(async () => ({ default: (await import('../../route-planner/presentation/RoutePlannerPage')).RoutePlannerPage }));
+const LocalitiesPage = lazy(async () => ({ default: (await import('../../localities/presentation/LocalitiesPage')).LocalitiesPage }));
 const ProgramacaoPage = lazy(async () => ({
   default: (await import('../../scheduling/presentation/ProgramacaoPage')).ProgramacaoPage,
 }));
@@ -32,6 +34,8 @@ type AdminData = {
   receipts: DeliveryReceipt[];
   deliveries: Delivery[];
   routes: RoutePlan[];
+  localities: Locality[];
+  routeTemplates: RouteTemplate[];
   fueling: FuelingRecord[];
 };
 
@@ -43,6 +47,8 @@ const emptyData: AdminData = {
   receipts: [],
   deliveries: [],
   routes: [],
+  localities: [],
+  routeTemplates: [],
   fueling: [],
 };
 
@@ -55,9 +61,11 @@ const pageConfig: Record<AdminPage, { category: string; description: string; tit
   fueling: { category: 'Operacao', description: 'Monitore registros e comprovantes de abastecimento.', title: 'Abastecimento' },
   receipts: { category: 'Operacao', description: 'Valide comprovantes enviados pelos motoristas.', title: 'Comprovantes' },
   routes: { category: 'Operacao', description: 'Visualize trajetos e compartilhe orientacoes de rota.', title: 'Rotas' },
+  'route-planner': { category: 'Operacao', description: 'Monte, visualize e salve rotas utilizadas nas programacoes de transporte.', title: 'Roteirizador' },
   scheduling: { category: 'Operacao', description: 'Planeje e acompanhe cargas e descargas.', title: 'Programacao' },
   users: { category: 'Cadastros', description: 'Gerencie acessos e dados dos usuarios.', title: 'Usuarios' },
   vehicles: { category: 'Cadastros', description: 'Gerencie e acompanhe os veiculos da frota.', title: 'Veiculos' },
+  localities: { category: 'Cadastros', description: 'Gerencie os pontos de origem, destino e parada utilizados nas operacoes.', title: 'Localidades' },
 };
 
 export function AdminDashboard({ session }: AdminDashboardProps) {
@@ -71,7 +79,7 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
     setLoading(true);
     setError('');
     try {
-      const [users, vehicles, trips, routes, checklists, receipts, deliveries, fueling] = await Promise.all([
+      const [users, vehicles, trips, routes, checklists, receipts, deliveries, fueling, localities, routeTemplates] = await Promise.all([
         adminReadRepository.users(),
         adminReadRepository.vehicles(),
         adminReadRepository.trips(),
@@ -80,8 +88,10 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
         adminReadRepository.deliveryReceipts(),
         adminReadRepository.deliveries(),
         adminReadRepository.fuelingRecords(),
+        adminReadRepository.localities(),
+        adminReadRepository.routeTemplates(),
       ]);
-      setData({ users, vehicles, trips, routes, checklists, receipts, deliveries, fueling });
+      setData({ users, vehicles, trips, routes, checklists, receipts, deliveries, fueling, localities, routeTemplates });
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Erro ao carregar painel.');
     } finally {
@@ -116,6 +126,16 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
       (watchError) => setError(watchError.message),
     );
   }, []);
+
+  useEffect(() => adminReadRepository.watchLocalities(
+    (localities) => setData((current) => ({ ...current, localities })),
+    (watchError) => setError(watchError.message),
+  ), []);
+
+  useEffect(() => adminReadRepository.watchRouteTemplates(
+    (routeTemplates) => setData((current) => ({ ...current, routeTemplates })),
+    (watchError) => setError(watchError.message),
+  ), []);
 
   const currentPage = pageConfig[activePage];
   const headerActions = (
@@ -165,16 +185,18 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
         <Suspense fallback={<PageSkeleton />}>
           {activePage === 'scheduling' ? (
             <ProgramacaoPage
-              deliveries={data.deliveries}
+              localities={data.localities}
               loading={loading}
               onChanged={loadData}
-              routes={data.routes}
+              routeTemplates={data.routeTemplates}
               trips={data.trips}
               users={data.users}
               vehicles={data.vehicles}
             />
           ) : activePage === 'routes' ? (
             <RotasPage deliveries={data.deliveries} loading={loading} routes={data.routes} trips={data.trips} />
+          ) : activePage === 'route-planner' ? (
+            <RoutePlannerPage loading={loading} localities={data.localities} onChanged={loadData} routeTemplates={data.routeTemplates} />
           ) : activePage === 'checklists' ? (
             <ChecklistsPage
               checklists={data.checklists}
@@ -195,8 +217,10 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
               loading={loading}
               onChanged={loadData}
             />
-          ) : (
+          ) : activePage === 'vehicles' ? (
             <VehiclesPage vehicles={data.vehicles} loading={loading} onChanged={loadData} />
+          ) : (
+            <LocalitiesPage loading={loading} localities={data.localities} onChanged={loadData} />
           )}
         </Suspense>
       </div>

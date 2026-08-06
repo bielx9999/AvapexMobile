@@ -1,13 +1,16 @@
-import 'dart:convert';
-
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../models/trip_model.dart';
 
 abstract final class TripRouteService {
   static List<String> routePoints(Trip trip) {
+    final snapshotPoints = trip.routeSnapshot?.points;
+    if (snapshotPoints != null && snapshotPoints.length >= 2) {
+      return snapshotPoints
+          .map((point) => '${point.latitude},${point.longitude}')
+          .toList(growable: false);
+    }
     return [
       _locationPoint(trip.originLocation, trip.origin),
       ...trip.routeStops.map(
@@ -47,6 +50,8 @@ abstract final class TripRouteService {
       return null;
     }
 
+    final savedPolyline =
+        encodedPolyline ?? trip.routeSnapshot?.encodedPolyline;
     final query = <String>[
       'size=640x360',
       'scale=2',
@@ -55,75 +60,17 @@ abstract final class TripRouteService {
       for (var index = 1; index < points.length - 1; index++)
         'markers=${Uri.encodeQueryComponent('color:yellow|label:${index.clamp(1, 9)}|${points[index]}')}',
       'markers=${Uri.encodeQueryComponent('color:red|label:D|${points.last}')}',
-      'path=${Uri.encodeQueryComponent(encodedPolyline == null || encodedPolyline.isEmpty ? 'color:0x1f1c1cff|weight:5|${points.join('|')}' : 'color:0x1f1c1cff|weight:5|enc:$encodedPolyline')}',
+      'path=${Uri.encodeQueryComponent(savedPolyline == null || savedPolyline.isEmpty ? 'color:0x1f1c1cff|weight:5|${points.join('|')}' : 'color:0x1f1c1cff|weight:5|enc:$savedPolyline')}',
       'key=${Uri.encodeQueryComponent(key)}',
     ].join('&');
     return Uri.parse('https://maps.googleapis.com/maps/api/staticmap?$query');
   }
 
-  static Uri? directionsApiUri(Trip trip, {String? apiKey}) {
-    final key = (apiKey ?? _configuredApiKey()).trim();
-    final points = routePoints(trip);
-    if (key.isEmpty || points.length < 2) {
-      return null;
-    }
-    final waypoints = points.length > 2
-        ? points.sublist(1, points.length - 1).join('|')
-        : '';
-    return Uri.https('maps.googleapis.com', '/maps/api/directions/json', {
-      'origin': points.first,
-      'destination': points.last,
-      if (waypoints.isNotEmpty) 'waypoints': waypoints,
-      'mode': 'driving',
-      'key': key,
-    });
-  }
-
-  static Future<String?> fetchRoutePolyline(
-    Trip trip, {
-    String? apiKey,
-    http.Client? client,
-  }) async {
-    final uri = directionsApiUri(trip, apiKey: apiKey);
-    if (uri == null) {
-      return null;
-    }
-    final ownClient = client == null;
-    final requestClient = client ?? http.Client();
-    try {
-      final response = await requestClient
-          .get(uri)
-          .timeout(const Duration(seconds: 15));
-      if (response.statusCode != 200) {
-        return null;
-      }
-      final payload = jsonDecode(response.body);
-      if (payload is! Map || payload['status'] != 'OK') {
-        return null;
-      }
-      final routes = payload['routes'];
-      if (routes is! List || routes.isEmpty || routes.first is! Map) {
-        return null;
-      }
-      final route = Map<String, dynamic>.from(routes.first as Map);
-      final polyline = route['overview_polyline'];
-      if (polyline is! Map) {
-        return null;
-      }
-      final points = polyline['points'];
-      return points is String && points.isNotEmpty ? points : null;
-    } on Object {
-      return null;
-    } finally {
-      if (ownClient) {
-        requestClient.close();
-      }
-    }
-  }
-
   static Future<Uri?> routePreviewUri(Trip trip) async {
-    final polyline = await fetchRoutePolyline(trip);
-    return staticMapUri(trip, encodedPolyline: polyline);
+    return staticMapUri(
+      trip,
+      encodedPolyline: trip.routeSnapshot?.encodedPolyline,
+    );
   }
 
   static Future<bool> openInGoogleMaps(Trip trip) {
@@ -141,10 +88,7 @@ abstract final class TripRouteService {
     }
   }
 
-  static String _locationPoint(
-    Map<String, dynamic> location,
-    String fallback,
-  ) {
+  static String _locationPoint(Map<String, dynamic> location, String fallback) {
     final latitude = location['latitude'];
     final longitude = location['longitude'];
     if (latitude is num && longitude is num) {

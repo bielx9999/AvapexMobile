@@ -77,6 +77,133 @@ service cloud.firestore {
         && data.longitude <= 180;
     }
 
+    function validCoordinate(latitude, longitude) {
+      return (
+        latitude == null
+        && longitude == null
+      ) || (
+        latitude is number
+        && latitude >= -90
+        && latitude <= 90
+        && longitude is number
+        && longitude >= -180
+        && longitude <= 180
+      );
+    }
+
+    function validLocalityData(data, localityId) {
+      return data.keys().hasAll([
+          'id', 'reference', 'normalizedReference', 'city', 'normalizedCity',
+          'uf', 'address', 'normalizedAddress', 'latitude', 'longitude',
+          'originalCoordinates', 'status', 'needsReview', 'source', 'sourceRow',
+          'fingerprint', 'createdAt', 'createdBy', 'updatedAt', 'updatedBy'
+        ])
+        && data.id == localityId
+        && data.reference is string
+        && data.reference.size() > 0
+        && data.normalizedReference is string
+        && data.city is string
+        && data.city.size() > 0
+        && data.normalizedCity is string
+        && data.uf is string
+        && data.uf.size() == 2
+        && data.address is string
+        && data.address.size() > 0
+        && data.normalizedAddress is string
+        && validCoordinate(data.latitude, data.longitude)
+        && data.originalCoordinates is string
+        && data.status in ['active', 'inactive']
+        && data.needsReview is bool
+        && data.source in ['import', 'manual']
+        && (data.sourceRow == null || data.sourceRow is int)
+        && data.fingerprint is string
+        && data.fingerprint.size() > 0
+        && data.createdAt is timestamp
+        && data.createdBy is string
+        && data.updatedAt is timestamp
+        && data.updatedBy is string;
+    }
+
+    function validRoutePoint(point, expectedType) {
+      return point is map
+        && point.keys().hasAll([
+          'id', 'type', 'sequence', 'locationId', 'reference', 'city', 'uf',
+          'address', 'latitude', 'longitude'
+        ])
+        && point.id is string
+        && point.id.size() > 0
+        && point.type == expectedType
+        && point.sequence is int
+        && point.sequence >= 0
+        && point.locationId is string
+        && point.reference is string
+        && point.address is string
+        && point.latitude is number
+        && point.latitude >= -90
+        && point.latitude <= 90
+        && point.longitude is number
+        && point.longitude >= -180
+        && point.longitude <= 180;
+    }
+
+    function validRouteDefinition(data) {
+      return data is map
+        && data.keys().hasAll([
+          'version', 'points', 'locationIds', 'distanceMeters', 'durationSeconds',
+          'encodedPolyline', 'path'
+        ])
+        && data.version is int
+        && data.version > 0
+        && data.points is list
+        && data.points.size() >= 2
+        && data.points.size() <= 27
+        && validRoutePoint(data.points[0], 'origin')
+        && validRoutePoint(data.points[data.points.size() - 1], 'destination')
+        && data.locationIds is list
+        && data.distanceMeters is int
+        && data.distanceMeters >= 0
+        && data.durationSeconds is int
+        && data.durationSeconds >= 0
+        && data.encodedPolyline is string
+        && data.encodedPolyline.size() > 0
+        && data.path is list
+        && data.path.size() >= 2;
+    }
+
+    function validRouteTemplateData(data, routeTemplateId) {
+      return data.keys().hasAll([
+          'id', 'name', 'normalizedName', 'description', 'notes', 'status',
+          'currentVersionId', 'currentVersion', 'usedCount', 'createdAt',
+          'createdBy', 'updatedAt', 'updatedBy'
+        ])
+        && data.id == routeTemplateId
+        && data.name is string
+        && data.name.size() > 0
+        && data.normalizedName is string
+        && data.description is string
+        && data.notes is string
+        && data.status in ['active', 'inactive']
+        && data.currentVersionId is string
+        && data.currentVersionId.size() > 0
+        && validRouteDefinition(data.currentVersion)
+        && data.usedCount is int
+        && data.usedCount >= 0
+        && data.createdAt is timestamp
+        && data.createdBy is string
+        && data.updatedAt is timestamp
+        && data.updatedBy is string;
+    }
+
+    function validRouteVersionData(data, routeVersionId) {
+      return data.keys().hasAll(['id', 'routeTemplateId', 'createdAt', 'createdBy'])
+        && data.id == routeVersionId
+        && data.routeTemplateId is string
+        && data.routeTemplateId.size() > 0
+        && validRouteDefinition(data)
+        && data.createdAt is timestamp
+        && data.createdBy is string;
+    }
+
     function validGeoLocation(data) {
       return data is map
         && data.keys().hasAll(['latitude', 'longitude'])
@@ -395,6 +522,28 @@ service cloud.firestore {
     match /vehicles/{vehicleId} {
       allow read: if isActiveUser();
       allow write: if isAdmin();
+    }
+
+    match /localities/{localityId} {
+      allow read: if isAdmin();
+      allow create, update: if isAdmin()
+        && validLocalityData(request.resource.data, localityId);
+      allow delete: if isAdmin();
+    }
+
+    match /routeTemplates/{routeTemplateId} {
+      allow read: if isAdmin();
+      allow create, update: if isAdmin()
+        && validRouteTemplateData(request.resource.data, routeTemplateId);
+      allow delete: if isAdmin();
+    }
+
+    match /routeVersions/{routeVersionId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin()
+        && validRouteVersionData(request.resource.data, routeVersionId);
+      allow update: if false;
+      allow delete: if isAdmin();
     }
 
     match /trips/{tripId} {

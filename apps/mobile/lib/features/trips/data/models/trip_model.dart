@@ -175,6 +175,160 @@ final class TripStop {
   };
 }
 
+enum TripRoutePointType {
+  origin('origin'),
+  stop('stop'),
+  via('via'),
+  destination('destination');
+
+  const TripRoutePointType(this.value);
+  final String value;
+
+  static TripRoutePointType fromFirestore(Object? value) {
+    return TripRoutePointType.values.firstWhere(
+      (type) => type.value == value,
+      orElse: () => TripRoutePointType.stop,
+    );
+  }
+}
+
+final class TripRoutePoint {
+  const TripRoutePoint({
+    required this.id,
+    required this.type,
+    required this.sequence,
+    required this.locationId,
+    required this.reference,
+    required this.city,
+    required this.uf,
+    required this.address,
+    required this.latitude,
+    required this.longitude,
+  });
+
+  final String id;
+  final TripRoutePointType type;
+  final int sequence;
+  final String locationId;
+  final String reference;
+  final String city;
+  final String uf;
+  final String address;
+  final double latitude;
+  final double longitude;
+
+  factory TripRoutePoint.fromMap(Object? value) {
+    final map = value is Map
+        ? Map<String, dynamic>.from(value)
+        : const <String, dynamic>{};
+    return TripRoutePoint(
+      id: (map['id'] as String?) ?? '',
+      type: TripRoutePointType.fromFirestore(map['type']),
+      sequence: (map['sequence'] as num?)?.toInt() ?? 0,
+      locationId: (map['locationId'] as String?) ?? '',
+      reference: (map['reference'] as String?) ?? '',
+      city: (map['city'] as String?) ?? '',
+      uf: (map['uf'] as String?) ?? '',
+      address: (map['address'] as String?) ?? '',
+      latitude: (map['latitude'] as num?)?.toDouble() ?? 0,
+      longitude: (map['longitude'] as num?)?.toDouble() ?? 0,
+    );
+  }
+
+  Map<String, dynamic> toFirestore() => {
+    'id': id,
+    'type': type.value,
+    'sequence': sequence,
+    'locationId': locationId,
+    'reference': reference,
+    'city': city,
+    'uf': uf,
+    'address': address,
+    'latitude': latitude,
+    'longitude': longitude,
+  };
+}
+
+final class TripRouteSnapshot {
+  const TripRouteSnapshot({
+    required this.routeTemplateId,
+    required this.routeVersionId,
+    required this.name,
+    required this.version,
+    required this.points,
+    required this.locationIds,
+    required this.distanceMeters,
+    required this.durationSeconds,
+    required this.encodedPolyline,
+    required this.path,
+  });
+
+  final String routeTemplateId;
+  final String routeVersionId;
+  final String name;
+  final int version;
+  final List<TripRoutePoint> points;
+  final List<String> locationIds;
+  final int distanceMeters;
+  final int durationSeconds;
+  final String encodedPolyline;
+  final List<({double latitude, double longitude})> path;
+
+  factory TripRouteSnapshot.fromMap(Object? value) {
+    final map = value is Map
+        ? Map<String, dynamic>.from(value)
+        : const <String, dynamic>{};
+    final rawPoints = map['points'];
+    final rawPath = map['path'];
+    final points = rawPoints is Iterable
+        ? rawPoints.map(TripRoutePoint.fromMap).toList(growable: false)
+        : <TripRoutePoint>[];
+    points.sort((a, b) => a.sequence.compareTo(b.sequence));
+    return TripRouteSnapshot(
+      routeTemplateId: (map['routeTemplateId'] as String?) ?? '',
+      routeVersionId: (map['routeVersionId'] as String?) ?? '',
+      name: (map['name'] as String?) ?? '',
+      version: (map['version'] as num?)?.toInt() ?? 0,
+      points: points,
+      locationIds: readStringList(map, 'locationIds'),
+      distanceMeters: (map['distanceMeters'] as num?)?.toInt() ?? 0,
+      durationSeconds: (map['durationSeconds'] as num?)?.toInt() ?? 0,
+      encodedPolyline: (map['encodedPolyline'] as String?) ?? '',
+      path: rawPath is Iterable
+          ? rawPath
+                .whereType<Map>()
+                .map((value) {
+                  final point = Map<String, dynamic>.from(value);
+                  return (
+                    latitude: (point['latitude'] as num?)?.toDouble() ?? 0,
+                    longitude: (point['longitude'] as num?)?.toDouble() ?? 0,
+                  );
+                })
+                .toList(growable: false)
+          : const [],
+    );
+  }
+
+  Map<String, dynamic> toFirestore() => {
+    'routeTemplateId': routeTemplateId,
+    'routeVersionId': routeVersionId,
+    'name': name,
+    'version': version,
+    'points': points
+        .map((point) => point.toFirestore())
+        .toList(growable: false),
+    'locationIds': locationIds,
+    'distanceMeters': distanceMeters,
+    'durationSeconds': durationSeconds,
+    'encodedPolyline': encodedPolyline,
+    'path': path
+        .map(
+          (point) => {'latitude': point.latitude, 'longitude': point.longitude},
+        )
+        .toList(growable: false),
+  };
+}
+
 enum TripOperationType {
   loading('loading'),
   unloading('unloading');
@@ -369,6 +523,9 @@ final class Trip {
     this.routeStops = const [],
     this.routeId = '',
     this.routeName = '',
+    this.routeTemplateId = '',
+    this.routeVersionId = '',
+    this.routeSnapshot,
     this.originLocation = const {},
     this.destinationLocation = const {},
   });
@@ -405,6 +562,9 @@ final class Trip {
   final List<TripStop> routeStops;
   final String routeId;
   final String routeName;
+  final String routeTemplateId;
+  final String routeVersionId;
+  final TripRouteSnapshot? routeSnapshot;
   final Map<String, dynamic> originLocation;
   final Map<String, dynamic> destinationLocation;
 
@@ -469,6 +629,11 @@ final class Trip {
       routeStops: _readTripStops(json['routeStops']),
       routeId: (json['routeId'] as String?) ?? '',
       routeName: (json['routeName'] as String?) ?? '',
+      routeTemplateId: (json['routeTemplateId'] as String?) ?? '',
+      routeVersionId: (json['routeVersionId'] as String?) ?? '',
+      routeSnapshot: json['routeSnapshot'] is Map
+          ? TripRouteSnapshot.fromMap(json['routeSnapshot'])
+          : null,
       originLocation: json['originLocation'] is Map
           ? Map<String, dynamic>.from(json['originLocation'] as Map)
           : const {},
@@ -518,6 +683,9 @@ final class Trip {
           .toList(growable: false),
       'routeId': routeId,
       'routeName': routeName,
+      'routeTemplateId': routeTemplateId,
+      'routeVersionId': routeVersionId,
+      if (routeSnapshot != null) 'routeSnapshot': routeSnapshot!.toFirestore(),
       if (originLocation.isNotEmpty) 'originLocation': originLocation,
       if (destinationLocation.isNotEmpty)
         'destinationLocation': destinationLocation,

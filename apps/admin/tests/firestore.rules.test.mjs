@@ -6,7 +6,7 @@ import {
   assertSucceeds,
   initializeTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { doc, setDoc, Timestamp, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, Timestamp, updateDoc } from 'firebase/firestore';
 
 let environment;
 
@@ -199,6 +199,38 @@ describe('trip response permissions', { concurrency: false }, () => {
   });
 });
 
+describe('locality and route catalog permissions', { concurrency: false }, () => {
+  test('administrator can create localities and immutable route versions', async () => {
+    const firestore = environment.authenticatedContext('admin-1').firestore();
+    await assertSucceeds(setDoc(doc(firestore, 'localities', 'location-1'), localityData()));
+    await assertSucceeds(setDoc(doc(firestore, 'routeVersions', 'version-1'), routeVersionData()));
+    await assertSucceeds(setDoc(doc(firestore, 'routeTemplates', 'route-template-1'), routeTemplateData()));
+    await assertFails(updateDoc(doc(firestore, 'routeVersions', 'version-1'), { distanceMeters: 123 }));
+  });
+
+  test('driver cannot read or write the administrative route catalog', async () => {
+    await environment.withSecurityRulesDisabled(async (context) => {
+      const firestore = context.firestore();
+      await setDoc(doc(firestore, 'localities', 'location-1'), localityData());
+      await setDoc(doc(firestore, 'routeVersions', 'version-1'), routeVersionData());
+      await setDoc(doc(firestore, 'routeTemplates', 'route-template-1'), routeTemplateData());
+    });
+    const firestore = environment.authenticatedContext('driver-1').firestore();
+    await assertFails(getDoc(doc(firestore, 'localities', 'location-1')));
+    await assertFails(getDoc(doc(firestore, 'routeTemplates', 'route-template-1')));
+    await assertFails(getDoc(doc(firestore, 'routeVersions', 'version-1')));
+    await assertFails(setDoc(doc(firestore, 'localities', 'location-2'), localityData('location-2')));
+  });
+
+  test('driver reads the saved route snapshot only through the assigned trip', async () => {
+    const firestore = environment.authenticatedContext('driver-1').firestore();
+    const snapshot = await assertSucceeds(getDoc(doc(firestore, 'trips', 'trip-1')));
+    if (snapshot.data()?.routeSnapshot?.routeVersionId !== 'version-1') {
+      throw new Error('Trip route snapshot was not preserved.');
+    }
+  });
+});
+
 function tripData() {
   return {
     id: 'trip-1',
@@ -218,6 +250,85 @@ function tripData() {
     driverRespondedAt: null,
     driverResponseDriverId: '',
     driverRejection: null,
+    routeTemplateId: 'route-template-1',
+    routeVersionId: 'version-1',
+    routeSnapshot: {
+      routeTemplateId: 'route-template-1',
+      routeVersionId: 'version-1',
+      name: 'Guarulhos - Santos',
+      ...routeDefinition(),
+    },
+  };
+}
+
+function localityData(id = 'location-1') {
+  return {
+    id,
+    reference: 'Matriz',
+    normalizedReference: 'MATRIZ',
+    city: 'Guarulhos',
+    normalizedCity: 'GUARULHOS',
+    uf: 'SP',
+    address: 'Guarulhos - SP',
+    normalizedAddress: 'GUARULHOS SP',
+    latitude: -23.45,
+    longitude: -46.53,
+    originalCoordinates: '-23.45, -46.53',
+    status: 'active',
+    needsReview: false,
+    source: 'manual',
+    sourceRow: null,
+    fingerprint: `MATRIZ|GUARULHOS|SP|${id}`,
+    createdAt: Timestamp.now(),
+    createdBy: 'admin-1',
+    updatedAt: Timestamp.now(),
+    updatedBy: 'admin-1',
+  };
+}
+
+function routeDefinition() {
+  return {
+    version: 1,
+    points: [
+      { id: 'point-1', type: 'origin', sequence: 0, locationId: 'location-1', reference: 'Matriz', city: 'Guarulhos', uf: 'SP', address: 'Guarulhos - SP', latitude: -23.45, longitude: -46.53 },
+      { id: 'point-2', type: 'destination', sequence: 1, locationId: 'location-2', reference: 'Porto', city: 'Santos', uf: 'SP', address: 'Santos - SP', latitude: -23.96, longitude: -46.33 },
+    ],
+    locationIds: ['location-1', 'location-2'],
+    distanceMeters: 100000,
+    durationSeconds: 7200,
+    encodedPolyline: 'encoded-route',
+    path: [
+      { latitude: -23.45, longitude: -46.53 },
+      { latitude: -23.96, longitude: -46.33 },
+    ],
+  };
+}
+
+function routeVersionData() {
+  return {
+    id: 'version-1',
+    routeTemplateId: 'route-template-1',
+    ...routeDefinition(),
+    createdAt: Timestamp.now(),
+    createdBy: 'admin-1',
+  };
+}
+
+function routeTemplateData() {
+  return {
+    id: 'route-template-1',
+    name: 'Guarulhos - Santos',
+    normalizedName: 'GUARULHOS SANTOS',
+    description: '',
+    notes: '',
+    status: 'active',
+    currentVersionId: 'version-1',
+    currentVersion: routeDefinition(),
+    usedCount: 0,
+    createdAt: Timestamp.now(),
+    createdBy: 'admin-1',
+    updatedAt: Timestamp.now(),
+    updatedBy: 'admin-1',
   };
 }
 
