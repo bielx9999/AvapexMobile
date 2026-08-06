@@ -533,7 +533,8 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'description',
           'cost',
-          'photoUrl'
+          'photoUrl',
+          'pendingPhotoLocalPath'
         ])
       );
       allow delete: if isAdmin();

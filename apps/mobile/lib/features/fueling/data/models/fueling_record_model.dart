@@ -47,6 +47,10 @@ final class FuelingRecord {
     required this.vehicleModel,
     required this.kmRegistered,
     required this.fuelType,
+    required this.stationName,
+    required this.liters,
+    required this.totalValue,
+    required this.fueledAt,
     required this.receiptPhotoUrls,
     required this.odometerPhotoUrls,
     required this.pendingReceiptPhotoLocalPaths,
@@ -63,6 +67,10 @@ final class FuelingRecord {
   final String vehicleModel;
   final num kmRegistered;
   final FuelType fuelType;
+  final String stationName;
+  final num liters;
+  final num totalValue;
+  final DateTime fueledAt;
   final List<String> receiptPhotoUrls;
   final List<String> odometerPhotoUrls;
   final List<String> pendingReceiptPhotoLocalPaths;
@@ -93,6 +101,12 @@ final class FuelingRecord {
       vehicleModel: json['vehicleModel'] as String,
       kmRegistered: json['kmRegistered'] as num,
       fuelType: FuelType.fromFirestore(json['fuelType'] as String),
+      stationName: (json['stationName'] as String?) ?? '',
+      liters: (json['liters'] as num?) ?? 0,
+      totalValue: (json['totalValue'] as num?) ?? 0,
+      fueledAt:
+          readNullableDateTime(json, 'fueledAt') ??
+          readDateTime(json, 'createdAt'),
       receiptPhotoUrls: readStringList(json, 'receiptPhotoUrls'),
       odometerPhotoUrls: readStringList(json, 'odometerPhotoUrls'),
       pendingReceiptPhotoLocalPaths: readStringList(
@@ -120,6 +134,10 @@ final class FuelingRecord {
       'vehicleModel': vehicleModel,
       'kmRegistered': kmRegistered,
       'fuelType': fuelType.value,
+      'stationName': stationName,
+      'liters': liters,
+      'totalValue': totalValue,
+      'fueledAt': writeTimestamp(fueledAt),
       'receiptPhotoUrls': receiptPhotoUrls,
       'odometerPhotoUrls': odometerPhotoUrls,
       'pendingReceiptPhotoLocalPaths': pendingReceiptPhotoLocalPaths,

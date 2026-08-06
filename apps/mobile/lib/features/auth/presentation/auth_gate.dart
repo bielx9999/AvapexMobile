@@ -36,6 +36,12 @@ final class AuthGate extends ConsumerWidget {
                     'Seu acesso esta bloqueado. Procure o administrativo da Avapex.',
               );
             }
+            if (profile.role != UserRole.driver) {
+              return const _BlockedAccessPage(
+                message:
+                    'Este aplicativo e exclusivo para motoristas. Use o painel administrativo para continuar.',
+              );
+            }
             return const AppShell();
           },
           error: (error, _) => Scaffold(
@@ -99,8 +105,7 @@ final class _BlockedAccessPage extends ConsumerWidget {
                     foregroundColor: Colors.black,
                     minimumSize: const Size.fromHeight(52),
                   ),
-                  onPressed: () =>
-                      ref.read(authRepositoryProvider).signOut(),
+                  onPressed: () => ref.read(authRepositoryProvider).signOut(),
                   child: const Text('Sair'),
                 ),
               ],

@@ -8,6 +8,7 @@ final class PendingMediaUpload {
     required this.ownerEntityId,
     required this.createdAt,
     this.lastAttemptAt,
+    this.uploadedUrl,
     this.attempts = 0,
   });
 
@@ -17,6 +18,7 @@ final class PendingMediaUpload {
   final String ownerEntityId;
   final DateTime createdAt;
   final DateTime? lastAttemptAt;
+  final String? uploadedUrl;
   final int attempts;
 
   factory PendingMediaUpload.create({
@@ -48,6 +50,7 @@ final class PendingMediaUpload {
       lastAttemptAt: json['lastAttemptAt'] == null
           ? null
           : DateTime.parse(json['lastAttemptAt'] as String),
+      uploadedUrl: json['uploadedUrl'] as String?,
       attempts: (json['attempts'] as num?)?.toInt() ?? 0,
     );
   }
@@ -60,7 +63,21 @@ final class PendingMediaUpload {
       ownerEntityId: ownerEntityId,
       createdAt: createdAt,
       lastAttemptAt: DateTime.now(),
+      uploadedUrl: uploadedUrl,
       attempts: attempts + 1,
+    );
+  }
+
+  PendingMediaUpload markUploaded(String url) {
+    return PendingMediaUpload(
+      id: id,
+      localPath: localPath,
+      mediaType: mediaType,
+      ownerEntityId: ownerEntityId,
+      createdAt: createdAt,
+      lastAttemptAt: lastAttemptAt,
+      uploadedUrl: url,
+      attempts: attempts,
     );
   }
 
@@ -72,6 +89,7 @@ final class PendingMediaUpload {
       'ownerEntityId': ownerEntityId,
       'createdAt': createdAt.toIso8601String(),
       'lastAttemptAt': lastAttemptAt?.toIso8601String(),
+      'uploadedUrl': uploadedUrl,
       'attempts': attempts,
     };
   }

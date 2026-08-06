@@ -1,63 +1,26 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:lucide_flutter/lucide_flutter.dart';
 
+import '../../features/checklists/application/checklist_providers.dart';
 import '../../features/checklists/presentation/checklists_page.dart';
+import '../../features/deliveries/application/delivery_providers.dart';
+import '../../features/deliveries/data/models/delivery_model.dart';
+import '../../features/driver/presentation/driver_home_page.dart';
+import '../../features/driver/presentation/driver_notifications_page.dart';
+import '../../features/fueling/presentation/driver_performance_page.dart';
 import '../../features/fueling/presentation/fueling_page.dart';
+import '../../features/incidents/presentation/incidents_page.dart';
+import '../../features/media/application/media_providers.dart';
 import '../../features/profile/presentation/profile_page.dart';
 import '../../features/receipts/presentation/delivery_receipts_page.dart';
-import '../../features/trips/presentation/driver_home_page.dart';
 import '../../features/trips/application/trip_providers.dart';
-import '../../features/users/application/user_providers.dart';
-import '../providers/firebase_providers.dart';
+import '../../features/trips/data/models/trip_model.dart';
+import '../../features/trips/presentation/driver_trips_page.dart';
 
-const _sidebarBackground = Color(0xFF1F1C1C);
-const _sidebarForeground = Colors.white;
-const _sidebarSelected = Color(0xFFFACC15);
-
-enum _AppSection {
-  trips(
-    label: 'Viagens',
-    title: 'Minhas viagens',
-    icon: Icons.route_outlined,
-    selectedIcon: Icons.route,
-  ),
-  checklists(
-    label: 'Checklists',
-    title: 'Checklists',
-    icon: Icons.fact_check_outlined,
-    selectedIcon: Icons.fact_check,
-  ),
-  receipts(
-    label: 'Comprovantes',
-    title: 'Comprovantes',
-    icon: Icons.receipt_long_outlined,
-    selectedIcon: Icons.receipt_long,
-  ),
-  fueling(
-    label: 'Registrar abastecimento',
-    title: 'Registrar abastecimento',
-    icon: Icons.local_gas_station_outlined,
-    selectedIcon: Icons.local_gas_station,
-  ),
-  profile(
-    label: 'Perfil',
-    title: 'Perfil',
-    icon: Icons.person_outline,
-    selectedIcon: Icons.person,
-  );
-
-  const _AppSection({
-    required this.label,
-    required this.title,
-    required this.icon,
-    required this.selectedIcon,
-  });
-
-  final String label;
-  final String title;
-  final IconData icon;
-  final IconData selectedIcon;
-}
+enum _DriverRootSection { home, trips, alerts, profile }
 
 final class AppShell extends ConsumerStatefulWidget {
   const AppShell({super.key});
@@ -66,52 +29,152 @@ final class AppShell extends ConsumerStatefulWidget {
   ConsumerState<AppShell> createState() => _AppShellState();
 }
 
-final class _AppShellState extends ConsumerState<AppShell> {
-  var _selectedIndex = 0;
-  var _isRailExpanded = true;
+final class _AppShellState extends ConsumerState<AppShell>
+    with WidgetsBindingObserver {
+  var _selectedIndex = _DriverRootSection.home.index;
+  Timer? _mediaSyncTimer;
+  var _isSyncingMedia = false;
 
-  _AppSection get _selectedSection => _AppSection.values[_selectedIndex];
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    unawaited(_syncPendingMedia());
+    _mediaSyncTimer = Timer.periodic(
+      const Duration(minutes: 1),
+      (_) => unawaited(_syncPendingMedia()),
+    );
+  }
 
-  void _selectSection(int index) {
-    setState(() => _selectedIndex = index);
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_syncPendingMedia());
+    }
+  }
+
+  Future<void> _syncPendingMedia() async {
+    if (_isSyncingMedia) {
+      return;
+    }
+    _isSyncingMedia = true;
+    try {
+      await ref.read(mediaUploadServiceProvider).flushPendingUploads();
+    } on Object {
+      // The queue keeps failed items for the next connectivity window.
+    } finally {
+      _isSyncingMedia = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    _mediaSyncTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  void _selectRoot(_DriverRootSection section) {
+    setState(() => _selectedIndex = section.index);
+  }
+
+  void _handleHomeAction(DriverHomeAction action) {
+    switch (action) {
+      case DriverHomeAction.trips:
+        _selectRoot(_DriverRootSection.trips);
+      case DriverHomeAction.alerts:
+        _selectRoot(_DriverRootSection.alerts);
+      case DriverHomeAction.profile:
+        _selectRoot(_DriverRootSection.profile);
+      case DriverHomeAction.assignedTrips:
+        _openFeature(
+          title: 'Viagens atribuidas',
+          child: const DriverTripsPage(assignedOnly: true, showHeader: false),
+        );
+      case DriverHomeAction.checklists:
+        _openFeature(title: 'Checklist', child: const ChecklistsPage());
+      case DriverHomeAction.receipts:
+        _openFeature(
+          title: 'Comprovantes',
+          child: const DeliveryReceiptsPage(),
+        );
+      case DriverHomeAction.incidents:
+        _openFeature(title: 'Ocorrencias', child: const IncidentsPage());
+      case DriverHomeAction.fueling:
+        _openFeature(
+          title: 'Registrar abastecimento',
+          child: const FuelingPage(),
+        );
+      case DriverHomeAction.performance:
+        _openFeature(
+          title: 'Minha Media',
+          child: const DriverPerformancePage(),
+        );
+    }
+  }
+
+  Future<void> _openFeature({required String title, required Widget child}) {
+    return Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => Scaffold(
+          appBar: AppBar(title: Text(title)),
+          body: SafeArea(top: false, child: child),
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     ref.watch(tripGpsHeartbeatControllerProvider);
-    final isWide = MediaQuery.sizeOf(context).width >= 760;
-
-    if (!isWide) {
-      return Scaffold(
-        appBar: AppBar(title: Text(_selectedSection.title)),
-        drawer: _AppDrawer(
-          selectedIndex: _selectedIndex,
-          onSelect: (index) {
-            Navigator.of(context).pop();
-            _selectSection(index);
-          },
-        ),
-        body: _SectionBody(section: _selectedSection),
-      );
-    }
+    final alertCount = _driverAlertCount(ref);
 
     return Scaffold(
-      body: Row(
-        children: [
-          _AppNavigationRail(
-            selectedIndex: _selectedIndex,
-            isExpanded: _isRailExpanded,
-            onToggleExpanded: () {
-              setState(() => _isRailExpanded = !_isRailExpanded);
-            },
-            onSelect: _selectSection,
+      body: SafeArea(
+        bottom: false,
+        child: IndexedStack(
+          index: _selectedIndex,
+          children: [
+            DriverHomePage(onAction: _handleHomeAction),
+            const DriverTripsPage(),
+            DriverNotificationsPage(onAction: _handleHomeAction),
+            const ProfilePage(),
+          ],
+        ),
+      ),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _selectedIndex,
+        onDestinationSelected: (index) {
+          setState(() => _selectedIndex = index);
+        },
+        destinations: [
+          const NavigationDestination(
+            icon: Icon(LucideIcons.house),
+            selectedIcon: Icon(LucideIcons.house, fill: 1),
+            label: 'Inicio',
           ),
-          const VerticalDivider(width: 1),
-          Expanded(
-            child: Scaffold(
-              appBar: AppBar(title: Text(_selectedSection.title)),
-              body: _SectionBody(section: _selectedSection),
+          const NavigationDestination(
+            icon: Icon(LucideIcons.route),
+            selectedIcon: Icon(LucideIcons.route, fill: 1),
+            label: 'Viagens',
+          ),
+          NavigationDestination(
+            icon: Badge(
+              isLabelVisible: alertCount > 0,
+              label: Text(alertCount > 9 ? '9+' : '$alertCount'),
+              child: const Icon(LucideIcons.bell),
             ),
+            selectedIcon: Badge(
+              isLabelVisible: alertCount > 0,
+              label: Text(alertCount > 9 ? '9+' : '$alertCount'),
+              child: const Icon(LucideIcons.bellRing),
+            ),
+            label: 'Avisos',
+          ),
+          const NavigationDestination(
+            icon: Icon(LucideIcons.userRound),
+            selectedIcon: Icon(LucideIcons.userRoundCheck),
+            label: 'Perfil',
           ),
         ],
       ),
@@ -119,302 +182,27 @@ final class _AppShellState extends ConsumerState<AppShell> {
   }
 }
 
-final class _AppNavigationRail extends ConsumerWidget {
-  const _AppNavigationRail({
-    required this.selectedIndex,
-    required this.isExpanded,
-    required this.onToggleExpanded,
-    required this.onSelect,
-  });
-
-  final int selectedIndex;
-  final bool isExpanded;
-  final VoidCallback onToggleExpanded;
-  final ValueChanged<int> onSelect;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final profile = ref.watch(currentUserProfileProvider);
-
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 180),
-      curve: Curves.easeOut,
-      width: isExpanded ? 256 : 92,
-      color: _sidebarBackground,
-      child: SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
-              child: Row(
-                children: [
-                  IconButton(
-                    tooltip: isExpanded ? 'Recolher menu' : 'Expandir menu',
-                    onPressed: onToggleExpanded,
-                    color: _sidebarForeground,
-                    icon: Icon(
-                      isExpanded
-                          ? Icons.keyboard_double_arrow_left
-                          : Icons.keyboard_double_arrow_right,
-                    ),
-                  ),
-                  if (isExpanded) ...[
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Logistica Avapex',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(
-                              color: _sidebarForeground,
-                              fontWeight: FontWeight.w800,
-                            ),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            if (isExpanded)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
-                child: profile.when(
-                  data: (user) => _ProfileSummary(
-                    name: user?.name ?? 'Usuario',
-                    email: user?.email ?? '',
-                    photoUrl: user?.photoUrl,
-                    isOnSidebar: true,
-                  ),
-                  error: (_, _) => const _ProfileSummary(
-                    name: 'Usuario',
-                    email: 'Perfil indisponivel',
-                    isOnSidebar: true,
-                  ),
-                  loading: () => const _ProfileSummary(
-                    name: 'Carregando...',
-                    email: '',
-                    isOnSidebar: true,
-                  ),
-                ),
-              ),
-            Expanded(
-              child: NavigationRail(
-                backgroundColor: _sidebarBackground,
-                indicatorColor: _sidebarSelected,
-                extended: isExpanded,
-                minExtendedWidth: 232,
-                selectedIndex: selectedIndex,
-                onDestinationSelected: onSelect,
-                selectedIconTheme: const IconThemeData(
-                  color: _sidebarBackground,
-                ),
-                unselectedIconTheme: const IconThemeData(
-                  color: _sidebarForeground,
-                ),
-                selectedLabelTextStyle: const TextStyle(
-                  color: _sidebarForeground,
-                  fontWeight: FontWeight.w800,
-                ),
-                unselectedLabelTextStyle: const TextStyle(
-                  color: _sidebarForeground,
-                ),
-                labelType: isExpanded
-                    ? NavigationRailLabelType.none
-                    : NavigationRailLabelType.all,
-                destinations: [
-                  for (final section in _AppSection.values)
-                    NavigationRailDestination(
-                      icon: Icon(section.icon),
-                      selectedIcon: Icon(section.selectedIcon),
-                      label: Text(section.label),
-                    ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: isExpanded
-                  ? OutlinedButton.icon(
-                      onPressed: () =>
-                          ref.read(authRepositoryProvider).signOut(),
-                      icon: const Icon(Icons.logout),
-                      label: const Text('Sair'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: _sidebarForeground,
-                        side: const BorderSide(color: _sidebarForeground),
-                      ),
-                    )
-                  : IconButton.outlined(
-                      tooltip: 'Sair',
-                      onPressed: () =>
-                          ref.read(authRepositoryProvider).signOut(),
-                      icon: const Icon(Icons.logout),
-                      color: _sidebarForeground,
-                      style: IconButton.styleFrom(
-                        side: const BorderSide(color: _sidebarForeground),
-                      ),
-                    ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-final class _AppDrawer extends ConsumerWidget {
-  const _AppDrawer({required this.selectedIndex, required this.onSelect});
-
-  final int selectedIndex;
-  final ValueChanged<int> onSelect;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final profile = ref.watch(currentUserProfileProvider);
-
-    return Drawer(
-      backgroundColor: _sidebarBackground,
-      child: SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: profile.when(
-                data: (user) => _ProfileSummary(
-                  name: user?.name ?? 'Usuario',
-                  email: user?.email ?? '',
-                  photoUrl: user?.photoUrl,
-                  isOnSidebar: true,
-                ),
-                error: (_, _) => const _ProfileSummary(
-                  name: 'Usuario',
-                  email: 'Perfil indisponivel',
-                  isOnSidebar: true,
-                ),
-                loading: () => const _ProfileSummary(
-                  name: 'Carregando...',
-                  email: '',
-                  isOnSidebar: true,
-                ),
-              ),
-            ),
-            const Divider(height: 1, color: Color(0xFF3A3535)),
-            Expanded(
-              child: ListView.builder(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                itemCount: _AppSection.values.length,
-                itemBuilder: (context, index) {
-                  final section = _AppSection.values[index];
-                  final selected = selectedIndex == index;
-                  return ListTile(
-                    selected: selected,
-                    selectedTileColor: _sidebarSelected,
-                    iconColor: _sidebarForeground,
-                    textColor: _sidebarForeground,
-                    selectedColor: Colors.black,
-                    leading: Icon(
-                      selected ? section.selectedIcon : section.icon,
-                    ),
-                    title: Text(section.label),
-                    onTap: () => onSelect(index),
-                  );
-                },
-              ),
-            ),
-            const Divider(height: 1, color: Color(0xFF3A3535)),
-            ListTile(
-              iconColor: _sidebarForeground,
-              textColor: _sidebarForeground,
-              leading: const Icon(Icons.logout),
-              title: const Text('Sair'),
-              onTap: () => ref.read(authRepositoryProvider).signOut(),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-final class _ProfileSummary extends StatelessWidget {
-  const _ProfileSummary({
-    required this.name,
-    required this.email,
-    this.photoUrl,
-    this.isOnSidebar = false,
-  });
-
-  final String name;
-  final String email;
-  final String? photoUrl;
-  final bool isOnSidebar;
-
-  @override
-  Widget build(BuildContext context) {
-    final foreground = isOnSidebar ? _sidebarForeground : null;
-    final avatarBackground = isOnSidebar
-        ? _sidebarSelected
-        : Theme.of(context).colorScheme.primaryContainer;
-    final avatarForeground = isOnSidebar
-        ? _sidebarBackground
-        : Theme.of(context).colorScheme.onPrimaryContainer;
-
-    return Row(
-      children: [
-        CircleAvatar(
-          backgroundColor: avatarBackground,
-          foregroundImage: photoUrl == null || photoUrl!.isEmpty
-              ? null
-              : NetworkImage(photoUrl!),
-          child: photoUrl == null || photoUrl!.isEmpty
-              ? Icon(Icons.person_outline, color: avatarForeground)
-              : null,
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  color: foreground,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              if (email.isNotEmpty)
-                Text(
-                  email,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodySmall?.copyWith(color: foreground),
-                ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-final class _SectionBody extends StatelessWidget {
-  const _SectionBody({required this.section});
-
-  final _AppSection section;
-
-  @override
-  Widget build(BuildContext context) {
-    return switch (section) {
-      _AppSection.trips => const DriverHomePage(),
-      _AppSection.checklists => const ChecklistsPage(),
-      _AppSection.receipts => const DeliveryReceiptsPage(),
-      _AppSection.fueling => const FuelingPage(),
-      _AppSection.profile => const ProfilePage(),
-    };
-  }
+int _driverAlertCount(WidgetRef ref) {
+  final trips = ref.watch(currentDriverTripsProvider).value ?? const <Trip>[];
+  final deliveries =
+      ref.watch(currentDriverDeliveriesProvider).value ?? const [];
+  final checklists = ref.watch(checklistHistoryProvider).value ?? const [];
+  final activeOrNext = trips.where(
+    (trip) =>
+        trip.status == TripStatus.inProgress ||
+        trip.status == TripStatus.pending,
+  );
+  final assignedCount = trips
+      .where((trip) => trip.status == TripStatus.pending)
+      .length;
+  final pendingProofCount = deliveries.where((delivery) {
+    return delivery.status != DeliveryStatus.cancelled &&
+        (delivery.proofStatus == DeliveryProofStatus.rejected ||
+            (delivery.status == DeliveryStatus.arrived &&
+                delivery.proofStatus == DeliveryProofStatus.pending));
+  }).length;
+  final checklistPending =
+      activeOrNext.isNotEmpty &&
+      !checklists.any((checklist) => checklist.tripId == activeOrNext.first.id);
+  return assignedCount + pendingProofCount + (checklistPending ? 1 : 0);
 }

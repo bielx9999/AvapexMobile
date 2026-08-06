@@ -2,11 +2,13 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 
 import '../../../../core/errors/firebase_failure.dart';
+import '../../../../core/firebase/firestore_collections.dart';
 import '../models/driver_media_type.dart';
 import '../models/pending_media_upload.dart';
 import 'pending_media_queue.dart';
@@ -14,13 +16,16 @@ import 'pending_media_queue.dart';
 final class MediaUploadService {
   MediaUploadService({
     FirebaseStorage? storage,
+    FirebaseFirestore? firestore,
     FirebaseAuth? auth,
     PendingMediaQueue? pendingQueue,
   }) : _storage = storage ?? FirebaseStorage.instance,
+       _firestore = firestore ?? FirebaseFirestore.instance,
        _auth = auth ?? FirebaseAuth.instance,
        _pendingQueue = pendingQueue ?? PendingMediaQueue();
 
   final FirebaseStorage _storage;
+  final FirebaseFirestore _firestore;
   final FirebaseAuth _auth;
   final PendingMediaQueue _pendingQueue;
 
@@ -76,17 +81,23 @@ final class MediaUploadService {
       await _pendingQueue.replace(attempted);
 
       try {
-        final file = File(pending.localPath);
-        if (!file.existsSync()) {
-          await _pendingQueue.remove(pending.id);
-          continue;
+        var url = pending.uploadedUrl;
+        if (url == null || url.isEmpty) {
+          final file = File(pending.localPath);
+          if (!file.existsSync()) {
+            await _pendingQueue.remove(pending.id);
+            continue;
+          }
+
+          url = await uploadDriverImage(
+            localFile: file,
+            mediaType: pending.mediaType,
+            ownerEntityId: pending.ownerEntityId,
+          );
+          await _pendingQueue.replace(attempted.markUploaded(url));
         }
 
-        final url = await uploadDriverImage(
-          localFile: file,
-          mediaType: pending.mediaType,
-          ownerEntityId: pending.ownerEntityId,
-        );
+        await _attachUploadedUrl(pending, url);
         uploadedUrls.add(url);
         await _pendingQueue.remove(pending.id);
       } on FirebaseFailure catch (failure) {
@@ -98,6 +109,68 @@ final class MediaUploadService {
     }
 
     return uploadedUrls;
+  }
+
+  Future<void> _attachUploadedUrl(
+    PendingMediaUpload pending,
+    String url,
+  ) async {
+    final update = switch (pending.mediaType) {
+      DriverMediaType.deliveryDocument => (
+        collection: FirestoreCollections.deliveryReceipts,
+        data: <String, Object>{
+          'physicalProofPhotoUrls': FieldValue.arrayUnion([url]),
+          'pendingPhysicalProofLocalPaths': FieldValue.arrayRemove([
+            pending.localPath,
+          ]),
+        },
+      ),
+      DriverMediaType.fuelingReceipt => (
+        collection: FirestoreCollections.fuelingRecords,
+        data: <String, Object>{
+          'receiptPhotoUrls': FieldValue.arrayUnion([url]),
+          'pendingReceiptPhotoLocalPaths': FieldValue.arrayRemove([
+            pending.localPath,
+          ]),
+        },
+      ),
+      DriverMediaType.fuelingOdometer => (
+        collection: FirestoreCollections.fuelingRecords,
+        data: <String, Object>{
+          'odometerPhotoUrls': FieldValue.arrayUnion([url]),
+          'pendingOdometerPhotoLocalPaths': FieldValue.arrayRemove([
+            pending.localPath,
+          ]),
+        },
+      ),
+      DriverMediaType.incident => (
+        collection: FirestoreCollections.incidents,
+        data: <String, Object>{
+          'photoUrl': url,
+          'pendingPhotoLocalPath': FieldValue.delete(),
+        },
+      ),
+      DriverMediaType.checklist => (
+        collection: FirestoreCollections.checklists,
+        data: <String, Object>{
+          'photoUrls': FieldValue.arrayUnion([url]),
+        },
+      ),
+      DriverMediaType.signature => (
+        collection: FirestoreCollections.checklists,
+        data: <String, Object>{'signatureUrl': url},
+      ),
+      DriverMediaType.profile => (
+        collection: FirestoreCollections.users,
+        data: <String, Object>{'photoUrl': url},
+      ),
+    };
+
+    await _firestore
+        .collection(update.collection)
+        .doc(pending.ownerEntityId)
+        .update(update.data)
+        .timeout(const Duration(seconds: 15));
   }
 
   Future<String> uploadDriverImage({

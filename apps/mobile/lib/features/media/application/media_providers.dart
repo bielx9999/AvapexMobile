@@ -11,6 +11,7 @@ final pendingMediaQueueProvider = Provider<PendingMediaQueue>((ref) {
 final mediaUploadServiceProvider = Provider<MediaUploadService>((ref) {
   return MediaUploadService(
     storage: ref.watch(firebaseStorageProvider),
+    firestore: ref.watch(firebaseFirestoreProvider),
     auth: ref.watch(firebaseAuthProvider),
     pendingQueue: ref.watch(pendingMediaQueueProvider),
   );

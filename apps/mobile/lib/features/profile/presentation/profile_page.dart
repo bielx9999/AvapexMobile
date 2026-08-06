@@ -9,6 +9,8 @@ import '../../../core/errors/firebase_failure.dart';
 import '../../../core/providers/firebase_providers.dart';
 import '../../media/application/media_providers.dart';
 import '../../media/data/models/driver_media_type.dart';
+import '../../trips/application/trip_providers.dart';
+import '../../trips/data/models/trip_model.dart';
 import '../../users/application/user_providers.dart';
 import '../../users/data/models/app_user_model.dart';
 
@@ -129,9 +131,32 @@ final class _ProfilePageState extends ConsumerState<ProfilePage> {
     }
   }
 
+  Future<void> _sendPasswordReset(AppUser user) async {
+    try {
+      await ref.read(authRepositoryProvider).sendPasswordResetEmail(user.email);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Enviamos as instrucoes de senha para o seu email.'),
+          ),
+        );
+      }
+    } on FirebaseFailure catch (failure) {
+      if (mounted) {
+        setState(() => _errorMessage = failure.message);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final profile = ref.watch(currentUserProfileProvider);
+    final activeTrip = ref
+        .watch(currentDriverTripsProvider)
+        .asData
+        ?.value
+        .where((trip) => trip.status == TripStatus.inProgress)
+        .firstOrNull;
 
     return profile.when(
       data: (user) {
@@ -146,6 +171,15 @@ final class _ProfilePageState extends ConsumerState<ProfilePage> {
             keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
             children: [
+              Text(
+                'Meu perfil',
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 4),
+              const Text('Seus dados de motorista'),
+              const SizedBox(height: 16),
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(16),
@@ -225,14 +259,34 @@ final class _ProfilePageState extends ConsumerState<ProfilePage> {
                         value: user.email,
                       ),
                       _InfoRow(
-                        icon: Icons.verified_user_outlined,
-                        label: 'Status',
-                        value: user.status.value,
+                        icon: Icons.phone_outlined,
+                        label: 'Telefone',
+                        value: user.phone,
                       ),
                       _InfoRow(
                         icon: Icons.badge_outlined,
-                        label: 'Tipo de acesso',
-                        value: user.role.value,
+                        label: 'CNH',
+                        value: user.cnh?.number ?? '',
+                      ),
+                      _InfoRow(
+                        icon: Icons.drive_eta_outlined,
+                        label: 'Categoria',
+                        value: user.cnh?.category ?? '',
+                      ),
+                      _InfoRow(
+                        icon: Icons.event_outlined,
+                        label: 'Validade da CNH',
+                        value: user.cnh == null
+                            ? ''
+                            : _formatDate(user.cnh!.expirationDate),
+                      ),
+                      _InfoRow(
+                        icon: Icons.local_shipping_outlined,
+                        label: 'Veiculo atual',
+                        value: activeTrip == null
+                            ? ''
+                            : '${activeTrip.vehiclePlate} ${activeTrip.vehicleModel}'
+                                  .trim(),
                       ),
                     ],
                   ),
@@ -252,6 +306,20 @@ final class _ProfilePageState extends ConsumerState<ProfilePage> {
                       )
                     : const Icon(Icons.save_outlined),
                 label: Text(_isSaving ? 'Salvando...' : 'Salvar perfil'),
+              ),
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                onPressed: _isSaving ? null : () => _sendPasswordReset(user),
+                icon: const Icon(Icons.lock_reset_outlined),
+                label: const Text('Alterar senha'),
+              ),
+              const SizedBox(height: 10),
+              TextButton.icon(
+                onPressed: _isSaving
+                    ? null
+                    : () => ref.read(authRepositoryProvider).signOut(),
+                icon: const Icon(Icons.logout),
+                label: const Text('Sair do aplicativo'),
               ),
             ],
           ),
@@ -368,4 +436,11 @@ String? _requiredName(String? value) {
     return 'Informe ao menos 2 caracteres.';
   }
   return null;
+}
+
+String _formatDate(DateTime value) {
+  final local = value.toLocal();
+  final day = local.day.toString().padLeft(2, '0');
+  final month = local.month.toString().padLeft(2, '0');
+  return '$day/$month/${local.year}';
 }

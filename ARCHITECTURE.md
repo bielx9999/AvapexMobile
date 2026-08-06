@@ -66,7 +66,7 @@ O banco NoSQL deve ser estruturado para minimizar leituras e evitar consultas co
 * `id` (string, PK)
 * `tripId` (string, FK -> trips)
 * `driverId` (string, FK -> users)
-* `type` (string: "mechanical" | "tire" | "accident" | "delay" | "expense")
+* `type` (string: "mechanical" | "tire" | "accident" | "delay" | "expense" | "damage" | "cargo" | "delivery" | "documentation" | "other")
 * `description` (string)
 * `cost` (number, opcional)
 * `photoUrl` (string, opcional)

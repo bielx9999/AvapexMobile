@@ -101,4 +101,14 @@ final class AuthRepository {
       throw FirebaseFailure.fromException(error, stackTrace);
     }
   }
+
+  Future<void> sendPasswordResetEmail(String email) async {
+    try {
+      await _auth
+          .sendPasswordResetEmail(email: email)
+          .timeout(const Duration(seconds: 15));
+    } on Object catch (error, stackTrace) {
+      throw FirebaseFailure.fromException(error, stackTrace);
+    }
+  }
 }

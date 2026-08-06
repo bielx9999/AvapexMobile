@@ -9,6 +9,8 @@ import '../../../core/errors/firebase_failure.dart';
 import '../../../core/providers/firebase_providers.dart';
 import '../../media/application/media_providers.dart';
 import '../../media/data/models/driver_media_type.dart';
+import '../../trips/application/trip_providers.dart';
+import '../../trips/data/models/trip_model.dart';
 import '../../users/application/user_providers.dart';
 import '../../vehicles/data/models/vehicle_model.dart';
 import '../application/fueling_providers.dart';
@@ -24,19 +26,66 @@ final class FuelingPage extends ConsumerStatefulWidget {
 final class _FuelingPageState extends ConsumerState<FuelingPage> {
   final _formKey = GlobalKey<FormState>();
   final _kmController = TextEditingController();
+  final _stationController = TextEditingController();
+  final _litersController = TextEditingController();
+  final _valueController = TextEditingController();
   final _imagePicker = ImagePicker();
 
   String? _selectedVehicleId;
   FuelType? _selectedFuelType;
   File? _receiptPhoto;
   File? _odometerPhoto;
+  var _fueledAt = DateTime.now();
   var _isSaving = false;
   String? _errorMessage;
 
   @override
   void dispose() {
     _kmController.dispose();
+    _stationController.dispose();
+    _litersController.dispose();
+    _valueController.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickFuelingDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _fueledAt,
+      firstDate: DateTime(2024),
+      lastDate: DateTime.now(),
+    );
+    if (picked == null || !mounted) {
+      return;
+    }
+    setState(() {
+      _fueledAt = DateTime(
+        picked.year,
+        picked.month,
+        picked.day,
+        _fueledAt.hour,
+        _fueledAt.minute,
+      );
+    });
+  }
+
+  Future<void> _pickFuelingTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(_fueledAt),
+    );
+    if (picked == null || !mounted) {
+      return;
+    }
+    setState(() {
+      _fueledAt = DateTime(
+        _fueledAt.year,
+        _fueledAt.month,
+        _fueledAt.day,
+        picked.hour,
+        picked.minute,
+      );
+    });
   }
 
   Future<void> _pickPhoto({
@@ -83,7 +132,10 @@ final class _FuelingPageState extends ConsumerState<FuelingPage> {
     });
   }
 
-  Future<void> _submit(List<Vehicle> vehicles) async {
+  Future<void> _submit(
+    List<Vehicle> vehicles, {
+    String? suggestedVehicleId,
+  }) async {
     final form = _formKey.currentState;
     setState(() => _errorMessage = null);
 
@@ -91,7 +143,8 @@ final class _FuelingPageState extends ConsumerState<FuelingPage> {
       return;
     }
 
-    final vehicle = vehicles.where((item) => item.id == _selectedVehicleId);
+    final selectedVehicleId = _selectedVehicleId ?? suggestedVehicleId;
+    final vehicle = vehicles.where((item) => item.id == selectedVehicleId);
     if (vehicle.isEmpty) {
       setState(() => _errorMessage = 'Selecione o veiculo abastecido.');
       return;
@@ -167,6 +220,10 @@ final class _FuelingPageState extends ConsumerState<FuelingPage> {
         vehicleModel: selectedVehicle.model,
         kmRegistered: num.parse(_kmController.text.replaceAll(',', '.')),
         fuelType: fuelType,
+        stationName: _stationController.text.trim(),
+        liters: num.parse(_litersController.text.replaceAll(',', '.')),
+        totalValue: num.parse(_valueController.text.replaceAll(',', '.')),
+        fueledAt: _fueledAt,
         receiptPhotoUrls: receiptPhotoUrls,
         odometerPhotoUrls: odometerPhotoUrls,
         pendingReceiptPhotoLocalPaths: pendingReceiptPaths,
@@ -185,11 +242,15 @@ final class _FuelingPageState extends ConsumerState<FuelingPage> {
 
       _formKey.currentState?.reset();
       _kmController.clear();
+      _stationController.clear();
+      _litersController.clear();
+      _valueController.clear();
       setState(() {
         _selectedVehicleId = null;
         _selectedFuelType = null;
         _receiptPhoto = null;
         _odometerPhoto = null;
+        _fueledAt = DateTime.now();
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -214,6 +275,12 @@ final class _FuelingPageState extends ConsumerState<FuelingPage> {
   @override
   Widget build(BuildContext context) {
     final vehicles = ref.watch(fuelingVehiclesProvider);
+    final activeTrip = ref
+        .watch(currentDriverTripsProvider)
+        .asData
+        ?.value
+        .where((trip) => trip.status == TripStatus.inProgress)
+        .firstOrNull;
 
     return DefaultTabController(
       length: 2,
@@ -230,6 +297,14 @@ final class _FuelingPageState extends ConsumerState<FuelingPage> {
               children: [
                 vehicles.when(
                   data: (items) {
+                    final suggestedVehicleId =
+                        items.any(
+                          (vehicle) => vehicle.id == activeTrip?.vehicleId,
+                        )
+                        ? activeTrip?.vehicleId
+                        : null;
+                    final selectedVehicleId =
+                        _selectedVehicleId ?? suggestedVehicleId;
                     return Form(
                       key: _formKey,
                       child: ListView(
@@ -242,7 +317,7 @@ final class _FuelingPageState extends ConsumerState<FuelingPage> {
                             child: Column(
                               children: [
                                 DropdownButtonFormField<String>(
-                                  initialValue: _selectedVehicleId,
+                                  initialValue: selectedVehicleId,
                                   isExpanded: true,
                                   decoration: const InputDecoration(
                                     labelText: 'Veiculo abastecido',
@@ -279,6 +354,61 @@ final class _FuelingPageState extends ConsumerState<FuelingPage> {
                                         'Nenhum veiculo cadastrado. O painel administrativo fara esse cadastro.',
                                   ),
                                 ],
+                                if (suggestedVehicleId != null &&
+                                    _selectedVehicleId == null) ...[
+                                  const SizedBox(height: 8),
+                                  const _FuelingInfoBanner(
+                                    icon: Icons.auto_awesome_outlined,
+                                    label: 'Preenchido automaticamente',
+                                    value:
+                                        'Usamos o veiculo da viagem em andamento.',
+                                  ),
+                                ],
+                                const SizedBox(height: 10),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: OutlinedButton.icon(
+                                        onPressed: _isSaving
+                                            ? null
+                                            : _pickFuelingDate,
+                                        icon: const Icon(Icons.event_outlined),
+                                        label: Text(
+                                          _formatDate(_fueledAt),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: OutlinedButton.icon(
+                                        onPressed: _isSaving
+                                            ? null
+                                            : _pickFuelingTime,
+                                        icon: const Icon(
+                                          Icons.schedule_outlined,
+                                        ),
+                                        label: Text(
+                                          _formatTime(_fueledAt),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 10),
+                                TextFormField(
+                                  controller: _stationController,
+                                  textCapitalization: TextCapitalization.words,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Posto',
+                                    prefixIcon: Icon(Icons.store_outlined),
+                                  ),
+                                  validator: (value) =>
+                                      (value ?? '').trim().isEmpty
+                                      ? 'Informe o posto.'
+                                      : null,
+                                ),
                                 const SizedBox(height: 10),
                                 TextFormField(
                                   controller: _kmController,
@@ -304,6 +434,61 @@ final class _FuelingPageState extends ConsumerState<FuelingPage> {
                                     }
                                     return null;
                                   },
+                                ),
+                                const SizedBox(height: 10),
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Expanded(
+                                      child: TextFormField(
+                                        controller: _litersController,
+                                        keyboardType:
+                                            const TextInputType.numberWithOptions(
+                                              decimal: true,
+                                            ),
+                                        inputFormatters: [
+                                          FilteringTextInputFormatter.allow(
+                                            RegExp(r'[0-9,.]'),
+                                          ),
+                                        ],
+                                        decoration: const InputDecoration(
+                                          labelText: 'Litros',
+                                          prefixIcon: Icon(
+                                            Icons.water_drop_outlined,
+                                          ),
+                                        ),
+                                        validator: (value) =>
+                                            _positiveNumberValidator(
+                                              value,
+                                              'Informe os litros.',
+                                            ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: TextFormField(
+                                        controller: _valueController,
+                                        keyboardType:
+                                            const TextInputType.numberWithOptions(
+                                              decimal: true,
+                                            ),
+                                        inputFormatters: [
+                                          FilteringTextInputFormatter.allow(
+                                            RegExp(r'[0-9,.]'),
+                                          ),
+                                        ],
+                                        decoration: const InputDecoration(
+                                          labelText: 'Valor total',
+                                          prefixText: 'R\$ ',
+                                        ),
+                                        validator: (value) =>
+                                            _positiveNumberValidator(
+                                              value,
+                                              'Informe o valor.',
+                                            ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
@@ -388,7 +573,12 @@ final class _FuelingPageState extends ConsumerState<FuelingPage> {
                           ],
                           const SizedBox(height: 18),
                           FilledButton.icon(
-                            onPressed: _isSaving ? null : () => _submit(items),
+                            onPressed: _isSaving
+                                ? null
+                                : () => _submit(
+                                    items,
+                                    suggestedVehicleId: suggestedVehicleId,
+                                  ),
                             icon: _isSaving
                                 ? const SizedBox.square(
                                     dimension: 18,
@@ -400,7 +590,7 @@ final class _FuelingPageState extends ConsumerState<FuelingPage> {
                             label: Text(
                               _isSaving
                                   ? 'Enviando...'
-                                  : 'Enviar abastecimento',
+                                  : 'Registrar abastecimento',
                             ),
                           ),
                         ],
@@ -842,7 +1032,7 @@ final class _FuelingHistoryTile extends StatelessWidget {
         leading: const Icon(Icons.local_gas_station_outlined),
         title: Text('${record.vehiclePlate} - ${record.fuelType.label}'),
         subtitle: Text(
-          'KM ${record.kmRegistered} - ${_formatDateTime(record.createdAt)}\n${_historyStatus(record)}',
+          'KM ${record.kmRegistered} - ${record.liters.toStringAsFixed(1)} L - R\$ ${record.totalValue.toStringAsFixed(2)}\n${_formatDateTime(record.fueledAt)} - ${_historyStatus(record)}',
         ),
         isThreeLine: true,
       ),
@@ -912,4 +1102,16 @@ String _formatDateTime(DateTime value) {
   final hour = local.hour.toString().padLeft(2, '0');
   final minute = local.minute.toString().padLeft(2, '0');
   return '$day/$month/$year $hour:$minute';
+}
+
+String _formatTime(DateTime value) {
+  final local = value.toLocal();
+  final hour = local.hour.toString().padLeft(2, '0');
+  final minute = local.minute.toString().padLeft(2, '0');
+  return '$hour:$minute';
+}
+
+String? _positiveNumberValidator(String? value, String message) {
+  final parsed = num.tryParse((value ?? '').replaceAll(',', '.'));
+  return parsed == null || parsed <= 0 ? message : null;
 }

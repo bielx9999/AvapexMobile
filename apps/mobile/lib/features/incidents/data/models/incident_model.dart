@@ -7,7 +7,12 @@ enum IncidentType {
   tire('tire'),
   accident('accident'),
   delay('delay'),
-  expense('expense');
+  expense('expense'),
+  damage('damage'),
+  cargo('cargo'),
+  delivery('delivery'),
+  documentation('documentation'),
+  other('other');
 
   const IncidentType(this.value);
 
@@ -49,6 +54,7 @@ final class Incident {
     required this.createdAt,
     this.cost,
     this.photoUrl,
+    this.pendingPhotoLocalPath,
   });
 
   final String id;
@@ -58,6 +64,7 @@ final class Incident {
   final String description;
   final num? cost;
   final String? photoUrl;
+  final String? pendingPhotoLocalPath;
   final IncidentStatus status;
   final DateTime createdAt;
 
@@ -81,6 +88,7 @@ final class Incident {
       description: json['description'] as String,
       cost: json['cost'] as num?,
       photoUrl: json['photoUrl'] as String?,
+      pendingPhotoLocalPath: json['pendingPhotoLocalPath'] as String?,
       status: IncidentStatus.fromFirestore(json['status'] as String),
       createdAt: readDateTime(json, 'createdAt'),
     );
@@ -95,6 +103,8 @@ final class Incident {
       'description': description,
       'cost': cost,
       'photoUrl': photoUrl,
+      if (pendingPhotoLocalPath != null)
+        'pendingPhotoLocalPath': pendingPhotoLocalPath,
       'status': status.value,
       'createdAt': writeTimestamp(createdAt),
     };

@@ -41,6 +41,22 @@ abstract final class AppTheme {
           fontWeight: FontWeight.w800,
         ),
       ),
+      navigationBarTheme: const NavigationBarThemeData(
+        height: 72,
+        backgroundColor: Colors.white,
+        indicatorColor: selectedYellow,
+        elevation: 0,
+        labelTextStyle: WidgetStatePropertyAll(
+          TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+        ),
+      ),
+      badgeTheme: const BadgeThemeData(
+        backgroundColor: black,
+        textColor: Colors.white,
+      ),
+      iconButtonTheme: IconButtonThemeData(
+        style: IconButton.styleFrom(minimumSize: const Size(48, 48)),
+      ),
       iconTheme: const IconThemeData(color: black),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
@@ -124,6 +140,7 @@ abstract final class AppTheme {
       listTileTheme: const ListTileThemeData(
         iconColor: black,
         contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+        minVerticalPadding: 10,
       ),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
