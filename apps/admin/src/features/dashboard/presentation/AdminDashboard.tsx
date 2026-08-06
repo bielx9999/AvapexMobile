@@ -165,8 +165,10 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
         <Suspense fallback={<PageSkeleton />}>
           {activePage === 'scheduling' ? (
             <ProgramacaoPage
+              deliveries={data.deliveries}
               loading={loading}
               onChanged={loadData}
+              routes={data.routes}
               trips={data.trips}
               users={data.users}
               vehicles={data.vehicles}

@@ -9,7 +9,8 @@ service firebase.storage {
     function isAdmin() {
       return signedIn()
         && firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
-        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'admin';
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'admin'
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.status == 'active';
     }
 
     match /drivers/{driverId}/{allPaths=**} {
@@ -20,6 +21,18 @@ service firebase.storage {
         && request.resource.size < 10 * 1024 * 1024
         && request.resource.contentType.matches('image/.*')
       );
+    }
+
+    match /trips/{tripId}/cte/{fileName} {
+      allow read: if isAdmin() || (
+        signedIn()
+        && firestore.exists(/databases/(default)/documents/trips/$(tripId))
+        && firestore.get(/databases/(default)/documents/trips/$(tripId)).data.driverId == request.auth.uid
+      );
+      allow create, update: if isAdmin()
+        && request.resource.size <= 10 * 1024 * 1024
+        && request.resource.contentType == 'application/pdf';
+      allow delete: if isAdmin();
     }
   }
 }

@@ -157,6 +157,10 @@ export const adminReadRepository = {
 };
 
 export const adminWriteRepository = {
+  createTripId() {
+    return doc(collection(firestore, 'trips')).id;
+  },
+
   async markDeliveryReceiptDelivered(receipt: DeliveryReceipt) {
     try {
       if ((receipt.adminStatus ?? 'pending') !== 'pending') {
@@ -235,7 +239,10 @@ export const adminWriteRepository = {
     }
   },
 
-  async saveTrip(trip: Omit<Trip, 'id' | 'startedAt' | 'completedAt' | 'deliveryDocs'> & { id?: string }) {
+  async saveTrip(
+    trip: Omit<Trip, 'id' | 'startedAt' | 'completedAt' | 'deliveryDocs'> & { id?: string },
+    options: { create?: boolean } = {},
+  ) {
     try {
       const data: DocumentData = {
         driverId: trip.driverId,
@@ -255,16 +262,52 @@ export const adminWriteRepository = {
         operationType: trip.operationType ?? 'loading',
         expectedArrivalAt: trip.expectedArrivalAt ?? null,
         additionalInfo: trip.additionalInfo?.trim() ?? '',
+        driverResponse: trip.driverResponse ?? 'pending',
+        driverRespondedAt: trip.driverRespondedAt ?? null,
+        driverResponseDriverId: trip.driverResponseDriverId ?? '',
+        driverRejection: trip.driverRejection ?? null,
+        assignedAt: trip.assignedAt ?? serverTimestamp(),
+        clientId: trip.clientId?.trim() ?? '',
+        clientName: trip.clientName?.trim() ?? '',
+        fleetNumber: trip.fleetNumber?.trim() ?? '',
+        cteDocuments: (trip.cteDocuments ?? []).map((document) => ({
+          id: document.id.trim(),
+          number: document.number.trim(),
+          series: document.series.trim(),
+          branch: document.branch.trim(),
+          issuedAt: document.issuedAt ?? null,
+          sender: document.sender.trim(),
+          storagePath: document.storagePath.trim(),
+          fileName: document.fileName.trim(),
+          contentType: document.contentType.trim(),
+          sizeBytes: document.sizeBytes,
+          uploadedAt: document.uploadedAt ?? null,
+          uploadedBy: document.uploadedBy.trim(),
+        })),
+        routeId: trip.routeId?.trim() ?? '',
+        routeName: trip.routeName?.trim() ?? '',
+        originLocationId: trip.originLocationId?.trim() ?? '',
+        destinationLocationId: trip.destinationLocationId?.trim() ?? '',
+        originLocation: trip.originLocation ?? null,
+        destinationLocation: trip.destinationLocation ?? null,
+        routeStops: (trip.routeStops ?? []).map((stop) => ({
+          name: stop.name.trim(),
+          address: stop.address.trim(),
+          ...(typeof stop.latitude === 'number' ? { latitude: stop.latitude } : {}),
+          ...(typeof stop.longitude === 'number' ? { longitude: stop.longitude } : {}),
+          ...(stop.locationId ? { locationId: stop.locationId.trim() } : {}),
+          ...(typeof stop.order === 'number' ? { order: stop.order } : {}),
+        })),
         statusUpdatedAt: serverTimestamp(),
       };
 
-      if (trip.id) {
+      if (trip.id && !options.create) {
         await updateDoc(doc(firestore, 'trips', trip.id), data);
         return trip.id;
       }
 
       if ((trip.operationType ?? 'loading') === 'loading') {
-        const tripRef = doc(collection(firestore, 'trips'));
+        const tripRef = trip.id ? doc(firestore, 'trips', trip.id) : doc(collection(firestore, 'trips'));
         const unloadingRef = doc(collection(firestore, 'trips'));
         const returnRef = trip.returnTrip === true ? doc(collection(firestore, 'trips')) : null;
         const returnUnloadingRef = returnRef ? doc(collection(firestore, 'trips')) : null;
@@ -297,11 +340,20 @@ export const adminWriteRepository = {
           unloadingSourceTripId: tripRef.id,
         });
         if (returnRef && returnUnloadingRef) {
+          const returnStops = Array.isArray(data.routeStops)
+            ? [...data.routeStops].reverse().map((stop, index) => ({ ...stop, order: index + 1 }))
+            : [];
           batch.set(returnRef, {
             ...data,
             id: returnRef.id,
             origin: data.destination,
             destination: data.origin,
+            originLocation: data.destinationLocation ?? null,
+            destinationLocation: data.originLocation ?? null,
+            originLocationId: data.destinationLocationId ?? '',
+            destinationLocationId: data.originLocationId ?? '',
+            routeName: data.routeName ? `${data.routeName} - Retorno` : '',
+            routeStops: returnStops,
             status: 'pending',
             scheduledAt: scheduledGeneratedAt,
             unloadingGeneratedTripId: returnUnloadingRef.id,
@@ -317,11 +369,20 @@ export const adminWriteRepository = {
           });
         }
         if (returnRef && returnUnloadingRef) {
+          const returnStops = Array.isArray(data.routeStops)
+            ? [...data.routeStops].reverse().map((stop, index) => ({ ...stop, order: index + 1 }))
+            : [];
           batch.set(returnUnloadingRef, {
             ...data,
             id: returnUnloadingRef.id,
             origin: data.destination,
             destination: data.origin,
+            originLocation: data.destinationLocation ?? null,
+            destinationLocation: data.originLocation ?? null,
+            originLocationId: data.destinationLocationId ?? '',
+            destinationLocationId: data.originLocationId ?? '',
+            routeName: data.routeName ? `${data.routeName} - Retorno` : '',
+            routeStops: returnStops,
             status: 'in_progress',
             scheduledAt: scheduledReturnUnloadingAt,
             startedAt: null,
@@ -337,6 +398,17 @@ export const adminWriteRepository = {
         }
         await batch.commit();
         return tripRef.id;
+      }
+
+      if (trip.id) {
+        await setDoc(doc(firestore, 'trips', trip.id), {
+          ...data,
+          id: trip.id,
+          startedAt: null,
+          completedAt: null,
+          deliveryDocs: [],
+        });
+        return trip.id;
       }
 
       const created = await addDoc(collection(firestore, 'trips'), {

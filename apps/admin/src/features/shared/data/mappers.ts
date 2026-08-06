@@ -95,6 +95,54 @@ export function mapTrip(id: string, data: Record<string, unknown>): Trip {
           programmingStatus === 'unloading'
         ? 'unloading'
         : 'loading';
+  const rejection = readRecord(data.driverRejection);
+  const cteDocuments = Array.isArray(data.cteDocuments)
+    ? data.cteDocuments
+        .map((value) => readRecord(value))
+        .map((document) => ({
+          id: typeof document.id === 'string' ? document.id : '',
+          number: typeof document.number === 'string' ? document.number : '',
+          series: typeof document.series === 'string' ? document.series : '',
+          branch: typeof document.branch === 'string' ? document.branch : '',
+          issuedAt: readDate(document.issuedAt),
+          sender: typeof document.sender === 'string' ? document.sender : '',
+          storagePath: typeof document.storagePath === 'string' ? document.storagePath : '',
+          fileName: typeof document.fileName === 'string' ? document.fileName : '',
+          contentType: typeof document.contentType === 'string' ? document.contentType : '',
+          sizeBytes: typeof document.sizeBytes === 'number' ? document.sizeBytes : 0,
+          uploadedAt: readDate(document.uploadedAt),
+          uploadedBy: typeof document.uploadedBy === 'string' ? document.uploadedBy : '',
+        }))
+        .filter((document) => document.number.length > 0)
+    : typeof data.cteNumber === 'string' && data.cteNumber.length > 0
+      ? [{
+          id: '',
+          number: data.cteNumber,
+          series: '',
+          branch: '',
+          issuedAt: null,
+          sender: '',
+          storagePath: '',
+          fileName: '',
+          contentType: '',
+          sizeBytes: 0,
+          uploadedAt: null,
+          uploadedBy: '',
+        }]
+      : [];
+  const routeStops = Array.isArray(data.routeStops)
+    ? data.routeStops
+        .map((value) => readRecord(value))
+        .map((stop) => ({
+          name: typeof stop.name === 'string' ? stop.name : '',
+          address: typeof stop.address === 'string' ? stop.address : '',
+          latitude: typeof stop.latitude === 'number' ? stop.latitude : undefined,
+          longitude: typeof stop.longitude === 'number' ? stop.longitude : undefined,
+          locationId: typeof stop.locationId === 'string' ? stop.locationId : undefined,
+          order: typeof stop.order === 'number' ? stop.order : undefined,
+        }))
+        .filter((stop) => stop.address.length > 0)
+    : [];
 
   return {
     id: typeof data.id === 'string' ? data.id : id,
@@ -132,6 +180,34 @@ export function mapTrip(id: string, data: Record<string, unknown>): Trip {
     gpsLocation: data.gpsLocation ? readRecord(data.gpsLocation) : undefined,
     lastGpsUpdateAt: readDate(data.lastGpsUpdateAt),
     statusUpdatedAt: readDate(data.statusUpdatedAt),
+    driverResponse:
+      data.driverResponse === 'accepted' || data.driverResponse === 'rejected'
+        ? data.driverResponse
+        : 'pending',
+    driverRespondedAt: readDate(data.driverRespondedAt),
+    driverResponseDriverId:
+      typeof data.driverResponseDriverId === 'string' ? data.driverResponseDriverId : '',
+    driverRejection:
+      typeof rejection.reasonCode === 'string' && rejection.reasonCode.length > 0
+        ? {
+            reasonCode: rejection.reasonCode,
+            reasonLabel: typeof rejection.reasonLabel === 'string' ? rejection.reasonLabel : '',
+            notes: typeof rejection.notes === 'string' ? rejection.notes : '',
+          }
+        : null,
+    assignedAt: readDate(data.assignedAt),
+    clientId: typeof data.clientId === 'string' ? data.clientId : '',
+    clientName: typeof data.clientName === 'string' ? data.clientName : '',
+    fleetNumber: typeof data.fleetNumber === 'string' ? data.fleetNumber : '',
+    cteDocuments,
+    routeId: typeof data.routeId === 'string' ? data.routeId : '',
+    routeName: typeof data.routeName === 'string' ? data.routeName : '',
+    originLocationId: typeof data.originLocationId === 'string' ? data.originLocationId : '',
+    destinationLocationId:
+      typeof data.destinationLocationId === 'string' ? data.destinationLocationId : '',
+    originLocation: data.originLocation ? mapAddress(data.originLocation) : undefined,
+    destinationLocation: data.destinationLocation ? mapAddress(data.destinationLocation) : undefined,
+    routeStops,
   };
 }
 

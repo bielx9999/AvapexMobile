@@ -33,7 +33,14 @@ final class DriverNotificationsPage extends ConsumerWidget {
             .toList()
           ..sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
     final assigned =
-        trips.where((trip) => trip.status == TripStatus.pending).toList()
+        trips
+            .where(
+              (trip) =>
+                  trip.driverResponse == DriverTripResponse.pending &&
+                  trip.status != TripStatus.completed &&
+                  trip.status != TripStatus.cancelled,
+            )
+            .toList()
           ..sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
     final pendingProofs = deliveries.where(_needsProofAction).toList()
       ..sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));

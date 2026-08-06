@@ -193,7 +193,12 @@ int _driverAlertCount(WidgetRef ref) {
         trip.status == TripStatus.pending,
   );
   final assignedCount = trips
-      .where((trip) => trip.status == TripStatus.pending)
+      .where(
+        (trip) =>
+            trip.driverResponse == DriverTripResponse.pending &&
+            trip.status != TripStatus.completed &&
+            trip.status != TripStatus.cancelled,
+      )
       .length;
   final pendingProofCount = deliveries.where((delivery) {
     return delivery.status != DeliveryStatus.cancelled &&

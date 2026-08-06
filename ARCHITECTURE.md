@@ -2,7 +2,7 @@
 
 ## 1. Visão Geral
 Sistema logístico integrado para otimização de processos operacionais e administrativos. O sistema é dividido em duas interfaces que consomem o mesmo backend Firebase:
-* **Mobile App (Motoristas):** Focado em agilidade, usabilidade em campo e funcionamento Offline-First (checklists, registro de avarias, atualização de status de viagens).
+* **Mobile App (Motoristas):** Focado em agilidade, usabilidade em campo e funcionamento Offline-First (checklists, registro de avarias, resposta a viagens atribuídas e acompanhamento somente leitura das etapas operacionais).
 * **Web Dashboard (Administrativo):** Focado em controle em tempo real, auditoria, despacho de cargas, gestão de frota e relatórios de conformidade.
 
 ## 2. Stack Tecnológica
@@ -44,11 +44,22 @@ O banco NoSQL deve ser estruturado para minimizar leituras e evitar consultas co
 * `completedAt` (timestamp, null)
 * `deliveryDocs` (array de strings - URLs das fotos de canhotos/NF no Storage)
 * `programmingStatus` (string: "loading" | "in_transit" | "unloading" | "awaiting_invoice" | "released")
-* `operationalStatus` (string, etapa detalhada registrada pelo motorista)
+* `operationalStatus` (string, etapa detalhada controlada exclusivamente pelo administrativo)
 * `operationType` (string: "loading" | "unloading")
 * `statusUpdatedAt` (timestamp, null - ultima atualizacao da etapa)
 * `gpsLocation` (map: `{ latitude, longitude, accuracy, display }`, opcional)
 * `lastGpsUpdateAt` (timestamp, null - heartbeat usado para calcular GPS online/offline)
+* `driverResponse` (string: `pending` | `accepted` | `rejected`, independente da etapa operacional)
+* `driverRespondedAt`, `assignedAt` (timestamp, null)
+* `driverResponseDriverId` (string, UID que respondeu)
+* `driverRejection` (map: `{ reasonCode, reasonLabel, notes }`, obrigatorio na recusa)
+* `clientName`, `fleetNumber` (string, snapshots administrativos)
+* `clientId` (string, FK opcional para o futuro cadastro de clientes)
+* `routeId`, `routeName` (string, referência e snapshot da rota selecionada)
+* `originLocationId`, `destinationLocationId` (string, FKs opcionais para o futuro cadastro de localidades)
+* `originLocation`, `destinationLocation` (map AddressSnapshot com endereço e coordenadas quando disponíveis)
+* `cteDocuments` (array de maps: `{ id, number, series, branch, issuedAt, sender, storagePath, fileName, contentType, sizeBytes, uploadedAt, uploadedBy }`)
+* `routeStops` (array ordenada de maps: `{ name, address, latitude, longitude, locationId, order }`)
 
 ### Coleção: `checklists`
 * `id` (string, PK)
@@ -76,6 +87,7 @@ O banco NoSQL deve ser estruturado para minimizar leituras e evitar consultas co
 ## 4. Regras de Arquitetura e Integração com Firebase
 1. **Offline-First no Mobile:** O cache offline do Firestore (`PersistenceEnabled`) deve ser inicializado antes de qualquer chamada de rede. Nenhuma tela do app mobile pode bloquear o usuário por falta de conexão à internet.
 2. **Upload de Mídias (Storage):** Fotos de checklist e canhotos devem ser comprimidas no client-side antes do upload para economizar dados móveis. O app deve salvar o caminho local provisoriamente se estiver offline e realizar o upload para o Cloud Storage em segundo plano quando a conexão for reestabelecida.
+   PDFs de CT-e são armazenados em `trips/{tripId}/cte/{documentId}.pdf`, limitados a 10 MB e `application/pdf`. Somente administradores ativos escrevem; a leitura é permitida ao administrativo e ao motorista vinculado à viagem.
 3. **Segurança de Acesso:** Motoristas só podem ler e escrever dados onde `driverId == auth.uid`. O setor administrativo tem acesso de leitura/escrita global em todas as coleções.
 4. **Separação de Responsabilidades:** Nunca misture lógica de UI com chamadas diretas do Firebase. Utilize uma camada de Serviços/Repositórios para abstrair as operações do Firestore e do Auth.
 

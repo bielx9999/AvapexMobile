@@ -3,6 +3,7 @@ export type UserStatus = 'active' | 'inactive';
 export type VehicleStatus = 'active' | 'inactive';
 export type VehicleType = 'mechanical_horse_trucado' | 'mechanical_horse_toco' | 'truck';
 export type TripStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled';
+export type DriverTripResponse = 'pending' | 'accepted' | 'rejected';
 export type ProgrammingStatus = 'loading' | 'in_transit' | 'unloading' | 'awaiting_invoice' | 'released';
 export type ProgrammingOperationType = 'loading' | 'unloading';
 export type ProgrammingOperationalStatus =
@@ -67,6 +68,30 @@ export type AddressSnapshot = {
   postalCode?: string;
 };
 
+export type TripCteDocument = {
+  id: string;
+  number: string;
+  series: string;
+  branch: string;
+  issuedAt: Date | null;
+  sender: string;
+  storagePath: string;
+  fileName: string;
+  contentType: string;
+  sizeBytes: number;
+  uploadedAt: Date | null;
+  uploadedBy: string;
+};
+
+export type TripRouteStop = {
+  name: string;
+  address: string;
+  latitude?: number;
+  longitude?: number;
+  locationId?: string;
+  order?: number;
+};
+
 export type AppUser = {
   uid: string;
   name: string;
@@ -124,6 +149,26 @@ export type Trip = {
   gpsLocation?: Record<string, unknown>;
   lastGpsUpdateAt?: Date | null;
   statusUpdatedAt?: Date | null;
+  driverResponse?: DriverTripResponse;
+  driverRespondedAt?: Date | null;
+  driverResponseDriverId?: string;
+  driverRejection?: {
+    reasonCode: string;
+    reasonLabel: string;
+    notes: string;
+  } | null;
+  assignedAt?: Date | null;
+  clientId?: string;
+  clientName?: string;
+  fleetNumber?: string;
+  cteDocuments?: TripCteDocument[];
+  routeId?: string;
+  routeName?: string;
+  originLocationId?: string;
+  destinationLocationId?: string;
+  originLocation?: AddressSnapshot;
+  destinationLocation?: AddressSnapshot;
+  routeStops?: TripRouteStop[];
 };
 
 export type RoutePlan = {

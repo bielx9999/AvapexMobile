@@ -59,6 +59,61 @@ void main() {
     );
   });
 
+  test(
+    'Trip keeps driver response, multiple CT-e and route stops separate',
+    () {
+      final respondedAt = DateTime.utc(2026, 8, 8, 10, 30);
+      final trip = Trip.fromFirestore({
+        'id': 'trip-assigned',
+        'driverId': 'driver-1',
+        'vehicleId': 'vehicle-1',
+        'origin': 'Guarulhos - SP',
+        'destination': 'Santos - SP',
+        'status': 'pending',
+        'scheduledAt': Timestamp.fromDate(DateTime.utc(2026, 8, 9, 7)),
+        'driverResponse': 'rejected',
+        'driverRespondedAt': Timestamp.fromDate(respondedAt),
+        'driverResponseDriverId': 'driver-1',
+        'driverRejection': {
+          'reasonCode': 'schedule_conflict',
+          'reasonLabel': 'Conflito de horario',
+          'notes': 'Outra programacao no mesmo horario.',
+        },
+        'cteDocuments': [
+          {
+            'id': 'cte-1',
+            'number': '1001',
+            'storagePath': 'trips/trip-assigned/cte/cte-1.pdf',
+            'fileName': 'CTe_1001.pdf',
+            'contentType': 'application/pdf',
+            'sizeBytes': 2048,
+            'uploadedAt': Timestamp.fromDate(respondedAt),
+            'uploadedBy': 'admin-1',
+          },
+          {'number': '1002', 'series': '1'},
+        ],
+        'routeStops': [
+          {'name': 'Parada 1', 'address': 'Cubatao - SP'},
+        ],
+      });
+
+      expect(trip.driverResponse, DriverTripResponse.rejected);
+      expect(trip.driverRejection?.reasonCode, 'schedule_conflict');
+      expect(trip.cteDocuments.map((document) => document.number), [
+        '1001',
+        '1002',
+      ]);
+      expect(trip.routeStops.single.address, 'Cubatao - SP');
+      expect(
+        trip.cteDocuments.first.storagePath,
+        'trips/trip-assigned/cte/cte-1.pdf',
+      );
+      expect(trip.cteDocuments.first.fileName, 'CTe_1001.pdf');
+      expect(trip.toFirestore()['driverResponse'], 'rejected');
+      expect(trip.toFirestore()['cteDocuments'], hasLength(2));
+    },
+  );
+
   test('Driver user requires CNH data', () {
     expect(
       () => AppUser.fromFirestore({

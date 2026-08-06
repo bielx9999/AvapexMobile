@@ -44,17 +44,25 @@ service cloud.firestore {
       return status in ['pending', 'in_route', 'arrived', 'delivered', 'not_delivered', 'cancelled'];
     }
 
-    function validDriverRouteTransition(previousStatus, nextStatus) {
-      return previousStatus == nextStatus
-        || (previousStatus == 'assigned' && nextStatus == 'in_progress')
-        || (previousStatus == 'in_progress' && nextStatus == 'completed');
-    }
-
-    function validDriverDeliveryTransition(previousStatus, nextStatus) {
-      return previousStatus == nextStatus
-        || (previousStatus == 'pending' && nextStatus == 'in_route')
-        || (previousStatus == 'in_route' && nextStatus in ['arrived', 'not_delivered'])
-        || (previousStatus == 'arrived' && nextStatus in ['delivered', 'not_delivered']);
+    function validDriverTripResponse(data) {
+      return data.driverResponse in ['accepted', 'rejected']
+        && data.driverResponseDriverId == request.auth.uid
+        && data.driverRespondedAt is timestamp
+        && (
+          (
+            data.driverResponse == 'accepted'
+            && data.driverRejection == null
+          )
+          || (
+            data.driverResponse == 'rejected'
+            && data.driverRejection is map
+            && data.driverRejection.reasonCode is string
+            && data.driverRejection.reasonCode.size() > 0
+            && data.driverRejection.reasonLabel is string
+            && data.driverRejection.reasonLabel.size() > 0
+            && data.driverRejection.notes is string
+          )
+        );
     }
 
     function validAddress(data) {
@@ -396,18 +404,28 @@ service cloud.firestore {
         ownedExistingDriverData()
         && request.resource.data.driverId == resource.data.driverId
         && request.resource.data.vehicleId == resource.data.vehicleId
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'status',
-          'startedAt',
-          'completedAt',
-          'deliveryDocs',
-          'programmingStatus',
-          'operationalStatus',
-          'operationType',
-          'statusUpdatedAt',
-          'gpsLocation',
-          'lastGpsUpdateAt'
-        ])
+        && (
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'gpsLocation',
+            'lastGpsUpdateAt'
+          ])
+          || (
+            resource.data.status == 'pending'
+            && resource.data.scheduledAt is timestamp
+            && resource.data.scheduledAt > request.time
+            && (
+              !('driverResponse' in resource.data)
+              || resource.data.driverResponse == 'pending'
+            )
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'driverResponse',
+              'driverRespondedAt',
+              'driverResponseDriverId',
+              'driverRejection'
+            ])
+            && validDriverTripResponse(request.resource.data)
+          )
+        )
       );
     }
 
@@ -421,17 +439,11 @@ service cloud.firestore {
         ownedExistingDriverData()
         && request.resource.data.driverId == resource.data.driverId
         && request.resource.data.vehicleId == resource.data.vehicleId
+        && request.resource.data.status == resource.data.status
         && request.resource.data.updatedBy == request.auth.uid
         && validRouteData(request.resource.data, routeId)
-        && validDriverRouteTransition(resource.data.status, request.resource.data.status)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'status',
           'currentLocation',
-          'startedAt',
-          'completedAt',
-          'completedDeliveryCount',
-          'actualDistanceMeters',
-          'actualDurationSeconds',
           'updatedAt',
           'updatedBy'
         ])
@@ -452,31 +464,16 @@ service cloud.firestore {
         && request.resource.data.vehicleId == resource.data.vehicleId
         && request.resource.data.updatedBy == request.auth.uid
         && validDeliveryData(request.resource.data, deliveryId)
-        && validDriverDeliveryTransition(resource.data.status, request.resource.data.status)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'status',
-          'arrivedAt',
-          'deliveredAt',
-          'checkInLocation',
-          'failure',
           'proofStatus',
           'deliveryProofId',
-          'notes',
           'updatedAt',
           'updatedBy'
         ])
-        && (
-          !request.resource.data.diff(resource.data).affectedKeys().hasAny([
-            'proofStatus',
-            'deliveryProofId'
-          ])
-          || (
-            resource.data.proofStatus in ['pending', 'rejected']
-            && request.resource.data.proofStatus == 'submitted'
-            && request.resource.data.deliveryProofId is string
-            && request.resource.data.deliveryProofId.size() > 0
-          )
-        )
+        && resource.data.proofStatus in ['pending', 'rejected']
+        && request.resource.data.proofStatus == 'submitted'
+        && request.resource.data.deliveryProofId is string
+        && request.resource.data.deliveryProofId.size() > 0
       );
       allow delete: if isAdmin();
     }
@@ -493,7 +490,7 @@ service cloud.firestore {
           && request.resource.data.source == 'driver'
           && request.resource.data.actorId == request.auth.uid
           && request.resource.data.driverId == request.auth.uid
-          && !(request.resource.data.type in ['delivery_proof_approved', 'delivery_proof_rejected'])
+          && request.resource.data.type in ['delivery_proof_submitted', 'note_added']
           && ownsRoute(request.resource.data.routeId)
           && deliveryBelongsToRoute(request.resource.data.deliveryId, request.resource.data.routeId)
         )

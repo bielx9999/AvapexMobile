@@ -4,6 +4,7 @@ import 'package:lucide_flutter/lucide_flutter.dart';
 
 import '../application/trip_providers.dart';
 import '../data/models/trip_model.dart';
+import 'assigned_trips_page.dart';
 import 'trip_detail_page.dart';
 
 final class DriverTripsPage extends ConsumerWidget {
@@ -19,12 +20,7 @@ final class DriverTripsPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     if (assignedOnly) {
-      return Column(
-        children: [
-          if (showHeader) const _PageHeader(),
-          const Expanded(child: _TripsList(kind: _TripListKind.upcoming)),
-        ],
-      );
+      return AssignedTripsPage(showHeader: showHeader);
     }
 
     return DefaultTabController(
@@ -109,7 +105,9 @@ final class _TripsList extends ConsumerWidget {
         final filtered = items.where((trip) {
           return switch (kind) {
             _TripListKind.inProgress => trip.status == TripStatus.inProgress,
-            _TripListKind.upcoming => trip.status == TripStatus.pending,
+            _TripListKind.upcoming =>
+              trip.status == TripStatus.pending &&
+                  trip.driverResponse == DriverTripResponse.accepted,
           };
         }).toList()..sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
 

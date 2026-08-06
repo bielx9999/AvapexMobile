@@ -59,43 +59,11 @@ final class TripRepository {
     }
   }
 
-  Future<void> updateStatusForCurrentDriver(
-    String tripId,
-    TripStatus status, {
-    DateTime? startedAt,
-    DateTime? completedAt,
+  Future<void> respondToAssignment({
+    required Trip trip,
+    required DriverTripResponse response,
+    TripRejection? rejection,
   }) async {
-    try {
-      final uid = _requireCurrentUserId();
-      final trip = await getByIdForCurrentDriver(tripId);
-      if (trip == null || trip.driverId != uid) {
-        throw const FirebaseFailure(
-          code: FirebaseFailureCode.permissionDenied,
-          message: 'Viagem inexistente ou nao pertence ao motorista atual.',
-        );
-      }
-
-      final data = <String, Object?>{'status': status.value};
-      if (startedAt != null) {
-        data['startedAt'] = Timestamp.fromDate(startedAt);
-      }
-      if (completedAt != null) {
-        data['completedAt'] = Timestamp.fromDate(completedAt);
-      }
-
-      await _trips
-          .doc(tripId)
-          .update(data)
-          .timeout(const Duration(seconds: 10));
-    } on Object catch (error, stackTrace) {
-      throw FirebaseFailure.fromException(error, stackTrace);
-    }
-  }
-
-  Future<void> updateProgressForCurrentDriver(
-    Trip trip,
-    TripProgress progress,
-  ) async {
     try {
       final uid = _requireCurrentUserId();
       if (trip.driverId != uid) {
@@ -104,27 +72,56 @@ final class TripRepository {
           message: 'Viagem inexistente ou nao pertence ao motorista atual.',
         );
       }
-
-      final data = <String, Object?>{
-        'status': progress.tripStatus.value,
-        'programmingStatus': progress.programmingStatus.value,
-        'operationalStatus': progress.operationalStatusValue,
-        'operationType': progress.operationType.value,
-        'statusUpdatedAt': FieldValue.serverTimestamp(),
-      };
-      if (progress.tripStatus == TripStatus.inProgress &&
-          trip.startedAt == null) {
-        data['startedAt'] = FieldValue.serverTimestamp();
-        data['completedAt'] = null;
+      if (response == DriverTripResponse.pending) {
+        throw const FirebaseFailure(
+          code: FirebaseFailureCode.unknown,
+          message: 'Resposta de viagem invalida.',
+        );
       }
-      if (progress.isFinished) {
-        data['completedAt'] = FieldValue.serverTimestamp();
+      if (response == DriverTripResponse.rejected &&
+          (rejection == null || rejection.reasonCode.isEmpty)) {
+        throw const FirebaseFailure(
+          code: FirebaseFailureCode.unknown,
+          message: 'Informe o motivo da recusa.',
+        );
       }
 
-      await _trips
-          .doc(trip.id)
-          .update(data)
-          .timeout(const Duration(seconds: 10));
+      await _firestore
+          .runTransaction((transaction) async {
+            final reference = _trips.doc(trip.id);
+            final snapshot = await transaction.get(reference);
+            final current = snapshot.data();
+            if (current == null || current.driverId != uid) {
+              throw const FirebaseFailure(
+                code: FirebaseFailureCode.permissionDenied,
+                message:
+                    'Viagem inexistente ou nao pertence ao motorista atual.',
+              );
+            }
+            if (current.driverResponse != DriverTripResponse.pending) {
+              throw const FirebaseFailure(
+                code: FirebaseFailureCode.permissionDenied,
+                message: 'Esta viagem ja recebeu uma resposta.',
+              );
+            }
+            if (!current.canDriverRespondAt(DateTime.now())) {
+              throw const FirebaseFailure(
+                code: FirebaseFailureCode.permissionDenied,
+                message:
+                    'Somente viagens futuras e pendentes podem receber resposta.',
+              );
+            }
+
+            transaction.update(reference, {
+              'driverResponse': response.value,
+              'driverRespondedAt': FieldValue.serverTimestamp(),
+              'driverResponseDriverId': uid,
+              'driverRejection': response == DriverTripResponse.rejected
+                  ? rejection!.toFirestore()
+                  : null,
+            });
+          })
+          .timeout(const Duration(seconds: 15));
     } on Object catch (error, stackTrace) {
       throw FirebaseFailure.fromException(error, stackTrace);
     }

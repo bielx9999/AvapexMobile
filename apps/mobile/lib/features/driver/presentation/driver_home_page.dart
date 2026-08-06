@@ -41,10 +41,26 @@ final class DriverHomePage extends ConsumerWidget {
         trips.where((trip) => trip.status == TripStatus.inProgress).toList()
           ..sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
     final assigned =
-        trips.where((trip) => trip.status == TripStatus.pending).toList()
+        trips
+            .where(
+              (trip) =>
+                  trip.driverResponse == DriverTripResponse.pending &&
+                  trip.status != TripStatus.completed &&
+                  trip.status != TripStatus.cancelled,
+            )
+            .toList()
+          ..sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
+    final acceptedUpcoming =
+        trips
+            .where(
+              (trip) =>
+                  trip.status == TripStatus.pending &&
+                  trip.driverResponse == DriverTripResponse.accepted,
+            )
+            .toList()
           ..sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
     final currentTrip = inProgress.firstOrNull;
-    final nextTrip = assigned.firstOrNull;
+    final nextTrip = acceptedUpcoming.firstOrNull ?? assigned.firstOrNull;
     final operationalTrip = currentTrip ?? nextTrip;
     final checklistPending =
         operationalTrip != null &&
