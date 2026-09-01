@@ -4,15 +4,19 @@ import {
   BarChart3,
   CheckCircle2,
   ClipboardList,
+  Eye,
   Filter,
   LineChart,
+  LoaderCircle,
   Search,
+  Send,
   UsersRound,
   X,
   XCircle,
 } from 'lucide-react';
 import Chart from 'react-apexcharts';
 import type { ApexOptions } from 'apexcharts';
+import { adminWriteRepository } from '../../shared/data/firestoreCollections';
 import type { AppUser, Checklist, ChecklistType } from '../../shared/domain/models';
 import { MetricCard } from '../../shared/presentation/ui';
 
@@ -44,6 +48,10 @@ export function ChecklistsPage({
   const [driverId, setDriverId] = useState('');
   const [type, setType] = useState<'all' | ChecklistType>('all');
   const [query, setQuery] = useState('');
+  const [selectedChecklist, setSelectedChecklist] = useState<Checklist | null>(null);
+  const [reportMessage, setReportMessage] = useState('');
+  const [actionError, setActionError] = useState('');
+  const [busyAction, setBusyAction] = useState<'approve' | 'report' | ''>('');
 
   const drivers = useMemo(
     () =>
@@ -97,7 +105,7 @@ export function ChecklistsPage({
   const stats = useMemo(() => {
     const total = filteredChecklists.length;
     const rejected = filteredChecklists.filter((checklist) => checklist.hasCriticalFailure).length;
-    const approved = total - rejected;
+    const approved = filteredChecklists.filter((checklist) => checklist.adminReviewStatus === 'approved').length;
     const uniqueDrivers = new Set(filteredChecklists.map((checklist) => checklist.driverId).filter(Boolean)).size;
     return { total, approved, rejected, uniqueDrivers };
   }, [filteredChecklists]);
@@ -159,6 +167,39 @@ export function ChecklistsPage({
     setDriverId('');
     setType('all');
     setQuery('');
+  }
+
+  function openAnalysis(checklist: Checklist) {
+    setSelectedChecklist(checklist);
+    setReportMessage(checklist.adminReviewMessage ?? '');
+    setActionError('');
+  }
+
+  async function approveChecklist(checklist: Checklist) {
+    setBusyAction('approve');
+    setActionError('');
+    try {
+      await adminWriteRepository.approveChecklist(checklist);
+      setSelectedChecklist(null);
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Erro ao aprovar checklist.');
+    } finally {
+      setBusyAction('');
+    }
+  }
+
+  async function reportChecklist(checklist: Checklist) {
+    setBusyAction('report');
+    setActionError('');
+    try {
+      await adminWriteRepository.reportChecklistError(checklist, reportMessage);
+      setSelectedChecklist(null);
+      setReportMessage('');
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Erro ao reportar erro no checklist.');
+    } finally {
+      setBusyAction('');
+    }
   }
 
   return (
@@ -302,26 +343,50 @@ export function ChecklistsPage({
                 <th className="px-4 py-3">Veiculo</th>
                 <th className="px-4 py-3">KM</th>
                 <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3 text-right">Analise</th>
               </tr>
             </thead>
             <tbody>
               {filteredChecklists.map((checklist) => (
                 <tr key={checklist.id}>
-                  <td className="px-4 py-3">{formatDate(checklist.createdAt)}</td>
-                  <td className="px-4 py-3">{checklist.driverName || driverNames.get(checklist.driverId) || checklist.driverId}</td>
-                  <td className="px-4 py-3">{checklistLabel(checklist.type)}</td>
-                  <td className="px-4 py-3">{checklist.vehiclePlate || checklist.vehicleId || '-'}</td>
+                  <td className="px-4 py-3">
+                    <span className="block text-sm font-medium text-zinc-900">{formatDateOnly(checklist.createdAt)}</span>
+                    <span className="text-xs text-zinc-500">{formatTimeOnly(checklist.createdAt)}</span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="block font-medium text-zinc-900">{checklist.driverName || driverNames.get(checklist.driverId) || checklist.driverId}</span>
+                    <span className="text-xs text-zinc-500">{checklist.driverId}</span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="rounded-lg bg-zinc-100 px-2 py-1 text-xs font-semibold text-zinc-700">{checklistLabel(checklist.type)}</span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="block font-medium text-zinc-900">{checklist.vehiclePlate || checklist.vehicleId || '-'}</span>
+                    <span className="text-xs text-zinc-500">{checklist.photoUrls.length} foto(s)</span>
+                  </td>
                   <td className="px-4 py-3">{checklist.kmRegistered || '-'}</td>
                   <td className="px-4 py-3">
-                    <span className={checklist.hasCriticalFailure ? 'ui-pill bg-red-50 text-red-700' : 'ui-pill bg-emerald-50 text-emerald-700'}>
-                      {checklist.hasCriticalFailure ? 'Reprovado' : 'Aprovado'}
+                    <span className={reviewStatusClass(checklist)}>
+                      {reviewStatusLabel(checklist)}
                     </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex justify-end">
+                      <button
+                        className="ui-button h-9 gap-2 border border-zinc-200 bg-white px-3 text-xs font-medium text-zinc-700 hover:bg-zinc-50"
+                        onClick={() => openAnalysis(checklist)}
+                        type="button"
+                      >
+                        <Eye size={15} />
+                        Analisar
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
               {!loading && filteredChecklists.length === 0 ? (
                 <tr>
-                  <td className="px-4 py-8 text-center text-zinc-500" colSpan={6}>
+                  <td className="px-4 py-8 text-center text-zinc-500" colSpan={7}>
                     Nenhum checklist encontrado.
                   </td>
                 </tr>
@@ -330,6 +395,20 @@ export function ChecklistsPage({
           </table>
         </div>
       </section>
+
+      {selectedChecklist ? (
+        <ChecklistAnalysisPanel
+          actionError={actionError}
+          busyAction={busyAction}
+          checklist={selectedChecklist}
+          driverName={selectedChecklist.driverName || driverNames.get(selectedChecklist.driverId) || selectedChecklist.driverId}
+          onApprove={() => void approveChecklist(selectedChecklist)}
+          onClose={() => setSelectedChecklist(null)}
+          onReport={() => void reportChecklist(selectedChecklist)}
+          reportMessage={reportMessage}
+          setReportMessage={setReportMessage}
+        />
+      ) : null}
     </div>
   );
 }
@@ -511,6 +590,198 @@ function EmptyText({ children }: { children: ReactNode }) {
   return <p className="rounded-2xl bg-zinc-50 px-4 py-8 text-center text-sm text-zinc-500">{children}</p>;
 }
 
+type ChecklistAnalysisPanelProps = {
+  actionError: string;
+  busyAction: 'approve' | 'report' | '';
+  checklist: Checklist;
+  driverName: string;
+  onApprove: () => void;
+  onClose: () => void;
+  onReport: () => void;
+  reportMessage: string;
+  setReportMessage: (value: string) => void;
+};
+
+function ChecklistAnalysisPanel({
+  actionError,
+  busyAction,
+  checklist,
+  driverName,
+  onApprove,
+  onClose,
+  onReport,
+  reportMessage,
+  setReportMessage,
+}: ChecklistAnalysisPanelProps) {
+  const reviewed = (checklist.adminReviewStatus ?? 'pending') !== 'pending';
+  const answerRows = objectRows(checklist.answers && Object.keys(checklist.answers).length > 0 ? checklist.answers : checklist.items);
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/35 backdrop-blur-[1px]">
+      <button aria-label="Fechar analise" className="absolute inset-0 h-full w-full cursor-default" onClick={onClose} type="button" />
+      <aside className="relative ml-auto flex h-full w-full max-w-2xl flex-col bg-zinc-50 shadow-2xl">
+        <header className="border-b border-zinc-200 bg-white px-5 py-4">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-lg font-semibold text-zinc-950">Analise do checklist</h2>
+                <span className={reviewStatusClass(checklist)}>{reviewStatusLabel(checklist)}</span>
+              </div>
+              <p className="mt-1 text-sm text-zinc-500">{checklistLabel(checklist.type)} - {formatDate(checklist.createdAt)}</p>
+            </div>
+            <button aria-label="Fechar" className="ui-icon-button h-9 w-9 border-zinc-300 text-zinc-700 hover:bg-zinc-50" onClick={onClose} type="button">
+              <X size={18} />
+            </button>
+          </div>
+        </header>
+
+        <div className="flex-1 space-y-4 overflow-y-auto px-5 py-5">
+          <section className="grid gap-3 sm:grid-cols-2">
+            <DetailCard icon={<UsersRound size={17} />} label="Motorista" value={driverName} helper={checklist.driverId} />
+            <DetailCard icon={<ClipboardList size={17} />} label="Modelo" value={checklistLabel(checklist.type)} helper={formatDate(checklist.createdAt)} />
+            <DetailCard icon={<BarChart3 size={17} />} label="Veiculo" value={checklist.vehiclePlate || checklist.vehicleId || '-'} helper={checklist.vehicleId} />
+            <DetailCard icon={<LineChart size={17} />} label="Quilometragem" value={checklist.kmRegistered ? `${checklist.kmRegistered.toLocaleString('pt-BR')} km` : '-'} helper={checklist.hasCriticalFailure ? 'Contem nao conformidade' : 'Sem falha critica marcada'} />
+          </section>
+
+          <section className="rounded-lg border border-zinc-200 bg-white shadow-sm">
+            <div className="flex items-center justify-between gap-3 border-b border-zinc-100 px-4 py-3">
+              <h3 className="text-sm font-semibold text-zinc-950">Respostas registradas</h3>
+              <span className="text-xs font-medium text-zinc-500">{answerRows.length} campos</span>
+            </div>
+            <div className="divide-y divide-zinc-100">
+              {answerRows.length > 0 ? answerRows.map(([key, value]) => (
+                <div className="grid gap-2 px-4 py-3 text-sm sm:grid-cols-[210px_1fr]" key={key}>
+                  <span className="font-medium text-zinc-600">{formatFieldName(key)}</span>
+                  <span className={answerValueClass(value)}>{formatUnknownValue(value)}</span>
+                </div>
+              )) : (
+                <p className="px-4 py-6 text-sm text-zinc-500">Nenhuma resposta detalhada encontrada.</p>
+              )}
+            </div>
+          </section>
+
+          {checklist.photoUrls.length > 0 ? (
+            <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="text-sm font-semibold text-zinc-950">Fotos anexadas</h3>
+                <span className="text-xs font-medium text-zinc-500">Clique para abrir</span>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+                {checklist.photoUrls.map((url, index) => (
+                  <a className="group overflow-hidden rounded-lg border border-zinc-200 bg-zinc-50" href={url} key={url} rel="noreferrer" target="_blank">
+                    <img alt={`Foto ${index + 1}`} className="h-32 w-full object-cover transition-transform group-hover:scale-[1.03]" src={url} />
+                    <span className="block px-2 py-1.5 text-xs font-medium text-zinc-600">Foto {index + 1}</span>
+                  </a>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          {reviewed ? (
+            <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
+              <h3 className="text-sm font-semibold text-zinc-950">Resultado da analise</h3>
+              <p className="mt-2 text-sm text-zinc-700">{checklist.adminReviewMessage || reviewStatusLabel(checklist)}</p>
+              <p className="mt-2 text-xs text-zinc-500">Revisado em {formatDate(checklist.reviewedAt ?? null)}</p>
+            </section>
+          ) : (
+            <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
+              <label className="block">
+                <span className="mb-2 block text-sm font-semibold text-zinc-950">Erro para reportar ao motorista</span>
+                <textarea
+                  className="ui-input min-h-28 w-full resize-y px-3 py-2 text-sm"
+                  onChange={(event) => setReportMessage(event.target.value)}
+                  placeholder="Descreva o que precisa ser corrigido ou reenviado..."
+                  value={reportMessage}
+                />
+              </label>
+              {actionError ? <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">{actionError}</p> : null}
+            </section>
+          )}
+        </div>
+
+        {!reviewed ? (
+          <footer className="grid gap-2 border-t border-zinc-200 px-5 py-4 sm:grid-cols-2">
+            <button className="ui-button h-11 gap-2 bg-zinc-950 px-4 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-60" disabled={Boolean(busyAction)} onClick={onApprove} type="button">
+              {busyAction === 'approve' ? <LoaderCircle className="animate-spin" size={17} /> : <CheckCircle2 size={17} />}
+              Aprovar checklist
+            </button>
+            <button className="ui-button h-11 gap-2 border border-red-200 bg-red-50 px-4 text-sm font-semibold text-red-700 hover:bg-red-100 disabled:opacity-60" disabled={Boolean(busyAction)} onClick={onReport} type="button">
+              {busyAction === 'report' ? <LoaderCircle className="animate-spin" size={17} /> : <Send size={17} />}
+              Reportar erro
+            </button>
+          </footer>
+        ) : null}
+      </aside>
+    </div>
+  );
+}
+
+function DetailCard({ helper, icon, label, value }: { helper: string; icon: ReactNode; label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
+      <div className="flex items-start gap-3">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-zinc-100 text-zinc-800">{icon}</span>
+        <div className="min-w-0">
+          <span className="block text-xs font-medium uppercase text-zinc-500">{label}</span>
+          <strong className="mt-1 block truncate text-sm text-zinc-950" title={value}>{value}</strong>
+          <span className="mt-1 block truncate text-xs text-zinc-500" title={helper}>{helper || '-'}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function objectRows(value: Record<string, unknown> | undefined) {
+  return Object.entries(value ?? {}).filter(([, item]) => item !== undefined && item !== null && item !== '');
+}
+
+function formatFieldName(value: string) {
+  return value
+    .replace(/[_-]/g, ' ')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function formatUnknownValue(value: unknown): string {
+  if (typeof value === 'boolean') return value ? 'Sim' : 'Nao';
+  if (typeof value === 'number') return value.toLocaleString('pt-BR');
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) return value.map(formatUnknownValue).join(', ');
+  if (value && typeof value === 'object') {
+    return Object.entries(value as Record<string, unknown>)
+      .map(([key, item]) => `${formatFieldName(key)}: ${formatUnknownValue(item)}`)
+      .join(' | ');
+  }
+  return '-';
+}
+
+function answerValueClass(value: unknown) {
+  const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  if (value === true || normalized === 'c' || normalized === 'conforme' || normalized === 'sim' || normalized === 'approved') {
+    return 'break-words font-semibold text-emerald-700';
+  }
+  if (value === false || normalized === 'nc' || normalized === 'nao conforme' || normalized === 'não conforme' || normalized === 'nao' || normalized === 'não' || normalized === 'reproved') {
+    return 'break-words font-semibold text-red-700';
+  }
+  if (normalized === 'na' || normalized === 'n/a') {
+    return 'break-words font-semibold text-zinc-500';
+  }
+  return 'break-words text-zinc-900';
+}
+
+function reviewStatusLabel(checklist: Checklist) {
+  if (checklist.adminReviewStatus === 'approved') return 'Aprovado pelo ADM';
+  if (checklist.adminReviewStatus === 'reported') return 'Erro reportado';
+  return checklist.hasCriticalFailure ? 'Pendente com NC' : 'Pendente';
+}
+
+function reviewStatusClass(checklist: Checklist) {
+  if (checklist.adminReviewStatus === 'approved') return 'ui-pill bg-emerald-50 text-emerald-700';
+  if (checklist.adminReviewStatus === 'reported') return 'ui-pill bg-red-50 text-red-700';
+  if (checklist.hasCriticalFailure) return 'ui-pill bg-amber-50 text-amber-700';
+  return 'ui-pill bg-zinc-100 text-zinc-700';
+}
+
 function checklistLabel(type: ChecklistType) {
   const labels: Record<ChecklistType, string> = {
     departure: 'Saida',
@@ -530,4 +801,14 @@ function formatDate(value: Date | null) {
     dateStyle: 'short',
     timeStyle: 'short',
   }).format(value);
+}
+
+function formatDateOnly(value: Date | null) {
+  if (!value) return '-';
+  return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short' }).format(value);
+}
+
+function formatTimeOnly(value: Date | null) {
+  if (!value) return '-';
+  return new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' }).format(value);
 }

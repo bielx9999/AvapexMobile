@@ -447,7 +447,7 @@ final class _TripCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '${trip.origin} -> ${trip.destination}',
+                trip.displayTitle,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: Theme.of(

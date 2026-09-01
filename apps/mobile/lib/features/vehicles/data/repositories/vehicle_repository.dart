@@ -53,6 +53,23 @@ final class VehicleRepository {
         });
   }
 
+  Stream<List<Vehicle>> watchVehiclesForDriver(
+    String uid, {
+    Set<String> extraVehicleIds = const {},
+  }) {
+    return watchAvailableVehicles().map((vehicles) {
+      return vehicles
+          .where(
+            (vehicle) =>
+                vehicle.currentDriverId == uid ||
+                vehicle.currentDriverId == null ||
+                vehicle.currentDriverId!.isEmpty ||
+                extraVehicleIds.contains(vehicle.id),
+          )
+          .toList(growable: false);
+    });
+  }
+
   Future<Vehicle?> getById(String vehicleId) async {
     try {
       final snapshot = await _vehicles

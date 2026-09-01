@@ -67,6 +67,7 @@ final class AppUser {
     required this.uid,
     required this.name,
     required this.email,
+    this.cpf = '',
     required this.phone,
     required this.role,
     required this.status,
@@ -78,6 +79,7 @@ final class AppUser {
   final String uid;
   final String name;
   final String email;
+  final String cpf;
   final String phone;
   final UserRole role;
   final DriverLicense? cnh;
@@ -108,6 +110,7 @@ final class AppUser {
       uid: (json['uid'] as String?) ?? documentId ?? '',
       name: json['name'] as String,
       email: json['email'] as String,
+      cpf: (json['cpf'] as String?) ?? '',
       phone: json['phone'] as String,
       role: role,
       cnh: cnhValue == null
@@ -128,6 +131,7 @@ final class AppUser {
       'uid': uid,
       'name': name,
       'email': email,
+      'cpf': cpf,
       'phone': phone,
       'role': role.value,
       'cnh': cnh?.toFirestore(),

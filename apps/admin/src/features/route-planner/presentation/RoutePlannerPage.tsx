@@ -48,6 +48,7 @@ export function RoutePlannerPage({ loading, localities, onChanged, routeTemplate
   const [busyId, setBusyId] = useState('');
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
+  const [showIntermediateEditor, setShowIntermediateEditor] = useState(false);
 
   const selectableLocalities = useMemo(
     () => localities.filter(validLocality).sort((a, b) => a.city.localeCompare(b.city) || a.reference.localeCompare(b.reference)),
@@ -84,6 +85,7 @@ export function RoutePlannerPage({ loading, localities, onChanged, routeTemplate
       return;
     }
     replacePoints([...points, localityPoint(locality, 'stop')]);
+    setShowIntermediateEditor(true);
   }
 
   function addVia(latitude: number, longitude: number) {
@@ -101,6 +103,27 @@ export function RoutePlannerPage({ loading, localities, onChanged, routeTemplate
       longitude,
     }]);
     setAddingVia(false);
+  }
+
+  function applyDraggedRoute(viaPoints: Array<{ latitude: number; longitude: number }>) {
+    if (!canEdit) return;
+    const routeViaPoints = viaPoints.map((point, index) => {
+      const coordinates = `${point.latitude.toFixed(6)}, ${point.longitude.toFixed(6)}`;
+      return {
+        address: coordinates,
+        city: '',
+        id: crypto.randomUUID(),
+        latitude: point.latitude,
+        locationId: '',
+        longitude: point.longitude,
+        reference: `Desvio do percurso ${index + 1}`,
+        sequence: 0,
+        type: 'via' as const,
+        uf: '',
+      };
+    });
+    replacePoints([...points.filter((point) => point.type !== 'via'), ...routeViaPoints]);
+    setShowIntermediateEditor(true);
   }
 
   function moveIntermediate(from: number, to: number) {
@@ -132,8 +155,9 @@ export function RoutePlannerPage({ loading, localities, onChanged, routeTemplate
   }
 
   async function save() {
-    if (!name.trim()) {
-      setError('Informe um nome para a rota.');
+    const routeName = routeDisplayName(name, origin, destination);
+    if (!routeName) {
+      setError('Informe origem e destino para salvar a rota.');
       return;
     }
     if (!calculated) {
@@ -145,7 +169,7 @@ export function RoutePlannerPage({ loading, localities, onChanged, routeTemplate
     try {
       await adminWriteRepository.saveRouteTemplate({
         id: routeId || undefined,
-        name,
+        name: routeName,
         description,
         notes,
         status,
@@ -177,6 +201,7 @@ export function RoutePlannerPage({ loading, localities, onChanged, routeTemplate
       path: routeTemplate.currentVersion.path,
     });
     setAddingVia(false);
+    setShowIntermediateEditor(nextMode !== 'new' && routeTemplate.currentVersion.points.some((point) => point.type === 'stop' || point.type === 'via'));
     setError('');
     plannerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
@@ -191,6 +216,7 @@ export function RoutePlannerPage({ loading, localities, onChanged, routeTemplate
     setPoints([]);
     setCalculated(null);
     setAddingVia(false);
+    setShowIntermediateEditor(false);
     setError('');
   }
 
@@ -237,32 +263,90 @@ export function RoutePlannerPage({ loading, localities, onChanged, routeTemplate
             <p className="mt-0.5 text-sm text-zinc-500">Defina os pontos na ordem operacional e calcule o trajeto rodoviario.</p>
           </div>
           <div className="flex gap-2">
+            {canEdit ? (
+              <button
+                className={`ui-button h-9 gap-2 px-3 text-sm font-medium ${
+                  addingVia
+                    ? 'bg-zinc-950 text-white hover:bg-zinc-800'
+                    : 'border border-zinc-300 bg-white text-zinc-800 hover:bg-zinc-50'
+                }`}
+                onClick={() => setAddingVia((current) => !current)}
+                type="button"
+              >
+                <MapPin size={16} />
+                {addingVia ? 'Cancelar VIA' : 'VIA no mapa'}
+              </button>
+            ) : null}
+            {canEdit ? (
+              <button
+                className={`ui-button h-9 gap-2 px-3 text-sm font-medium ${
+                  showIntermediateEditor
+                    ? 'bg-zinc-950 text-white hover:bg-zinc-800'
+                    : 'border border-zinc-300 bg-white text-zinc-800 hover:bg-zinc-50'
+                }`}
+                onClick={() => setShowIntermediateEditor((current) => !current)}
+                type="button"
+              >
+                <Plus size={16} />
+                Ponto intermediario
+              </button>
+            ) : null}
             {mode === 'view' ? <button className="ui-button h-9 gap-2 border border-zinc-300 bg-white px-3 text-sm font-medium" onClick={() => setMode('edit')} type="button"><Pencil size={16} />Editar</button> : null}
             {(routeId || points.length > 0) ? <button className="ui-button h-9 gap-2 border border-zinc-300 bg-white px-3 text-sm font-medium" onClick={resetPlanner} type="button"><X size={16} />Limpar</button> : null}
           </div>
         </header>
 
-        <div className="grid min-h-[640px] lg:grid-cols-[minmax(340px,35%)_minmax(0,65%)]">
-          <div className="border-b border-zinc-200 p-5 lg:border-b-0 lg:border-r">
-            <div className="space-y-5">
-              <EndpointSelector disabled={!canEdit} label="Origem" localities={selectableLocalities} onChange={(value) => selectEndpoint('origin', value)} value={origin?.locationId ?? ''} />
-              <IntermediateEditor disabled={!canEdit} intermediates={intermediates} localities={selectableLocalities} onAddStop={addStop} onDragStart={(event, index) => event.dataTransfer.setData('text/plain', String(index))} onDrop={handleDrop} onMove={moveIntermediate} onRemove={(id) => replacePoints(points.filter((point) => point.id !== id))} />
-              <button className={`ui-button h-10 w-full gap-2 border px-3 text-sm font-medium ${addingVia ? 'border-zinc-950 bg-zinc-950 text-white' : 'border-zinc-300 bg-white text-zinc-800 hover:bg-zinc-50'}`} disabled={!canEdit} onClick={() => setAddingVia((current) => !current)} type="button"><MapPin size={16} />{addingVia ? 'Cancelar ponto VIA' : 'Adicionar ponto VIA no mapa'}</button>
-              <EndpointSelector disabled={!canEdit} label="Destino" localities={selectableLocalities} onChange={(value) => selectEndpoint('destination', value)} value={destination?.locationId ?? ''} />
-              <button className="ui-button h-11 w-full gap-2 bg-zinc-950 px-4 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-50" disabled={!canEdit || calculating || !origin || !destination} onClick={() => void calculate()} type="button">{calculating ? <LoaderCircle className="animate-spin" size={17} /> : <Calculator size={17} />}Calcular rota</button>
+        <div className="grid min-h-[680px] lg:grid-cols-[minmax(380px,420px)_minmax(0,1fr)]">
+          <aside className="border-b border-zinc-200 bg-zinc-50/60 p-4 lg:border-b-0 lg:border-r">
+            <div className="space-y-4">
+              <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-semibold text-zinc-950">Cadastro da rota</h3>
+                    <p className="mt-0.5 text-xs text-zinc-500">Selecione as localidades cadastradas.</p>
+                  </div>
+                  <span className="rounded-full bg-zinc-100 px-2 py-1 text-xs font-semibold text-zinc-600">
+                    {points.length} pontos
+                  </span>
+                </div>
+                <div className="space-y-4">
+                  <EndpointSelector disabled={!canEdit} label="Origem" localities={selectableLocalities} onChange={(value) => selectEndpoint('origin', value)} value={origin?.locationId ?? ''} />
+                  <EndpointSelector disabled={!canEdit} label="Destino" localities={selectableLocalities} onChange={(value) => selectEndpoint('destination', value)} value={destination?.locationId ?? ''} />
+                </div>
+              </section>
 
-              {calculated ? <RouteFacts definition={calculated} /> : null}
-              <div className="border-t border-zinc-200 pt-5">
-                <TextInput disabled={!canEdit} label="Nome da rota" onChange={setName} required value={name} />
-                <label className="mt-3 block"><span className="mb-1.5 block text-sm font-medium text-zinc-700">Descricao</span><textarea className="ui-input min-h-16 w-full resize-y px-3 py-2 text-sm" disabled={!canEdit} onChange={(event) => setDescription(event.target.value)} value={description} /></label>
-                <label className="mt-3 block"><span className="mb-1.5 block text-sm font-medium text-zinc-700">Observacoes ao motorista</span><textarea className="ui-input min-h-16 w-full resize-y px-3 py-2 text-sm" disabled={!canEdit} onChange={(event) => setNotes(event.target.value)} value={notes} /></label>
-                <label className="mt-3 block"><span className="mb-1.5 block text-sm font-medium text-zinc-700">Status</span><select className="ui-input h-10 w-full px-3 text-sm" disabled={!canEdit} onChange={(event) => setStatus(event.target.value as RouteTemplate['status'])} value={status}><option value="active">Ativa</option><option value="inactive">Inativa</option></select></label>
+              {showIntermediateEditor || intermediates.length > 0 ? (
+                <IntermediateEditor disabled={!canEdit} intermediates={intermediates} localities={selectableLocalities} onAddStop={addStop} />
+              ) : null}
+
+              <RoutePointList
+                disabled={!canEdit}
+                intermediates={intermediates}
+                onDragStart={(event, index) => event.dataTransfer.setData('text/plain', String(index))}
+                onDrop={handleDrop}
+                onMove={moveIntermediate}
+                onRemove={(id) => replacePoints(points.filter((point) => point.id !== id))}
+                points={points}
+              />
+
+              <div className="grid gap-2">
+                <button className="ui-button h-11 w-full gap-2 bg-zinc-950 px-4 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-50" disabled={!canEdit || calculating || !origin || !destination} onClick={() => void calculate()} type="button">{calculating ? <LoaderCircle className="animate-spin" size={17} /> : <Calculator size={17} />}Calcular rota</button>
+                {canEdit ? <button className="ui-button h-11 w-full gap-2 bg-avapex-yellow px-4 text-sm font-semibold text-avapex-black hover:bg-yellow-300 disabled:opacity-50" disabled={saving || !calculated} onClick={() => void save()} type="button">{saving ? <LoaderCircle className="animate-spin" size={17} /> : <Save size={17} />}{routeId ? 'Salvar nova versao' : 'Salvar rota'}</button> : null}
               </div>
+              {calculated ? <RouteFacts definition={calculated} /> : null}
               {error ? <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700" role="alert">{error}</p> : null}
-              {canEdit ? <button className="ui-button h-11 w-full gap-2 bg-avapex-yellow px-4 text-sm font-semibold text-avapex-black hover:bg-yellow-300 disabled:opacity-50" disabled={saving || !calculated} onClick={() => void save()} type="button">{saving ? <LoaderCircle className="animate-spin" size={17} /> : <Save size={17} />}{routeId ? 'Salvar nova versao' : 'Salvar rota'}</button> : null}
             </div>
-          </div>
-          <RoutePlannerMap addingVia={addingVia} onMapClick={addVia} path={displayedPath} points={points} />
+          </aside>
+          <section className="min-h-[560px] bg-white">
+            <RoutePlannerMap
+              addingVia={addingVia}
+              canEdit={canEdit}
+              onMapClick={addVia}
+              onRouteDrag={applyDraggedRoute}
+              path={displayedPath}
+              points={points}
+            />
+          </section>
         </div>
       </section>
 
@@ -295,14 +379,192 @@ function EndpointSelector({ disabled, label, localities, onChange, value }: { di
   const cityKey = selected ? cityValue(selected) : draftCityKey;
   const cities = uniqueCities(localities);
   const available = cityKey ? localities.filter((locality) => cityValue(locality) === cityKey) : [];
-  return <fieldset disabled={disabled}><legend className="mb-2 text-sm font-semibold text-zinc-950">{label}</legend><div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2"><SearchableCombobox disabled={disabled} label="Cidade" onChange={(nextValue) => { setDraftCityKey(nextValue); if (selected) onChange(''); }} options={cities} placeholder="Buscar cidade..." value={cityKey} /><SearchableCombobox disabled={disabled || !cityKey} label="Localidade" onChange={onChange} options={localityOptions(available)} placeholder="Buscar referencia..." value={value} /></div>{selected ? <p className="mt-2 text-xs text-zinc-500">{selected.address}</p> : null}</fieldset>;
+  return (
+    <fieldset disabled={disabled}>
+      <legend className="mb-2 text-sm font-semibold text-zinc-950">{label}</legend>
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1 2xl:grid-cols-2">
+        <SearchableCombobox
+          disabled={disabled}
+          label="Cidade"
+          onChange={(nextValue) => {
+            setDraftCityKey(nextValue);
+            if (selected) onChange('');
+          }}
+          options={cities}
+          placeholder="Buscar cidade..."
+          value={cityKey}
+        />
+        <SearchableCombobox
+          disabled={disabled || !cityKey}
+          label="Localidade"
+          onChange={onChange}
+          options={localityOptions(available)}
+          placeholder="Buscar referencia..."
+          value={value}
+        />
+      </div>
+      {selected ? <p className="mt-2 line-clamp-2 text-xs text-zinc-500">{selected.address}</p> : null}
+    </fieldset>
+  );
 }
 
-function IntermediateEditor({ disabled, intermediates, localities, onAddStop, onDragStart, onDrop, onMove, onRemove }: { disabled: boolean; intermediates: RouteTemplatePoint[]; localities: Locality[]; onAddStop: (id: string) => void; onDragStart: (event: DragEvent<HTMLDivElement>, index: number) => void; onDrop: (event: DragEvent<HTMLDivElement>, index: number) => void; onMove: (from: number, to: number) => void; onRemove: (id: string) => void }) {
+function IntermediateEditor({
+  disabled,
+  intermediates,
+  localities,
+  onAddStop,
+}: {
+  disabled: boolean;
+  intermediates: RouteTemplatePoint[];
+  localities: Locality[];
+  onAddStop: (id: string) => void;
+}) {
   const [cityKey, setCityKey] = useState('');
   const [localityId, setLocalityId] = useState('');
   const available = cityKey ? localities.filter((locality) => cityValue(locality) === cityKey) : [];
-  return <div><div className="mb-2 flex items-center justify-between"><h3 className="text-sm font-semibold text-zinc-950">Paradas e pontos VIA</h3><span className="text-xs text-zinc-500">{intermediates.length}/25</span></div>{!disabled ? <div className="grid gap-2"><SearchableCombobox label="Cidade da parada" onChange={(nextValue) => { setCityKey(nextValue); setLocalityId(''); }} options={uniqueCities(localities)} placeholder="Buscar cidade..." value={cityKey} /><div className="flex items-end gap-2"><div className="min-w-0 flex-1"><SearchableCombobox disabled={!cityKey} label="Localidade da parada" onChange={setLocalityId} options={localityOptions(available)} placeholder="Buscar referencia..." value={localityId} /></div><button aria-label="Adicionar parada" className="ui-icon-button mb-0 h-11 w-11 shrink-0 border-zinc-300 bg-white" disabled={!localityId || intermediates.length >= 25} onClick={() => { onAddStop(localityId); setLocalityId(''); }} title="Adicionar parada" type="button"><Plus size={17} /></button></div></div> : null}<div className="mt-3 space-y-2">{intermediates.map((point, index) => <div className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-2 py-2" draggable={!disabled} key={point.id} onDragOver={(event) => event.preventDefault()} onDragStart={(event) => onDragStart(event, index)} onDrop={(event) => onDrop(event, index)}><span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${point.type === 'via' ? 'border border-zinc-300 bg-white' : 'bg-zinc-900 text-white'}`}>{point.type === 'via' ? 'VIA' : index + 1}</span><span className="min-w-0 flex-1"><strong className="block truncate text-xs text-zinc-900">{point.reference}</strong><span className="block truncate text-[11px] text-zinc-500">{point.address}</span></span>{!disabled ? <><button aria-label="Mover para cima" className="ui-icon-button h-7 w-7" disabled={index === 0} onClick={() => onMove(index, index - 1)} title="Mover para cima" type="button"><ArrowUp size={14} /></button><button aria-label="Mover para baixo" className="ui-icon-button h-7 w-7" disabled={index === intermediates.length - 1} onClick={() => onMove(index, index + 1)} title="Mover para baixo" type="button"><ArrowDown size={14} /></button><button aria-label="Remover ponto" className="ui-icon-button h-7 w-7 text-red-700" onClick={() => onRemove(point.id)} title="Remover ponto" type="button"><Trash2 size={14} /></button></> : null}</div>)}</div></div>;
+  return (
+    <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold text-zinc-950">Inserir ponto</h3>
+          <p className="mt-0.5 text-xs text-zinc-500">Adicione uma entrega intermediaria.</p>
+        </div>
+        <span className="text-xs font-medium text-zinc-500">{intermediates.length}/25</span>
+      </div>
+      {!disabled ? (
+        <div className="grid gap-3">
+          <SearchableCombobox
+            label="Cidade do ponto"
+            onChange={(nextValue) => {
+              setCityKey(nextValue);
+              setLocalityId('');
+            }}
+            options={uniqueCities(localities)}
+            placeholder="Buscar cidade..."
+            value={cityKey}
+          />
+          <div className="flex items-end gap-2">
+            <div className="min-w-0 flex-1">
+              <SearchableCombobox
+                disabled={!cityKey}
+                label="Localidade do ponto"
+                onChange={setLocalityId}
+                options={localityOptions(available)}
+                placeholder="Buscar referencia..."
+                value={localityId}
+              />
+            </div>
+            <button
+              aria-label="Adicionar ponto"
+              className="ui-icon-button mb-0 h-11 w-11 shrink-0 border-zinc-300 bg-zinc-950 text-white hover:bg-zinc-800"
+              disabled={!localityId || intermediates.length >= 25}
+              onClick={() => {
+                onAddStop(localityId);
+                setLocalityId('');
+              }}
+              title="Adicionar ponto"
+              type="button"
+            >
+              <Plus size={17} />
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function RoutePointList({
+  disabled,
+  intermediates,
+  onDragStart,
+  onDrop,
+  onMove,
+  onRemove,
+  points,
+}: {
+  disabled: boolean;
+  intermediates: RouteTemplatePoint[];
+  onDragStart: (event: DragEvent<HTMLDivElement>, index: number) => void;
+  onDrop: (event: DragEvent<HTMLDivElement>, index: number) => void;
+  onMove: (from: number, to: number) => void;
+  onRemove: (id: string) => void;
+  points: RouteTemplatePoint[];
+}) {
+  return (
+    <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold text-zinc-950">Sequencia da rota</h3>
+          <p className="mt-0.5 text-xs text-zinc-500">Reordene ou remova pontos antes de calcular.</p>
+        </div>
+        <span className="rounded-full bg-zinc-100 px-2 py-1 text-xs font-semibold text-zinc-600">{points.length}</span>
+      </div>
+      {points.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-zinc-300 bg-zinc-50 px-3 py-6 text-center text-sm text-zinc-500">
+          Nenhum ponto selecionado.
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {points.map((point, index) => {
+            const intermediateIndex = point.type === 'origin' || point.type === 'destination'
+              ? -1
+              : intermediates.findIndex((item) => item.id === point.id);
+            const movable = intermediateIndex >= 0;
+            return (
+              <div
+                className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-2 py-2"
+                draggable={!disabled && movable}
+                key={point.id}
+                onDragOver={(event) => {
+                  if (movable) event.preventDefault();
+                }}
+                onDragStart={(event) => {
+                  if (movable) onDragStart(event, intermediateIndex);
+                }}
+                onDrop={(event) => {
+                  if (movable) onDrop(event, intermediateIndex);
+                }}
+              >
+                <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${pointBadgeClass(point.type)}`}>
+                  {pointBadgeLabel(point.type, index)}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <strong className="block truncate text-xs text-zinc-900">{point.reference}</strong>
+                  <span className="block truncate text-[11px] text-zinc-500">{point.city ? `${point.city}/${point.uf} - ` : ''}{point.address}</span>
+                </span>
+                {!disabled ? (
+                  <>
+                    {movable ? (
+                      <>
+                        <button aria-label="Mover para cima" className="ui-icon-button h-7 w-7" disabled={intermediateIndex === 0} onClick={() => onMove(intermediateIndex, intermediateIndex - 1)} title="Mover para cima" type="button"><ArrowUp size={14} /></button>
+                        <button aria-label="Mover para baixo" className="ui-icon-button h-7 w-7" disabled={intermediateIndex === intermediates.length - 1} onClick={() => onMove(intermediateIndex, intermediateIndex + 1)} title="Mover para baixo" type="button"><ArrowDown size={14} /></button>
+                      </>
+                    ) : null}
+                    <button aria-label="Remover ponto" className="ui-icon-button h-7 w-7 text-red-700 hover:bg-red-50" onClick={() => onRemove(point.id)} title="Remover ponto" type="button"><Trash2 size={14} /></button>
+                  </>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function pointBadgeLabel(type: RouteTemplatePoint['type'], index: number) {
+  if (type === 'origin') return 'ORI';
+  if (type === 'destination') return 'DES';
+  if (type === 'via') return 'VIA';
+  return String(index + 1);
+}
+
+function pointBadgeClass(type: RouteTemplatePoint['type']) {
+  if (type === 'origin') return 'bg-avapex-yellow text-avapex-black';
+  if (type === 'destination') return 'bg-zinc-950 text-white';
+  if (type === 'via') return 'border border-zinc-300 bg-white text-zinc-700';
+  return 'bg-zinc-800 text-white';
 }
 
 function RouteFacts({ definition }: { definition: Omit<RouteVersionDefinition, 'version'> }) {
@@ -311,10 +573,6 @@ function RouteFacts({ definition }: { definition: Omit<RouteVersionDefinition, '
 
 function Fact({ label, value }: { label: string; value: string }) {
   return <div className="px-3 py-2.5"><span className="block text-[10px] font-semibold uppercase text-zinc-500">{label}</span><strong className="mt-0.5 block text-sm text-zinc-950">{value}</strong></div>;
-}
-
-function TextInput({ disabled, label, onChange, required, value }: { disabled: boolean; label: string; onChange: (value: string) => void; required?: boolean; value: string }) {
-  return <label className="block"><span className="mb-1.5 block text-sm font-medium text-zinc-700">{label}{required ? ' *' : ''}</span><input className="ui-input h-10 w-full px-3 text-sm" disabled={disabled} onChange={(event) => onChange(event.target.value)} required={required} value={value} /></label>;
 }
 
 function validLocality(locality: Locality): locality is Locality & { latitude: number; longitude: number } {
@@ -349,6 +607,17 @@ function localityOptions(localities: Locality[]): ComboboxOption[] {
 
 function cityValue(locality: Locality) {
   return `${locality.normalizedCity}|${locality.uf}`;
+}
+
+function routeDisplayName(name: string, origin?: RouteTemplatePoint, destination?: RouteTemplatePoint) {
+  const trimmedName = name.trim();
+  if (trimmedName) {
+    return trimmedName;
+  }
+  if (!origin || !destination) {
+    return '';
+  }
+  return `${origin.city}/${origin.uf} - ${destination.city}/${destination.uf}`;
 }
 
 function formatDistance(meters: number) {

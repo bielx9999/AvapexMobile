@@ -1,8 +1,8 @@
 import {
   addDoc,
   collection,
-  deleteDoc,
   deleteField,
+  deleteDoc,
   doc,
   getDocs,
   increment,
@@ -31,7 +31,6 @@ import {
   mapFuelingRecord,
   mapLocality,
   mapOperationalSettings,
-  mapRoute,
   mapRouteEvent,
   mapRouteTemplate,
   mapRouteVersion,
@@ -49,7 +48,6 @@ import type {
   Locality,
   OperationalSettings,
   RouteEvent,
-  RoutePlan,
   RouteTemplate,
   RouteVersion,
   RouteVersionDefinition,
@@ -62,7 +60,6 @@ const converters = {
   users: makeConverter<AppUser>(mapUser),
   vehicles: makeConverter<Vehicle>(mapVehicle),
   trips: makeConverter<Trip>(mapTrip),
-  routes: makeConverter<RoutePlan>(mapRoute),
   deliveries: makeConverter<Delivery>(mapDelivery),
   routeEvents: makeConverter<RouteEvent>(mapRouteEvent),
   settings: makeConverter<OperationalSettings>(mapOperationalSettings),
@@ -139,7 +136,6 @@ export const adminReadRepository = {
   users: () => listCollection<AppUser>('users', [orderBy('createdAt', 'desc'), limit(200)], 'Erro ao listar usuarios.'),
   vehicles: () => listCollection<Vehicle>('vehicles', [orderBy('plate', 'asc'), limit(200)], 'Erro ao listar veiculos.'),
   trips: () => listCollection<Trip>('trips', [orderBy('scheduledAt', 'desc'), limit(200)], 'Erro ao listar viagens.'),
-  routes: () => listCollection<RoutePlan>('routes', [orderBy('serviceDate', 'desc'), limit(200)], 'Erro ao listar rotas.'),
   deliveries: () => listCollection<Delivery>('deliveries', [orderBy('scheduledAt', 'desc'), limit(500)], 'Erro ao listar entregas.'),
   routeEvents: () => listCollection<RouteEvent>('routeEvents', [orderBy('occurredAt', 'desc'), limit(500)], 'Erro ao listar eventos de rota.'),
   settings: () => listCollection<OperationalSettings>('settings', [], 'Erro ao listar configuracoes operacionais.'),
@@ -170,12 +166,12 @@ export const adminReadRepository = {
       (error) => onError(mapFirebaseError(error, 'Erro ao acompanhar viagens em tempo real.')),
     );
   },
-  watchRoutes(onData: (routes: RoutePlan[]) => void, onError: (error: Error) => void): Unsubscribe {
-    const routesQuery = query(typedCollection<RoutePlan>('routes'), orderBy('serviceDate', 'desc'), limit(200));
+  watchChecklists(onData: (checklists: Checklist[]) => void, onError: (error: Error) => void): Unsubscribe {
+    const checklistsQuery = query(typedCollection<Checklist>('checklists'), orderBy('createdAt', 'desc'), limit(200));
     return onSnapshot(
-      routesQuery,
+      checklistsQuery,
       (snapshot) => onData(snapshot.docs.map((document) => document.data())),
-      (error) => onError(mapFirebaseError(error, 'Erro ao acompanhar rotas em tempo real.')),
+      (error) => onError(mapFirebaseError(error, 'Erro ao acompanhar checklists em tempo real.')),
     );
   },
   watchDeliveries(onData: (deliveries: Delivery[]) => void, onError: (error: Error) => void): Unsubscribe {
@@ -403,6 +399,44 @@ export const adminWriteRepository = {
     }
   },
 
+  async approveChecklist(checklist: Checklist) {
+    try {
+      if ((checklist.adminReviewStatus ?? 'pending') !== 'pending') {
+        throw new Error('Este checklist ja foi analisado.');
+      }
+      await updateDoc(doc(firestore, 'checklists', checklist.id), {
+        adminReviewStatus: 'approved',
+        adminReviewMessage: '',
+        driverNotificationStatus: 'not_sent',
+        reviewedAt: serverTimestamp(),
+        reviewedBy: auth.currentUser?.uid ?? '',
+      });
+    } catch (error) {
+      throw mapFirebaseError(error, 'Erro ao aprovar checklist.');
+    }
+  },
+
+  async reportChecklistError(checklist: Checklist, message: string) {
+    try {
+      if ((checklist.adminReviewStatus ?? 'pending') !== 'pending') {
+        throw new Error('Este checklist ja foi analisado.');
+      }
+      const trimmedMessage = message.trim();
+      if (!trimmedMessage) {
+        throw new Error('Informe o erro que deve ser enviado ao motorista.');
+      }
+      await updateDoc(doc(firestore, 'checklists', checklist.id), {
+        adminReviewStatus: 'reported',
+        adminReviewMessage: trimmedMessage,
+        driverNotificationStatus: 'queued',
+        reviewedAt: serverTimestamp(),
+        reviewedBy: auth.currentUser?.uid ?? '',
+      });
+    } catch (error) {
+      throw mapFirebaseError(error, 'Erro ao reportar erro no checklist.');
+    }
+  },
+
   async markDeliveryReceiptDelivered(receipt: DeliveryReceipt) {
     try {
       if ((receipt.adminStatus ?? 'pending') !== 'pending') {
@@ -552,105 +586,6 @@ export const adminWriteRepository = {
         return trip.id;
       }
 
-      if ((trip.operationType ?? 'loading') === 'loading') {
-        const tripRef = trip.id ? doc(firestore, 'trips', trip.id) : doc(collection(firestore, 'trips'));
-        const unloadingRef = doc(collection(firestore, 'trips'));
-        const returnRef = trip.returnTrip === true ? doc(collection(firestore, 'trips')) : null;
-        const returnUnloadingRef = returnRef ? doc(collection(firestore, 'trips')) : null;
-        const scheduledGeneratedAt = nextDaySameTime(trip.scheduledAt);
-        const scheduledReturnUnloadingAt = nextDaySameTime(scheduledGeneratedAt);
-        const batch = writeBatch(firestore);
-
-        batch.set(tripRef, {
-          ...data,
-          id: tripRef.id,
-          unloadingGeneratedTripId: unloadingRef.id,
-          ...(returnRef ? { returnGeneratedTripId: returnRef.id } : {}),
-          startedAt: null,
-          completedAt: null,
-          deliveryDocs: [],
-        });
-        if (trip.routeTemplateId) {
-          batch.update(doc(firestore, 'routeTemplates', trip.routeTemplateId), { usedCount: increment(1) });
-        }
-        batch.set(unloadingRef, {
-          ...data,
-          id: unloadingRef.id,
-          status: 'in_progress',
-          scheduledAt: scheduledGeneratedAt,
-          startedAt: null,
-          completedAt: null,
-          deliveryDocs: [],
-          programmingStatus: 'unloading',
-          operationalStatus: 'waiting_unloading',
-          operationType: 'unloading',
-          returnTrip: false,
-          expectedArrivalAt: null,
-          unloadingSourceTripId: tripRef.id,
-        });
-        if (returnRef && returnUnloadingRef) {
-          const returnStops = Array.isArray(data.routeStops)
-            ? [...data.routeStops].reverse().map((stop, index) => ({ ...stop, order: index + 1 }))
-            : [];
-          batch.set(returnRef, {
-            ...data,
-            id: returnRef.id,
-            origin: data.destination,
-            destination: data.origin,
-            originLocation: data.destinationLocation ?? null,
-            destinationLocation: data.originLocation ?? null,
-            originLocationId: data.destinationLocationId ?? '',
-            destinationLocationId: data.originLocationId ?? '',
-            routeName: data.routeName ? `${data.routeName} - Retorno` : '',
-            routeSnapshot: data.routeSnapshot ? reverseRouteSnapshot(data.routeSnapshot as TripRouteSnapshot) : null,
-            routeStops: returnStops,
-            status: 'pending',
-            scheduledAt: scheduledGeneratedAt,
-            unloadingGeneratedTripId: returnUnloadingRef.id,
-            startedAt: null,
-            completedAt: null,
-            deliveryDocs: [],
-            programmingStatus: 'loading',
-            operationalStatus: 'waiting_loading',
-            operationType: 'loading',
-            returnTrip: false,
-            expectedArrivalAt: null,
-            returnSourceTripId: tripRef.id,
-          });
-        }
-        if (returnRef && returnUnloadingRef) {
-          const returnStops = Array.isArray(data.routeStops)
-            ? [...data.routeStops].reverse().map((stop, index) => ({ ...stop, order: index + 1 }))
-            : [];
-          batch.set(returnUnloadingRef, {
-            ...data,
-            id: returnUnloadingRef.id,
-            origin: data.destination,
-            destination: data.origin,
-            originLocation: data.destinationLocation ?? null,
-            destinationLocation: data.originLocation ?? null,
-            originLocationId: data.destinationLocationId ?? '',
-            destinationLocationId: data.originLocationId ?? '',
-            routeName: data.routeName ? `${data.routeName} - Retorno` : '',
-            routeSnapshot: data.routeSnapshot ? reverseRouteSnapshot(data.routeSnapshot as TripRouteSnapshot) : null,
-            routeStops: returnStops,
-            status: 'in_progress',
-            scheduledAt: scheduledReturnUnloadingAt,
-            startedAt: null,
-            completedAt: null,
-            deliveryDocs: [],
-            programmingStatus: 'unloading',
-            operationalStatus: 'waiting_unloading',
-            operationType: 'unloading',
-            returnTrip: false,
-            expectedArrivalAt: null,
-            unloadingSourceTripId: returnRef.id,
-          });
-        }
-        await batch.commit();
-        return tripRef.id;
-      }
-
       if (trip.id) {
         await setDoc(doc(firestore, 'trips', trip.id), {
           ...data,
@@ -678,6 +613,97 @@ export const adminWriteRepository = {
       return created.id;
     } catch (error) {
       throw mapFirebaseError(error, 'Erro ao salvar programacao.');
+    }
+  },
+
+  async createUnloadingTripFromLoading(sourceTrip: Trip) {
+    if (sourceTrip.operationType === 'unloading') {
+      throw new Error('Esta programacao ja e uma descarga.');
+    }
+    if (sourceTrip.unloadingGeneratedTripId) {
+      throw new Error('Esta carga ja possui descarga gerada.');
+    }
+
+    try {
+      const sourceRef = doc(firestore, 'trips', sourceTrip.id);
+      const unloadingRef = doc(collection(firestore, 'trips'));
+      const scheduledAt = nextDaySameTime(sourceTrip.scheduledAt);
+      const batch = writeBatch(firestore);
+
+      batch.update(sourceRef, {
+        unloadingGeneratedTripId: unloadingRef.id,
+        statusUpdatedAt: serverTimestamp(),
+      });
+      batch.set(unloadingRef, {
+        id: unloadingRef.id,
+        driverId: sourceTrip.driverId,
+        vehicleId: sourceTrip.vehicleId,
+        origin: sourceTrip.origin,
+        destination: sourceTrip.destination,
+        status: 'pending',
+        scheduledAt,
+        startedAt: null,
+        completedAt: null,
+        deliveryDocs: [],
+        driverName: sourceTrip.driverName ?? '',
+        vehiclePlate: sourceTrip.vehiclePlate ?? '',
+        vehicleModel: sourceTrip.vehicleModel ?? '',
+        programmingStatus: 'unloading',
+        operationalStatus: 'waiting_unloading',
+        returnTrip: false,
+        customerRequestNumber: sourceTrip.customerRequestNumber ?? '',
+        programmedVehicleType: sourceTrip.programmedVehicleType ?? 'truck',
+        operationType: 'unloading',
+        expectedArrivalAt: null,
+        additionalInfo: sourceTrip.additionalInfo ?? '',
+        driverResponse: 'pending',
+        driverRespondedAt: null,
+        driverResponseDriverId: '',
+        driverRejection: null,
+        assignedAt: serverTimestamp(),
+        clientId: sourceTrip.clientId ?? '',
+        clientName: sourceTrip.clientName ?? '',
+        fleetNumber: sourceTrip.fleetNumber ?? '',
+        cteDocuments: (sourceTrip.cteDocuments ?? []).map((document) => ({
+          id: document.id,
+          number: document.number,
+          series: document.series,
+          branch: document.branch,
+          issuedAt: document.issuedAt ?? null,
+          sender: document.sender,
+          storagePath: document.storagePath,
+          fileName: document.fileName,
+          contentType: document.contentType,
+          sizeBytes: document.sizeBytes,
+          uploadedAt: document.uploadedAt ?? null,
+          uploadedBy: document.uploadedBy,
+        })),
+        routeId: sourceTrip.routeId ?? '',
+        routeName: sourceTrip.routeName ?? '',
+        routeTemplateId: sourceTrip.routeTemplateId ?? '',
+        routeVersionId: sourceTrip.routeVersionId ?? '',
+        routeSnapshot: sourceTrip.routeSnapshot ? serializeTripRouteSnapshot(sourceTrip.routeSnapshot) : null,
+        routeLocationIds: sourceTrip.routeSnapshot?.locationIds ?? [],
+        originLocationId: sourceTrip.originLocationId ?? '',
+        destinationLocationId: sourceTrip.destinationLocationId ?? '',
+        originLocation: sourceTrip.originLocation ?? null,
+        destinationLocation: sourceTrip.destinationLocation ?? null,
+        routeStops: (sourceTrip.routeStops ?? []).map((stop) => ({
+          name: stop.name,
+          address: stop.address,
+          ...(typeof stop.latitude === 'number' ? { latitude: stop.latitude } : {}),
+          ...(typeof stop.longitude === 'number' ? { longitude: stop.longitude } : {}),
+          ...(stop.locationId ? { locationId: stop.locationId } : {}),
+          ...(typeof stop.order === 'number' ? { order: stop.order } : {}),
+        })),
+        unloadingSourceTripId: sourceTrip.id,
+        statusUpdatedAt: serverTimestamp(),
+      });
+
+      await batch.commit();
+      return unloadingRef.id;
+    } catch (error) {
+      throw mapFirebaseError(error, 'Erro ao gerar descarga.');
     }
   },
 
@@ -826,48 +852,6 @@ function serializeTripRouteSnapshot(snapshot: TripRouteSnapshot) {
     name: snapshot.name,
     ...serializeRouteDefinition(snapshot),
   };
-}
-
-function reverseRouteSnapshot(snapshot: TripRouteSnapshot): TripRouteSnapshot {
-  const points = [...snapshot.points].reverse().map((point, index, items) => ({
-    ...point,
-    id: `${point.id}-return`,
-    sequence: index,
-    type: index === 0 ? 'origin' as const : index === items.length - 1 ? 'destination' as const : point.type,
-  }));
-  return {
-    ...snapshot,
-    name: snapshot.name ? `${snapshot.name} - Retorno` : 'Rota de retorno',
-    points,
-    locationIds: points.map((point) => point.locationId).filter(Boolean),
-    path: [...snapshot.path].reverse(),
-    encodedPolyline: encodePolyline([...snapshot.path].reverse()),
-  };
-}
-
-function encodePolyline(path: Array<{ latitude: number; longitude: number }>) {
-  let previousLatitude = 0;
-  let previousLongitude = 0;
-  let result = '';
-  for (const point of path) {
-    const latitude = Math.round(point.latitude * 1e5);
-    const longitude = Math.round(point.longitude * 1e5);
-    result += encodePolylineValue(latitude - previousLatitude);
-    result += encodePolylineValue(longitude - previousLongitude);
-    previousLatitude = latitude;
-    previousLongitude = longitude;
-  }
-  return result;
-}
-
-function encodePolylineValue(value: number) {
-  let encoded = '';
-  let shifted = value < 0 ? ~(value << 1) : value << 1;
-  while (shifted >= 0x20) {
-    encoded += String.fromCharCode((0x20 | (shifted & 0x1f)) + 63);
-    shifted >>= 5;
-  }
-  return encoded + String.fromCharCode(shifted + 63);
 }
 
 function normalizeSearchText(value: string) {

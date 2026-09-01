@@ -15,7 +15,7 @@ final class DriverEquipmentRepository {
 
   CollectionReference<DriverEquipment> get _equipment {
     return _firestore
-        .collection(FirestoreCollections.driverEquipments)
+        .collection(FirestoreCollections.equipment)
         .withConverter<DriverEquipment>(
           fromFirestore: (snapshot, _) =>
               DriverEquipment.fromDocument(snapshot),
@@ -31,7 +31,7 @@ final class DriverEquipmentRepository {
     final uid = _requireCurrentUserId();
 
     return _equipment
-        .where('driverId', isEqualTo: uid)
+        .where('currentDriverId', isEqualTo: uid)
         .snapshots()
         .map((snapshot) {
           final equipment = snapshot.docs
@@ -50,6 +50,86 @@ final class DriverEquipmentRepository {
         .handleError((Object error, StackTrace stackTrace) {
           throw FirebaseFailure.fromException(error, stackTrace);
         });
+  }
+
+  Future<String> saveDriverChecklist({
+    required List<DriverEquipment> equipment,
+    required Map<String, Map<String, String>> results,
+  }) async {
+    try {
+      final uid = _requireCurrentUserId();
+      if (equipment.isEmpty) {
+        throw const FirebaseFailure(
+          code: FirebaseFailureCode.unknown,
+          message: 'Nao existem equipamentos vinculados ao seu veiculo.',
+        );
+      }
+      final inspectionRef = _firestore
+          .collection(FirestoreCollections.equipmentInspections)
+          .doc();
+      final hasIssue = results.values.any(
+        (result) => result['result'] != 'ok',
+      );
+      final batch = _firestore.batch();
+      batch.set(inspectionRef, {
+        'id': inspectionRef.id,
+        'vehicleId': equipment.first.vehicleId,
+        'vehiclePlate': equipment.first.vehiclePlate,
+        'inspectionType': 'driver_checklist',
+        'referenceMonth': DateTime.now().month,
+        'referenceYear': DateTime.now().year,
+        'performedAt': FieldValue.serverTimestamp(),
+        'performedByUserId': uid,
+        'responsibleDriverId': uid,
+        'responsibleDriverName': '',
+        'status': hasIssue ? 'divergence' : 'completed',
+        'notes': '',
+        'photoUrls': <String>[],
+        'items': equipment.map((item) {
+          final result = results[item.id] ?? const <String, String>{};
+          return {
+            'equipmentId': item.id,
+            'equipmentCode': item.tagNumber,
+            'equipmentType': item.type.value,
+            'expected': true,
+            'result': result['result'] ?? 'ok',
+            'observation': result['observation'] ?? '',
+            'photoUrl': '',
+          };
+        }).toList(growable: false),
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      for (final item in equipment) {
+        final result = results[item.id] ?? const <String, String>{};
+        if (result['result'] == 'ok') {
+          continue;
+        }
+        final occurrenceRef = _firestore
+            .collection(FirestoreCollections.equipmentOccurrences)
+            .doc();
+        batch.set(occurrenceRef, {
+          'id': occurrenceRef.id,
+          'equipmentId': item.id,
+          'equipmentCode': item.tagNumber,
+          'vehicleId': item.vehicleId,
+          'vehiclePlate': item.vehiclePlate,
+          'type': result['result'] == 'not_found' ? 'not_found' : 'damaged',
+          'reportedBy': uid,
+          'reportedAt': FieldValue.serverTimestamp(),
+          'description': result['observation'] ?? '',
+          'status': 'open',
+          'resolvedAt': null,
+          'resolvedBy': '',
+          'photoUrl': '',
+          'sourceInspectionId': inspectionRef.id,
+        });
+      }
+      await batch.commit().timeout(const Duration(seconds: 15));
+      return inspectionRef.id;
+    } on Object catch (error, stackTrace) {
+      throw FirebaseFailure.fromException(error, stackTrace);
+    }
   }
 
   String _requireCurrentUserId() {

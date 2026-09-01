@@ -4,6 +4,8 @@ import {
   CalendarClock,
   ClipboardList,
   Clock3,
+  ExternalLink,
+  FileCheck2,
   FileText,
   MapPin,
   Pencil,
@@ -197,14 +199,32 @@ export function ProgramacaoPage({ loading, localities, onChanged, routeTemplates
   }
 
   async function handleFormSaved(result: { created: boolean; operationType: ProgrammingOperationType; returnTrip: boolean; scheduledAt: Date }) {
-    if (result.created && result.operationType === 'loading') {
-      const generatedDate = formatDateInput(addDays(result.scheduledAt, result.returnTrip ? 2 : 1));
-      setEndDate((current) => (!current || current < generatedDate ? generatedDate : current));
-    }
+    void result;
     setShowForm(false);
     setEditingTrip(null);
     setToastMessage(result.created ? 'Programacao criada com sucesso' : 'Programacao atualizada com sucesso');
     await onChanged();
+  }
+
+  async function createUnloadingTrip(trip: Trip) {
+    const confirmed = window.confirm('Gerar uma programacao de descarga para esta carga? Ela sera enviada ao motorista para aceite.');
+    if (!confirmed) {
+      return;
+    }
+
+    setBusyTripId(trip.id);
+    setError('');
+    try {
+      await adminWriteRepository.createUnloadingTripFromLoading(trip);
+      const generatedDate = formatDateInput(addDays(trip.scheduledAt ?? new Date(), 1));
+      setEndDate((current) => (!current || current < generatedDate ? generatedDate : current));
+      setToastMessage('Descarga gerada e enviada ao motorista para aceite');
+      await onChanged();
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : 'Erro ao gerar descarga.');
+    } finally {
+      setBusyTripId('');
+    }
   }
 
   async function updateDailyStatus(trip: Trip, value: DailyStatusValue) {
@@ -322,6 +342,7 @@ export function ProgramacaoPage({ loading, localities, onChanged, routeTemplates
                   key={trip.id}
                   onDelete={() => void deleteTrip(trip)}
                   onEdit={() => openEditForm(trip)}
+                  onGenerateUnloading={() => void createUnloadingTrip(trip)}
                   onStatusChange={(value) => void updateDailyStatus(trip, value)}
                   trip={trip}
                   vehicleLabel={trip.vehiclePlate || vehicleNames.get(trip.vehicleId) || trip.vehicleId}
@@ -366,6 +387,7 @@ type ProgrammingCardProps = {
   driverName: string;
   onDelete: () => void;
   onEdit: () => void;
+  onGenerateUnloading: () => void;
   onStatusChange: (value: DailyStatusValue) => void;
   trip: Trip;
   vehicleLabel: string;
@@ -377,6 +399,7 @@ function ProgrammingCard({
   driverName,
   onDelete,
   onEdit,
+  onGenerateUnloading,
   onStatusChange,
   trip,
   vehicleLabel,
@@ -385,6 +408,7 @@ function ProgrammingCard({
   const operationType = trip.operationType ?? 'loading';
   const statusOptions = dailyStatusOptions.filter((option) => option.operationType === operationType);
   const gps = getGpsConnection(trip, currentTime);
+  const canGenerateUnloading = operationType === 'loading' && !trip.unloadingGeneratedTripId;
 
   return (
     <article className={`w-full overflow-hidden rounded-md border border-zinc-200 border-l-4 bg-white shadow-sm ${statusBorderClass(trip.programmingStatus ?? 'loading')}`}>
@@ -397,9 +421,25 @@ function ProgrammingCard({
           <p className="mt-1 truncate text-[11px] text-zinc-500" title={`${vehicleLabel} | ${programmedVehicleTypeLabel(trip.programmedVehicleType)} | ${driverName}`}>
             {vehicleLabel || 'Sem veiculo'} | {programmedVehicleTypeLabel(trip.programmedVehicleType)} | {driverName || 'Sem motorista'}
           </p>
-          <p className="mt-1.5 truncate text-xs font-semibold text-zinc-800" title={`${trip.origin || '-'} -> ${trip.destination || '-'}`}>
-            {trip.origin || '-'} <span className="px-1 text-zinc-400">-&gt;</span> {trip.destination || '-'}
+          <p className="mt-1.5 truncate text-xs font-semibold text-zinc-800" title={trip.routeName || `${trip.origin || '-'} -> ${trip.destination || '-'}`}>
+            {trip.routeName || `${trip.origin || '-'} -> ${trip.destination || '-'}`}
           </p>
+          {trip.routeName ? (
+            <p className="mt-1 truncate text-[11px] text-zinc-500" title={`${trip.origin || '-'} -> ${trip.destination || '-'}`}>
+              {trip.origin || '-'} <span className="px-1 text-zinc-400">-&gt;</span> {trip.destination || '-'}
+            </p>
+          ) : null}
+          {trip.proofPhotoUrls?.length || trip.pendingProofPhotoLocalPaths?.length ? (
+            <p className="mt-1.5 flex items-center gap-1 text-[10px] font-semibold text-emerald-700">
+              <FileCheck2 size={12} />
+              Comprovante anexado
+              {trip.proofPhotoUrls?.[0] ? (
+                <a className="inline-flex items-center gap-1 text-emerald-800 underline-offset-2 hover:underline" href={trip.proofPhotoUrls[0]} rel="noreferrer" target="_blank">
+                  abrir <ExternalLink size={10} />
+                </a>
+              ) : null}
+            </p>
+          ) : null}
           <p className="mt-1 truncate text-[11px] text-zinc-500">
             {trip.clientName || 'Cliente nao informado'} | CT-e {(trip.cteDocuments ?? []).map((document) => document.number).join(', ') || 'nao informado'}
           </p>
@@ -434,12 +474,23 @@ function ProgrammingCard({
 
         <section className="flex min-w-0 flex-col justify-between gap-2 bg-zinc-50/40 px-3 py-3">
           <DeliveryProgress currentValue={currentStatus.value} operationType={operationType} />
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <select aria-label="Etapa da entrega" className="ui-input h-8 min-w-0 flex-1 px-2 text-[11px] font-semibold" disabled={busy} onChange={(event) => onStatusChange(event.target.value as DailyStatusValue)} value={currentStatus.value}>
               {statusOptions.map((option) => (
                 <option key={option.value} value={option.value}>{option.label}</option>
               ))}
             </select>
+            {canGenerateUnloading ? (
+              <button
+                className="ui-button h-8 shrink-0 border border-lime-200 bg-lime-50 px-2 text-[10px] font-bold text-lime-800 hover:bg-lime-100"
+                disabled={busy}
+                onClick={onGenerateUnloading}
+                title="Gerar descarga para o motorista aceitar"
+                type="button"
+              >
+                Gerar descarga
+              </button>
+            ) : null}
             <button aria-label="Editar programacao" className="ui-icon-button h-8 w-8 shrink-0 border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-100" disabled={busy} onClick={onEdit} title="Editar programacao" type="button"><Pencil size={14} /></button>
             <button aria-label="Excluir programacao" className="ui-icon-button h-8 w-8 shrink-0 border-red-200 bg-white text-red-600 hover:bg-red-50" disabled={busy} onClick={onDelete} title="Excluir programacao" type="button"><Trash2 size={14} /></button>
           </div>

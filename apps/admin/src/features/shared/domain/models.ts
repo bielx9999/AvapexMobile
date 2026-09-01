@@ -28,8 +28,13 @@ export type ProgrammedVehicleType =
 export type ChecklistType = 'departure' | 'arrival' | 'vehicle_daily' | 'chain_tensioner' | 'strap_ratchet';
 export type FuelType = 'diesel' | 'arla';
 export type EquipmentType = 'strap' | 'ratchet' | 'chain' | 'tensioner';
+export type EquipmentStatus = 'in_stock' | 'assigned' | 'in_use' | 'damaged' | 'under_review' | 'lost' | 'retired';
+export type EquipmentMovementType = 'registration' | 'stock_entry' | 'assignment' | 'transfer' | 'return' | 'lost' | 'found' | 'retirement';
+export type EquipmentInspectionStatus = 'pending' | 'completed' | 'divergence' | 'not_applicable';
+export type EquipmentInspectionResult = 'ok' | 'damaged' | 'not_found' | 'divergence';
+export type EquipmentOccurrenceType = 'damaged' | 'not_found' | 'lost' | 'divergence' | 'other';
+export type EquipmentOccurrenceStatus = 'open' | 'under_review' | 'resolved';
 export type RouteStatus = 'draft' | 'planned' | 'assigned' | 'in_progress' | 'completed' | 'cancelled';
-export type RouteOptimizationStatus = 'not_requested' | 'processing' | 'optimized' | 'failed';
 export type LocalityStatus = 'active' | 'inactive';
 export type LocalitySource = 'import' | 'manual';
 export type RouteTemplateStatus = 'active' | 'inactive';
@@ -175,6 +180,7 @@ export type AppUser = {
   uid: string;
   name: string;
   email: string;
+  cpf?: string;
   phone: string;
   role: UserRole;
   status: UserStatus;
@@ -194,6 +200,8 @@ export type Vehicle = {
   fleetNumber: string;
   year: number | null;
   type: VehicleType;
+  currentDriverId?: string;
+  currentDriverName?: string;
   currentKm: number;
   status: VehicleStatus;
   lastChecklistId?: string;
@@ -251,47 +259,10 @@ export type Trip = {
   routeTemplateId?: string;
   routeVersionId?: string;
   routeSnapshot?: TripRouteSnapshot;
-};
-
-export type RoutePlan = {
-  id: string;
-  code: string;
-  serviceDate: Date | null;
-  status: RouteStatus;
-  driverId: string;
-  driverName: string;
-  vehicleId: string;
-  vehiclePlate: string;
-  fleetId: string;
-  carrierId: string;
-  carrierName: string;
-  operationTypeId: string;
-  operationTypeName: string;
-  regionIds: string[];
-  startAddress: AddressSnapshot;
-  endAddress: AddressSnapshot;
-  deliveryCount: number;
-  completedDeliveryCount: number;
-  plannedDistanceMeters: number;
-  plannedDurationSeconds: number;
-  plannedCost: number;
-  actualDistanceMeters: number;
-  actualDurationSeconds: number;
-  actualCost: number;
-  optimization: {
-    status: RouteOptimizationStatus;
-    provider: string;
-    requestId: string;
-    optimizedAt: Date | null;
-    errorMessage: string;
-  };
-  currentLocation?: GeoLocation;
-  startedAt: Date | null;
-  completedAt: Date | null;
-  createdAt: Date | null;
-  createdBy: string;
-  updatedAt: Date | null;
-  updatedBy: string;
+  proofPhotoUrls?: string[];
+  pendingProofPhotoLocalPaths?: string[];
+  proofSubmittedAt?: Date | null;
+  proofSubmittedBy?: string;
 };
 
 export type DeliveryFailure = {
@@ -446,6 +417,11 @@ export type Checklist = {
   answers?: Record<string, unknown>;
   approvalStatus?: string;
   hasCriticalFailure?: boolean;
+  adminReviewStatus?: 'pending' | 'approved' | 'reported';
+  adminReviewMessage?: string;
+  driverNotificationStatus?: 'not_sent' | 'queued' | 'sent';
+  reviewedAt?: Date | null;
+  reviewedBy?: string;
 };
 
 export type DeliveryReceipt = {
@@ -497,4 +473,114 @@ export type DriverEquipment = {
   tagNumber: string;
   status: string;
   description?: string;
+};
+
+export type StorageLocation = {
+  id: string;
+  name: string;
+  description: string;
+  active: boolean;
+  createdAt: Date | null;
+  updatedAt: Date | null;
+};
+
+export type Equipment = {
+  id: string;
+  code: string;
+  type: EquipmentType;
+  description: string;
+  brand: string;
+  model: string;
+  capacity: string;
+  length: string;
+  purchaseDate: Date | null;
+  status: EquipmentStatus;
+  currentVehicleId: string;
+  currentVehiclePlate: string;
+  currentDriverId: string;
+  currentDriverName: string;
+  currentStorageId: string;
+  currentStorageName: string;
+  lastInspectionAt: Date | null;
+  createdAt: Date | null;
+  updatedAt: Date | null;
+};
+
+export type EquipmentAssignment = {
+  id: string;
+  equipmentId: string;
+  equipmentCode: string;
+  equipmentType: EquipmentType;
+  vehicleId: string;
+  vehiclePlate: string;
+  responsibleDriverId: string;
+  responsibleDriverName: string;
+  assignedAt: Date | null;
+  assignedBy: string;
+  returnedAt: Date | null;
+  returnedBy: string;
+  status: 'active' | 'returned' | 'transferred';
+  observation: string;
+};
+
+export type EquipmentMovement = {
+  id: string;
+  equipmentId: string;
+  equipmentCode: string;
+  movementType: EquipmentMovementType;
+  sourceVehicleId: string;
+  sourceVehiclePlate: string;
+  destinationVehicleId: string;
+  destinationVehiclePlate: string;
+  sourceStorageId: string;
+  sourceStorageName: string;
+  destinationStorageId: string;
+  destinationStorageName: string;
+  responsibleUserId: string;
+  observation: string;
+  createdAt: Date | null;
+};
+
+export type EquipmentInspectionItem = {
+  equipmentId: string;
+  equipmentCode: string;
+  equipmentType: EquipmentType;
+  expected: boolean;
+  result: EquipmentInspectionResult;
+  observation: string;
+  photoUrl: string;
+};
+
+export type EquipmentInspection = {
+  id: string;
+  vehicleId: string;
+  vehiclePlate: string;
+  inspectionType: 'admin_monthly' | 'driver_checklist';
+  referenceMonth: number;
+  referenceYear: number;
+  performedAt: Date | null;
+  performedByUserId: string;
+  responsibleDriverId: string;
+  responsibleDriverName: string;
+  status: EquipmentInspectionStatus;
+  notes: string;
+  items: EquipmentInspectionItem[];
+  createdAt: Date | null;
+  updatedAt: Date | null;
+};
+
+export type EquipmentOccurrence = {
+  id: string;
+  equipmentId: string;
+  equipmentCode: string;
+  vehicleId: string;
+  vehiclePlate: string;
+  type: EquipmentOccurrenceType;
+  reportedBy: string;
+  reportedAt: Date | null;
+  description: string;
+  status: EquipmentOccurrenceStatus;
+  resolvedAt: Date | null;
+  resolvedBy: string;
+  photoUrl: string;
 };

@@ -7,16 +7,21 @@ import type {
   DeliveryReceipt,
   DeliveryProofRequirements,
   DriverEquipment,
+  Equipment,
+  EquipmentAssignment,
+  EquipmentInspection,
+  EquipmentMovement,
+  EquipmentOccurrence,
   FuelingRecord,
   GeoLocation,
   Locality,
   OperationalSettings,
   RouteEvent,
-  RoutePlan,
   RouteTemplate,
   RouteTemplatePoint,
   RouteVersion,
   RouteVersionDefinition,
+  StorageLocation,
   Trip,
   TripRouteSnapshot,
   Vehicle,
@@ -81,6 +86,7 @@ export function mapUser(id: string, data: Record<string, unknown>): AppUser {
     uid: typeof data.uid === 'string' ? data.uid : id,
     name: typeof data.name === 'string' ? data.name : '',
     email: typeof data.email === 'string' ? data.email : '',
+    cpf: typeof data.cpf === 'string' ? data.cpf : undefined,
     phone: typeof data.phone === 'string' ? data.phone : '',
     role: data.role === 'admin' ? 'admin' : 'driver',
     status: data.status === 'inactive' ? 'inactive' : 'active',
@@ -114,6 +120,8 @@ export function mapVehicle(id: string, data: Record<string, unknown>): Vehicle {
       type === 'mechanical_horse_trucado' || type === 'mechanical_horse_toco' || type === 'truck'
         ? type
         : 'truck',
+    currentDriverId: readString(data.currentDriverId) || undefined,
+    currentDriverName: readString(data.currentDriverName) || undefined,
     currentKm: typeof data.currentKm === 'number' ? data.currentKm : 0,
     status: data.status === 'inactive' || data.status === 'maintenance' ? 'inactive' : 'active',
     lastChecklistId: typeof data.lastChecklistId === 'string' ? data.lastChecklistId : undefined,
@@ -270,56 +278,10 @@ export function mapTrip(id: string, data: Record<string, unknown>): Trip {
     routeTemplateId: readString(data.routeTemplateId),
     routeVersionId: readString(data.routeVersionId),
     routeSnapshot: mapTripRouteSnapshot(data.routeSnapshot),
-  };
-}
-
-export function mapRoute(id: string, data: Record<string, unknown>): RoutePlan {
-  const optimization = readRecord(data.optimization);
-  const optimizationStatus = optimization.status;
-  return {
-    id: readString(data.id, id),
-    code: readString(data.code),
-    serviceDate: readDate(data.serviceDate),
-    status: isRouteStatus(data.status) ? data.status : 'draft',
-    driverId: readString(data.driverId),
-    driverName: readString(data.driverName),
-    vehicleId: readString(data.vehicleId),
-    vehiclePlate: readString(data.vehiclePlate),
-    fleetId: readString(data.fleetId),
-    carrierId: readString(data.carrierId),
-    carrierName: readString(data.carrierName),
-    operationTypeId: readString(data.operationTypeId),
-    operationTypeName: readString(data.operationTypeName),
-    regionIds: readStringList(data.regionIds),
-    startAddress: mapAddress(data.startAddress),
-    endAddress: mapAddress(data.endAddress),
-    deliveryCount: readNumber(data.deliveryCount),
-    completedDeliveryCount: readNumber(data.completedDeliveryCount),
-    plannedDistanceMeters: readNumber(data.plannedDistanceMeters),
-    plannedDurationSeconds: readNumber(data.plannedDurationSeconds),
-    plannedCost: readNumber(data.plannedCost),
-    actualDistanceMeters: readNumber(data.actualDistanceMeters),
-    actualDurationSeconds: readNumber(data.actualDurationSeconds),
-    actualCost: readNumber(data.actualCost),
-    optimization: {
-      status:
-        optimizationStatus === 'processing' ||
-        optimizationStatus === 'optimized' ||
-        optimizationStatus === 'failed'
-          ? optimizationStatus
-          : 'not_requested',
-      provider: readString(optimization.provider),
-      requestId: readString(optimization.requestId),
-      optimizedAt: readDate(optimization.optimizedAt),
-      errorMessage: readString(optimization.errorMessage),
-    },
-    currentLocation: mapGeoLocation(data.currentLocation),
-    startedAt: readDate(data.startedAt),
-    completedAt: readDate(data.completedAt),
-    createdAt: readDate(data.createdAt),
-    createdBy: readString(data.createdBy),
-    updatedAt: readDate(data.updatedAt),
-    updatedBy: readString(data.updatedBy),
+    proofPhotoUrls: readStringList(data.proofPhotoUrls),
+    pendingProofPhotoLocalPaths: readStringList(data.pendingProofPhotoLocalPaths),
+    proofSubmittedAt: readDate(data.proofSubmittedAt),
+    proofSubmittedBy: readString(data.proofSubmittedBy),
   };
 }
 
@@ -483,6 +445,8 @@ function defaultOperationalStatus(programmingStatus: Trip['programmingStatus']):
 
 export function mapChecklist(id: string, data: Record<string, unknown>): Checklist {
   const type = typeof data.type === 'string' ? data.type : 'vehicle_daily';
+  const adminReviewStatus = typeof data.adminReviewStatus === 'string' ? data.adminReviewStatus : 'pending';
+  const driverNotificationStatus = typeof data.driverNotificationStatus === 'string' ? data.driverNotificationStatus : 'not_sent';
   return {
     id: typeof data.id === 'string' ? data.id : id,
     tripId: typeof data.tripId === 'string' ? data.tripId : '',
@@ -501,6 +465,17 @@ export function mapChecklist(id: string, data: Record<string, unknown>): Checkli
     answers: data.answers ? readRecord(data.answers) : undefined,
     approvalStatus: typeof data.approvalStatus === 'string' ? data.approvalStatus : undefined,
     hasCriticalFailure: typeof data.hasCriticalFailure === 'boolean' ? data.hasCriticalFailure : undefined,
+    adminReviewStatus:
+      adminReviewStatus === 'approved' || adminReviewStatus === 'reported'
+        ? adminReviewStatus
+        : 'pending',
+    adminReviewMessage: typeof data.adminReviewMessage === 'string' ? data.adminReviewMessage : '',
+    driverNotificationStatus:
+      driverNotificationStatus === 'queued' || driverNotificationStatus === 'sent'
+        ? driverNotificationStatus
+        : 'not_sent',
+    reviewedAt: readDate(data.reviewedAt),
+    reviewedBy: readString(data.reviewedBy),
   };
 }
 
@@ -565,6 +540,131 @@ export function mapDriverEquipment(id: string, data: Record<string, unknown>): D
     tagNumber: typeof data.tagNumber === 'string' ? data.tagNumber : '',
     status: typeof data.status === 'string' ? data.status : 'available',
     description: typeof data.description === 'string' ? data.description : undefined,
+  };
+}
+
+export function mapStorageLocation(id: string, data: Record<string, unknown>): StorageLocation {
+  return {
+    id: readString(data.id, id),
+    name: readString(data.name),
+    description: readString(data.description),
+    active: readBoolean(data.active, true),
+    createdAt: readDate(data.createdAt),
+    updatedAt: readDate(data.updatedAt),
+  };
+}
+
+export function mapEquipment(id: string, data: Record<string, unknown>): Equipment {
+  const type = readString(data.type, 'strap');
+  const status = readString(data.status, 'in_stock');
+  return {
+    id: readString(data.id, id),
+    code: readString(data.code),
+    type: type as Equipment['type'],
+    description: readString(data.description),
+    brand: readString(data.brand),
+    model: readString(data.model),
+    capacity: readString(data.capacity),
+    length: readString(data.length),
+    purchaseDate: readDate(data.purchaseDate),
+    status: status as Equipment['status'],
+    currentVehicleId: readString(data.currentVehicleId),
+    currentVehiclePlate: readString(data.currentVehiclePlate),
+    currentDriverId: readString(data.currentDriverId),
+    currentDriverName: readString(data.currentDriverName),
+    currentStorageId: readString(data.currentStorageId),
+    currentStorageName: readString(data.currentStorageName),
+    lastInspectionAt: readDate(data.lastInspectionAt),
+    createdAt: readDate(data.createdAt),
+    updatedAt: readDate(data.updatedAt),
+  };
+}
+
+export function mapEquipmentAssignment(id: string, data: Record<string, unknown>): EquipmentAssignment {
+  return {
+    id: readString(data.id, id),
+    equipmentId: readString(data.equipmentId),
+    equipmentCode: readString(data.equipmentCode),
+    equipmentType: readString(data.equipmentType, 'strap') as EquipmentAssignment['equipmentType'],
+    vehicleId: readString(data.vehicleId),
+    vehiclePlate: readString(data.vehiclePlate),
+    responsibleDriverId: readString(data.responsibleDriverId),
+    responsibleDriverName: readString(data.responsibleDriverName),
+    assignedAt: readDate(data.assignedAt),
+    assignedBy: readString(data.assignedBy),
+    returnedAt: readDate(data.returnedAt),
+    returnedBy: readString(data.returnedBy),
+    status: readString(data.status, 'active') as EquipmentAssignment['status'],
+    observation: readString(data.observation),
+  };
+}
+
+export function mapEquipmentMovement(id: string, data: Record<string, unknown>): EquipmentMovement {
+  return {
+    id: readString(data.id, id),
+    equipmentId: readString(data.equipmentId),
+    equipmentCode: readString(data.equipmentCode),
+    movementType: readString(data.movementType, 'registration') as EquipmentMovement['movementType'],
+    sourceVehicleId: readString(data.sourceVehicleId),
+    sourceVehiclePlate: readString(data.sourceVehiclePlate),
+    destinationVehicleId: readString(data.destinationVehicleId),
+    destinationVehiclePlate: readString(data.destinationVehiclePlate),
+    sourceStorageId: readString(data.sourceStorageId),
+    sourceStorageName: readString(data.sourceStorageName),
+    destinationStorageId: readString(data.destinationStorageId),
+    destinationStorageName: readString(data.destinationStorageName),
+    responsibleUserId: readString(data.responsibleUserId),
+    observation: readString(data.observation),
+    createdAt: readDate(data.createdAt),
+  };
+}
+
+export function mapEquipmentInspection(id: string, data: Record<string, unknown>): EquipmentInspection {
+  const items = Array.isArray(data.items)
+    ? data.items.map((item) => readRecord(item)).map((item) => ({
+      equipmentId: readString(item.equipmentId),
+      equipmentCode: readString(item.equipmentCode),
+      equipmentType: readString(item.equipmentType, 'strap') as EquipmentInspection['items'][number]['equipmentType'],
+      expected: readBoolean(item.expected, true),
+      result: readString(item.result, 'ok') as EquipmentInspection['items'][number]['result'],
+      observation: readString(item.observation),
+      photoUrl: readString(item.photoUrl),
+    }))
+    : [];
+  return {
+    id: readString(data.id, id),
+    vehicleId: readString(data.vehicleId),
+    vehiclePlate: readString(data.vehiclePlate),
+    inspectionType: readString(data.inspectionType, 'admin_monthly') as EquipmentInspection['inspectionType'],
+    referenceMonth: Math.max(1, Math.min(12, Math.trunc(readNumber(data.referenceMonth, 1)))),
+    referenceYear: Math.trunc(readNumber(data.referenceYear, new Date().getFullYear())),
+    performedAt: readDate(data.performedAt),
+    performedByUserId: readString(data.performedByUserId),
+    responsibleDriverId: readString(data.responsibleDriverId),
+    responsibleDriverName: readString(data.responsibleDriverName),
+    status: readString(data.status, 'pending') as EquipmentInspection['status'],
+    notes: readString(data.notes),
+    items,
+    createdAt: readDate(data.createdAt),
+    updatedAt: readDate(data.updatedAt),
+  };
+}
+
+export function mapEquipmentOccurrence(id: string, data: Record<string, unknown>): EquipmentOccurrence {
+  return {
+    id: readString(data.id, id),
+    equipmentId: readString(data.equipmentId),
+    equipmentCode: readString(data.equipmentCode),
+    vehicleId: readString(data.vehicleId),
+    vehiclePlate: readString(data.vehiclePlate),
+    type: readString(data.type, 'other') as EquipmentOccurrence['type'],
+    reportedBy: readString(data.reportedBy),
+    reportedAt: readDate(data.reportedAt),
+    description: readString(data.description),
+    status: readString(data.status, 'open') as EquipmentOccurrence['status'],
+    resolvedAt: readDate(data.resolvedAt),
+    resolvedBy: readString(data.resolvedBy),
+    photoUrl: readString(data.photoUrl),
   };
 }
 
@@ -685,10 +785,6 @@ function readTransitions<TStatus extends string>(value: unknown) {
   return Object.fromEntries(
     Object.entries(readRecord(value)).map(([status, transitions]) => [status, readStringList(transitions)]),
   ) as Partial<Record<TStatus, TStatus[]>>;
-}
-
-function isRouteStatus(value: unknown): value is RoutePlan['status'] {
-  return value === 'draft' || value === 'planned' || value === 'assigned' || value === 'in_progress' || value === 'completed' || value === 'cancelled';
 }
 
 function isDeliveryStatus(value: unknown): value is Delivery['status'] {

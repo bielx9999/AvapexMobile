@@ -13,6 +13,26 @@ import '../../trips/application/trip_providers.dart';
 import '../../trips/data/models/trip_model.dart';
 import '../../users/application/user_providers.dart';
 import '../../users/data/models/app_user_model.dart';
+import '../../vehicles/data/models/vehicle_model.dart';
+
+final _profileVehiclesProvider = StreamProvider<List<Vehicle>>((ref) {
+  final uid = ref.watch(firebaseAuthProvider).currentUser?.uid;
+  if (uid == null || uid.isEmpty) {
+    return const Stream<List<Vehicle>>.empty();
+  }
+  final tripVehicleIds =
+      ref
+          .watch(currentDriverTripsProvider)
+          .asData
+          ?.value
+          .map((trip) => trip.vehicleId)
+          .where((vehicleId) => vehicleId.isNotEmpty)
+          .toSet() ??
+      const <String>{};
+  return ref
+      .watch(vehicleRepositoryProvider)
+      .watchVehiclesForDriver(uid, extraVehicleIds: tripVehicleIds);
+});
 
 final class ProfilePage extends ConsumerStatefulWidget {
   const ProfilePage({super.key});
@@ -151,12 +171,10 @@ final class _ProfilePageState extends ConsumerState<ProfilePage> {
   @override
   Widget build(BuildContext context) {
     final profile = ref.watch(currentUserProfileProvider);
-    final activeTrip = ref
-        .watch(currentDriverTripsProvider)
-        .asData
-        ?.value
-        .where((trip) => trip.status == TripStatus.inProgress)
-        .firstOrNull;
+    final trips =
+        ref.watch(currentDriverTripsProvider).asData?.value ?? const <Trip>[];
+    final vehicles =
+        ref.watch(_profileVehiclesProvider).asData?.value ?? const <Vehicle>[];
 
     return profile.when(
       data: (user) {
@@ -283,10 +301,7 @@ final class _ProfilePageState extends ConsumerState<ProfilePage> {
                       _InfoRow(
                         icon: Icons.local_shipping_outlined,
                         label: 'Veiculo atual',
-                        value: activeTrip == null
-                            ? ''
-                            : '${activeTrip.vehiclePlate} ${activeTrip.vehicleModel}'
-                                  .trim(),
+                        value: _currentVehicleText(user, trips, vehicles),
                       ),
                     ],
                   ),
@@ -443,4 +458,89 @@ String _formatDate(DateTime value) {
   final day = local.day.toString().padLeft(2, '0');
   final month = local.month.toString().padLeft(2, '0');
   return '$day/$month/${local.year}';
+}
+
+String _currentVehicleText(
+  AppUser user,
+  List<Trip> trips,
+  List<Vehicle> vehicles,
+) {
+  final linkedVehicle = _firstVehicleWhere(
+    vehicles,
+    (vehicle) => vehicle.currentDriverId == user.uid,
+  );
+  if (linkedVehicle != null) {
+    return _vehicleText(linkedVehicle);
+  }
+
+  final trip = _selectCurrentVehicleTrip(trips);
+  if (trip != null) {
+    final tripVehicle = _firstVehicleWhere(
+      vehicles,
+      (vehicle) => vehicle.id == trip.vehicleId,
+    );
+    if (tripVehicle != null) {
+      return _vehicleText(tripVehicle);
+    }
+    return [
+      trip.vehiclePlate,
+      trip.vehicleModel,
+    ].where((value) => value.trim().isNotEmpty).join(' - ');
+  }
+
+  return '';
+}
+
+Trip? _selectCurrentVehicleTrip(List<Trip> trips) {
+  final inProgress =
+      trips
+          .where(
+            (trip) =>
+                trip.status == TripStatus.inProgress &&
+                trip.vehicleId.isNotEmpty,
+          )
+          .toList()
+        ..sort((a, b) => _tripDate(b).compareTo(_tripDate(a)));
+  if (inProgress.isNotEmpty) {
+    return inProgress.first;
+  }
+
+  final assignedOrAccepted =
+      trips
+          .where(
+            (trip) =>
+                trip.vehicleId.isNotEmpty &&
+                trip.status == TripStatus.pending &&
+                trip.driverResponse != DriverTripResponse.rejected,
+          )
+          .toList()
+        ..sort((a, b) => _tripDate(a).compareTo(_tripDate(b)));
+  if (assignedOrAccepted.isNotEmpty) {
+    return assignedOrAccepted.first;
+  }
+
+  return null;
+}
+
+DateTime _tripDate(Trip trip) {
+  return trip.startedAt ?? trip.assignedAt ?? trip.scheduledAt;
+}
+
+Vehicle? _firstVehicleWhere(
+  List<Vehicle> vehicles,
+  bool Function(Vehicle vehicle) test,
+) {
+  for (final vehicle in vehicles) {
+    if (test(vehicle)) {
+      return vehicle;
+    }
+  }
+  return null;
+}
+
+String _vehicleText(Vehicle vehicle) {
+  return [
+    vehicle.plate,
+    vehicle.model,
+  ].where((value) => value.trim().isNotEmpty).join(' - ');
 }

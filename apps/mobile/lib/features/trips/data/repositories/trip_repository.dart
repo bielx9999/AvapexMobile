@@ -107,8 +107,7 @@ final class TripRepository {
             if (!current.canDriverRespondAt(DateTime.now())) {
               throw const FirebaseFailure(
                 code: FirebaseFailureCode.permissionDenied,
-                message:
-                    'Somente viagens futuras e pendentes podem receber resposta.',
+                message: 'Somente viagens pendentes podem receber resposta.',
               );
             }
 
@@ -119,6 +118,111 @@ final class TripRepository {
               'driverRejection': response == DriverTripResponse.rejected
                   ? rejection!.toFirestore()
                   : null,
+            });
+          })
+          .timeout(const Duration(seconds: 15));
+    } on Object catch (error, stackTrace) {
+      throw FirebaseFailure.fromException(error, stackTrace);
+    }
+  }
+
+  Future<void> moveToNextProgressForCurrentDriver(Trip trip) async {
+    try {
+      final uid = _requireCurrentUserId();
+      await _firestore
+          .runTransaction((transaction) async {
+            final reference = _trips.doc(trip.id);
+            final snapshot = await transaction.get(reference);
+            final current = snapshot.data();
+            if (current == null || current.driverId != uid) {
+              throw const FirebaseFailure(
+                code: FirebaseFailureCode.permissionDenied,
+                message:
+                    'Viagem inexistente ou nao pertence ao motorista atual.',
+              );
+            }
+            if (current.driverResponse != DriverTripResponse.accepted) {
+              throw const FirebaseFailure(
+                code: FirebaseFailureCode.permissionDenied,
+                message: 'Aceite a viagem antes de atualizar o andamento.',
+              );
+            }
+            if (current.status == TripStatus.completed ||
+                current.status == TripStatus.cancelled) {
+              throw const FirebaseFailure(
+                code: FirebaseFailureCode.permissionDenied,
+                message: 'Esta viagem ja foi encerrada.',
+              );
+            }
+
+            final next = _nextProgress(current);
+            if (next == null || next.isFinished) {
+              throw const FirebaseFailure(
+                code: FirebaseFailureCode.permissionDenied,
+                message: 'Anexe o comprovante para finalizar esta viagem.',
+              );
+            }
+
+            transaction.update(
+              reference,
+              _progressUpdate(next, markStarted: current.startedAt == null),
+            );
+          })
+          .timeout(const Duration(seconds: 15));
+    } on Object catch (error, stackTrace) {
+      throw FirebaseFailure.fromException(error, stackTrace);
+    }
+  }
+
+  Future<void> completeForCurrentDriver({
+    required Trip trip,
+    required List<String> proofPhotoUrls,
+    required List<String> pendingProofPhotoLocalPaths,
+  }) async {
+    try {
+      final uid = _requireCurrentUserId();
+      if (proofPhotoUrls.isEmpty && pendingProofPhotoLocalPaths.isEmpty) {
+        throw const FirebaseFailure(
+          code: FirebaseFailureCode.unknown,
+          message: 'Anexe ao menos uma foto do comprovante.',
+        );
+      }
+
+      await _firestore
+          .runTransaction((transaction) async {
+            final reference = _trips.doc(trip.id);
+            final snapshot = await transaction.get(reference);
+            final current = snapshot.data();
+            if (current == null || current.driverId != uid) {
+              throw const FirebaseFailure(
+                code: FirebaseFailureCode.permissionDenied,
+                message:
+                    'Viagem inexistente ou nao pertence ao motorista atual.',
+              );
+            }
+            if (current.driverResponse != DriverTripResponse.accepted) {
+              throw const FirebaseFailure(
+                code: FirebaseFailureCode.permissionDenied,
+                message: 'Aceite a viagem antes de finalizar.',
+              );
+            }
+            if (current.status == TripStatus.completed ||
+                current.status == TripStatus.cancelled) {
+              throw const FirebaseFailure(
+                code: FirebaseFailureCode.permissionDenied,
+                message: 'Esta viagem ja foi encerrada.',
+              );
+            }
+
+            final finished = current.operationType == TripOperationType.loading
+                ? TripProgress.releasedLoading
+                : TripProgress.releasedUnloading;
+            transaction.update(reference, {
+              ..._progressUpdate(finished),
+              'proofPhotoUrls': proofPhotoUrls,
+              'pendingProofPhotoLocalPaths': pendingProofPhotoLocalPaths,
+              'proofSubmittedAt': FieldValue.serverTimestamp(),
+              'proofSubmittedBy': uid,
             });
           })
           .timeout(const Duration(seconds: 15));
@@ -152,4 +256,36 @@ final class TripRepository {
     }
     return uid;
   }
+}
+
+TripProgress? _nextProgress(Trip trip) {
+  final stages = TripProgress.optionsFor(trip.operationType);
+  final currentIndex = stages.indexOf(trip.progress);
+  if (currentIndex < 0) {
+    return stages.firstWhere(
+      (stage) => stage.tripStatus == TripStatus.inProgress,
+      orElse: () => stages.first,
+    );
+  }
+  if (currentIndex >= stages.length - 1) {
+    return null;
+  }
+  return stages[currentIndex + 1];
+}
+
+Map<String, Object?> _progressUpdate(
+  TripProgress progress, {
+  bool markStarted = false,
+}) {
+  return {
+    'status': progress.tripStatus.value,
+    'programmingStatus': progress.programmingStatus.value,
+    'operationType': progress.operationType.value,
+    'operationalStatus': progress.operationalStatusValue,
+    'statusUpdatedAt': FieldValue.serverTimestamp(),
+    if (progress.tripStatus == TripStatus.inProgress && markStarted)
+      'startedAt': FieldValue.serverTimestamp(),
+    if (progress.tripStatus == TripStatus.completed)
+      'completedAt': FieldValue.serverTimestamp(),
+  };
 }

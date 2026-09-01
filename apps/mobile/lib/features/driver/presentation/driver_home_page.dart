@@ -17,6 +17,7 @@ enum DriverHomeAction {
   incidents,
   fueling,
   performance,
+  equipment,
   alerts,
   profile,
 }
@@ -195,6 +196,12 @@ final class DriverHomePage extends ConsumerWidget {
                       label: 'Minha Media',
                       description: 'Consumo do veiculo',
                       action: DriverHomeAction.performance,
+                    ),
+                    const _DriverAction(
+                      icon: LucideIcons.packageCheck,
+                      label: 'Equipamentos',
+                      description: 'Cintas e amarracao',
+                      action: DriverHomeAction.equipment,
                     ),
                   ],
                   onAction: onAction,
@@ -392,7 +399,11 @@ final class _CurrentTripCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 18),
-          _RouteLine(origin: trip.origin, destination: trip.destination),
+          _RouteLine(
+            title: trip.displayTitle,
+            origin: trip.origin,
+            destination: trip.destination,
+          ),
           const SizedBox(height: 14),
           Wrap(
             spacing: 14,
@@ -428,8 +439,13 @@ final class _CurrentTripCard extends StatelessWidget {
 }
 
 final class _RouteLine extends StatelessWidget {
-  const _RouteLine({required this.origin, required this.destination});
+  const _RouteLine({
+    required this.title,
+    required this.origin,
+    required this.destination,
+  });
 
+  final String title;
   final String origin;
   final String destination;
 
@@ -448,7 +464,7 @@ final class _RouteLine extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                origin,
+                title,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
@@ -457,22 +473,15 @@ final class _RouteLine extends StatelessWidget {
                   fontWeight: FontWeight.w800,
                 ),
               ),
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 6),
-                child: Icon(
-                  LucideIcons.arrowDown,
-                  color: Colors.white54,
-                  size: 18,
-                ),
-              ),
+              const SizedBox(height: 6),
               Text(
-                destination,
-                maxLines: 2,
+                '$origin -> $destination',
+                maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 17,
-                  fontWeight: FontWeight.w800,
+                  color: Colors.white70,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ],
@@ -540,7 +549,7 @@ final class _AssignedTripBanner extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '${trip.origin} -> ${trip.destination}',
+                      trip.displayTitle,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),

@@ -131,6 +131,14 @@
         { "fieldPath": "routeTemplateId", "order": "ASCENDING" },
         { "fieldPath": "version", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "equipmentAssignments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "equipmentId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

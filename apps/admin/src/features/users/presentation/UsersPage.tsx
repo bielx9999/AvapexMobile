@@ -1,8 +1,10 @@
-import { FormEvent, type ReactNode, useMemo, useState } from 'react';
-import { Ban, KeyRound, Pencil, Plus, Search, Trash2, UserCheck, X } from 'lucide-react';
+import { ChangeEvent, FormEvent, type ReactNode, useMemo, useState } from 'react';
+import { Ban, Download, FileSpreadsheet, KeyRound, LoaderCircle, Pencil, Plus, Search, Trash2, Upload, UserCheck, X } from 'lucide-react';
 import { adminUserRepository } from '../data/adminUserRepository';
+import { analyzeUserWorkbook, displayImportCpf, type UserImportAnalysis } from '../data/userImport';
 import type { AppUser, UserRole, UserStatus } from '../../shared/domain/models';
 import { ActionIconButton, EmptyState, ErrorBanner } from '../../shared/presentation/ui';
+import { formatCpf, isValidCpf } from '../../shared/utils/cpf';
 
 type UsersPageProps = {
   users: AppUser[];
@@ -14,6 +16,7 @@ type UsersPageProps = {
 const initialForm = {
   name: '',
   email: '',
+  cpf: '',
   phone: '',
   password: '',
   role: 'driver' as UserRole,
@@ -30,6 +33,7 @@ export function UsersPage({ users, loading, currentUid, onChanged }: UsersPagePr
   const [submitting, setSubmitting] = useState(false);
   const [busyUid, setBusyUid] = useState('');
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
   const [editingUser, setEditingUser] = useState<AppUser | null>(null);
 
   const filteredUsers = useMemo(() => {
@@ -38,7 +42,7 @@ export function UsersPage({ users, loading, currentUid, onChanged }: UsersPagePr
       return users;
     }
     return users.filter((user) =>
-      [user.name, user.email, user.phone, user.role, user.status]
+      [user.name, user.email, user.cpf, user.phone, user.role, user.status]
         .join(' ')
         .toLowerCase()
         .includes(normalized),
@@ -55,6 +59,7 @@ export function UsersPage({ users, loading, currentUid, onChanged }: UsersPagePr
         await adminUserRepository.updateUser({
           uid: editingUser.uid,
           name: form.name,
+          cpf: form.cpf,
           phone: form.phone,
           role: form.role,
           status: form.status,
@@ -105,10 +110,27 @@ export function UsersPage({ users, loading, currentUid, onChanged }: UsersPagePr
     setShowCreateForm(true);
   }
 
+  function downloadTemplate() {
+    const rows = [
+      ['NOME', 'EMAIL', 'CPF', 'TELEFONE', 'PERFIL', 'SENHA', 'CNH NUMERO', 'CNH CATEGORIA', 'CNH VALIDADE'],
+      ['Joao Motorista', 'joao@avapex.com.br', '390.533.447-05', '11999990000', 'Motorista', 'Senha123', '12345678900', 'E', '31/12/2028'],
+      ['Maria Operacional', 'maria@avapex.com.br', '529.982.247-25', '11988880000', 'Administrativo', 'Senha123', '', '', ''],
+    ];
+    const csv = rows.map((row) => row.map((cell) => `"${cell.replace(/"/g, '""')}"`).join(';')).join('\r\n');
+    const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'modelo-importacao-usuarios.csv';
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
   function openEditForm(user: AppUser) {
     setForm({
       name: user.name,
       email: user.email,
+      cpf: formatCpf(user.cpf ?? ''),
       phone: user.phone,
       password: '',
       role: user.role,
@@ -129,6 +151,22 @@ export function UsersPage({ users, loading, currentUid, onChanged }: UsersPagePr
         <div className="flex flex-col gap-3 border-b border-zinc-200 px-4 py-3 md:flex-row md:items-center md:justify-between">
           <p className="text-sm text-zinc-500">{filteredUsers.length} usuarios encontrados</p>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <button
+              className="ui-button flex h-10 items-center justify-center gap-2 border border-zinc-300 bg-white px-3 text-sm font-medium text-zinc-800 hover:bg-zinc-50"
+              onClick={downloadTemplate}
+              type="button"
+            >
+              <Download size={17} />
+              Baixar modelo
+            </button>
+            <button
+              className="ui-button flex h-10 items-center justify-center gap-2 border border-zinc-300 bg-white px-3 text-sm font-medium text-zinc-800 hover:bg-zinc-50"
+              onClick={() => setShowImportModal(true)}
+              type="button"
+            >
+              <Upload size={17} />
+              Importar planilha
+            </button>
             <button
               className="ui-button flex h-10 items-center justify-center gap-2 bg-avapex-yellow px-4 text-sm font-semibold text-avapex-black hover:bg-yellow-300"
               onClick={openCreateForm}
@@ -155,6 +193,7 @@ export function UsersPage({ users, loading, currentUid, onChanged }: UsersPagePr
               <tr>
                 <th className="px-4 py-3">Nome</th>
                 <th className="px-4 py-3">Email</th>
+                <th className="px-4 py-3">CPF</th>
                 <th className="px-4 py-3">Telefone</th>
                 <th className="px-4 py-3">Perfil</th>
                 <th className="px-4 py-3">Status</th>
@@ -167,6 +206,7 @@ export function UsersPage({ users, loading, currentUid, onChanged }: UsersPagePr
                 <tr key={user.uid}>
                   <td className="px-4 py-3 font-medium">{user.name || '-'}</td>
                   <td className="px-4 py-3">{user.email}</td>
+                  <td className="px-4 py-3">{user.cpf ? formatCpf(user.cpf) : '-'}</td>
                   <td className="px-4 py-3">{user.phone || '-'}</td>
                   <td className="px-4 py-3">{user.role === 'admin' ? 'Administrativo' : 'Motorista'}</td>
                   <td className="px-4 py-3">
@@ -243,7 +283,7 @@ export function UsersPage({ users, loading, currentUid, onChanged }: UsersPagePr
 
               {!loading && filteredUsers.length === 0 ? (
                 <tr>
-                  <td className="p-0" colSpan={7}>
+                  <td className="p-0" colSpan={8}>
                     <EmptyState description="Nao existem usuarios correspondentes aos filtros atuais." title="Nenhum usuario encontrado" />
                   </td>
                 </tr>
@@ -289,6 +329,13 @@ export function UsersPage({ users, loading, currentUid, onChanged }: UsersPagePr
                     onChange={(value) => setForm((current) => ({ ...current, email: value }))}
                     readOnly={Boolean(editingUser)}
                     required
+                  />
+                  <TextField
+                    label="CPF"
+                    value={form.cpf}
+                    onChange={(value) => setForm((current) => ({ ...current, cpf: formatCpf(value) }))}
+                    required
+                    error={form.cpf && !isValidCpf(form.cpf) ? 'CPF invalido.' : ''}
                   />
                   <TextField
                     label="Telefone"
@@ -382,6 +429,196 @@ export function UsersPage({ users, loading, currentUid, onChanged }: UsersPagePr
           </section>
         </div>
       ) : null}
+
+      {showImportModal ? (
+        <UserImportModal
+          users={users}
+          onClose={() => setShowImportModal(false)}
+          onImported={async () => {
+            setShowImportModal(false);
+            await onChanged();
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function UserImportModal({
+  users,
+  onClose,
+  onImported,
+}: {
+  users: AppUser[];
+  onClose: () => void;
+  onImported: () => Promise<void>;
+}) {
+  const [analysis, setAnalysis] = useState<UserImportAnalysis | null>(null);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const validRows = analysis?.rows.filter((row) => row.issues.length === 0 && row.role) ?? [];
+
+  async function selectFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setLoading(true);
+    setError('');
+    setAnalysis(null);
+    try {
+      setAnalysis(await analyzeUserWorkbook(file, users));
+    } catch (fileError) {
+      setError(fileError instanceof Error ? fileError.message : 'Nao foi possivel ler a planilha.');
+    } finally {
+      setLoading(false);
+      event.target.value = '';
+    }
+  }
+
+  async function importRows() {
+    if (!validRows.length) {
+      setError('A planilha precisa ter ao menos um usuario valido para importar.');
+      return;
+    }
+    setSaving(true);
+    setError('');
+    try {
+      await adminUserRepository.importUsers(validRows.map((row) => ({
+        name: row.name,
+        email: row.email,
+        cpf: row.cpf,
+        phone: row.phone,
+        password: row.password,
+        role: row.role!,
+        cnhNumber: row.cnhNumber,
+        cnhCategory: row.cnhCategory,
+        cnhExpirationDate: row.cnhExpirationDate,
+      })));
+      await onImported();
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Erro ao importar usuarios.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4 py-6 backdrop-blur-[1px]">
+      <section aria-modal="true" className="flex max-h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl" role="dialog">
+        <header className="flex items-start justify-between gap-4 border-b border-zinc-200 px-5 py-4">
+          <div>
+            <h2 className="text-lg font-semibold text-zinc-950">Importar usuarios por planilha</h2>
+            <p className="text-sm text-zinc-500">Use o modelo com dados de acesso, CPF e CNH quando o perfil for motorista.</p>
+          </div>
+          <button aria-label="Fechar importacao" className="ui-icon-button flex h-9 w-9 shrink-0 items-center justify-center border-zinc-300 text-zinc-700 hover:bg-zinc-50" onClick={onClose} type="button">
+            <X size={18} />
+          </button>
+        </header>
+
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">
+          <ErrorBanner message={error} />
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-zinc-600">Perfis aceitos: Motorista ou Administrativo. CPF e e-mail nao podem repetir.</p>
+            <label className="ui-button h-11 cursor-pointer gap-2 border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-700 hover:bg-zinc-50">
+              {loading ? <LoaderCircle className="animate-spin" size={17} /> : <FileSpreadsheet size={17} />}
+              {loading ? 'Lendo planilha...' : analysis ? 'Escolher outro arquivo' : 'Selecionar planilha'}
+              <input accept=".xlsx,.xls,.csv" className="sr-only" disabled={loading || saving} onChange={selectFile} type="file" />
+            </label>
+          </div>
+
+          {!analysis ? (
+            <div className="rounded-xl border border-dashed border-zinc-300 bg-zinc-50 px-5 py-8 text-center">
+              <FileSpreadsheet className="mx-auto text-zinc-400" size={30} />
+              <p className="mt-3 text-sm font-medium text-zinc-800">Selecione a planilha preenchida</p>
+              <p className="mt-1 text-sm text-zinc-500">O sistema valida CPF, e-mail, senha, perfil, CNH e duplicidades antes de gravar.</p>
+            </div>
+          ) : (
+            <>
+              <div className="grid gap-3 sm:grid-cols-4">
+                <ImportMetric label="Linhas lidas" value={analysis.totalRows} tone="neutral" />
+                <ImportMetric label="Prontas para importar" value={analysis.validRows} tone="success" />
+                <ImportMetric label="Com pendencia" value={analysis.invalidRows} tone={analysis.invalidRows ? 'warning' : 'neutral'} />
+                <ImportMetric label="Duplicadas" value={analysis.duplicateRows} tone={analysis.duplicateRows ? 'danger' : 'neutral'} />
+              </div>
+              <div className="overflow-hidden rounded-xl border border-zinc-200">
+                <div className="flex items-center justify-between border-b border-zinc-200 bg-zinc-50 px-4 py-3">
+                  <div>
+                    <p className="text-sm font-semibold text-zinc-900">{analysis.fileName}</p>
+                    <p className="text-xs text-zinc-500">Somente as linhas sem pendencias serao cadastradas.</p>
+                  </div>
+                  <span className="text-sm font-semibold text-zinc-700">{validRows.length} usuario(s)</span>
+                </div>
+                <div className="max-h-72 overflow-auto">
+                  <table className="ui-table min-w-[980px]">
+                    <thead>
+                      <tr>
+                        <th>Linha</th>
+                        <th>Nome</th>
+                        <th>Email</th>
+                        <th>CPF</th>
+                        <th>Perfil</th>
+                        <th>CNH</th>
+                        <th>Situacao</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {analysis.rows.map((row) => (
+                        <tr key={row.sourceRow}>
+                          <td>{row.sourceRow}</td>
+                          <td className="font-semibold">{row.name || '-'}</td>
+                          <td>{row.email || '-'}</td>
+                          <td>{displayImportCpf(row.cpf)}</td>
+                          <td>{row.role === 'admin' ? 'Administrativo' : row.role === 'driver' ? 'Motorista' : '-'}</td>
+                          <td>{row.role === 'driver' ? [row.cnhNumber, row.cnhCategory, row.cnhExpirationDate].filter(Boolean).join(' | ') || '-' : '-'}</td>
+                          <td>
+                            {row.issues.length ? (
+                              <span className="text-sm text-red-700">{row.issues.join('; ')}</span>
+                            ) : (
+                              <span className="text-sm font-medium text-emerald-700">Pronto para importar</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+
+        <footer className="border-t border-zinc-200 px-5 py-4">
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <button className="ui-button h-10 border border-zinc-300 bg-white px-4 text-sm font-medium" disabled={saving} onClick={onClose} type="button">
+              Cancelar
+            </button>
+            <button
+              className="ui-button h-10 gap-2 bg-avapex-yellow px-4 text-sm font-semibold text-avapex-black disabled:opacity-50"
+              disabled={!analysis || validRows.length === 0 || saving}
+              onClick={() => void importRows()}
+              type="button"
+            >
+              {saving ? <LoaderCircle className="animate-spin" size={16} /> : <Upload size={16} />}
+              Importar {validRows.length} usuario(s)
+            </button>
+          </div>
+        </footer>
+      </section>
+    </div>
+  );
+}
+
+function ImportMetric({ label, value, tone }: { label: string; value: number; tone: 'neutral' | 'success' | 'warning' | 'danger' }) {
+  const colors = {
+    neutral: 'border-zinc-200 bg-zinc-50 text-zinc-800',
+    success: 'border-emerald-200 bg-emerald-50 text-emerald-800',
+    warning: 'border-amber-200 bg-amber-50 text-amber-800',
+    danger: 'border-red-200 bg-red-50 text-red-800',
+  };
+  return (
+    <div className={`rounded-lg border p-3 ${colors[tone]}`}>
+      <p className="text-xs font-medium">{label}</p>
+      <p className="mt-1 text-xl font-semibold">{value}</p>
     </div>
   );
 }
@@ -394,14 +631,15 @@ type TextFieldProps = {
   required?: boolean;
   minLength?: number;
   readOnly?: boolean;
+  error?: string;
 };
 
-function TextField({ label, value, onChange, type = 'text', required, minLength, readOnly }: TextFieldProps) {
+function TextField({ label, value, onChange, type = 'text', required, minLength, readOnly, error }: TextFieldProps) {
   return (
     <label className="block">
       <span className="mb-2 block text-sm font-medium text-zinc-700">{label}</span>
       <input
-        className="ui-input h-11 w-full px-3"
+        className={`ui-input h-11 w-full px-3 ${error ? 'border-red-500' : ''}`}
         type={type}
         value={value}
         onChange={(event) => onChange(event.target.value)}
@@ -409,6 +647,7 @@ function TextField({ label, value, onChange, type = 'text', required, minLength,
         minLength={minLength}
         readOnly={readOnly}
       />
+      {error ? <span className="mt-1.5 block text-xs font-medium text-red-600">{error}</span> : null}
     </label>
   );
 }

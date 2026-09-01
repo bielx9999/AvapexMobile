@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/errors/firebase_failure.dart';
 import '../../../core/providers/firebase_providers.dart';
 import '../../users/application/user_providers.dart';
+import '../../trips/application/trip_providers.dart';
 import '../../vehicles/data/models/vehicle_model.dart';
 import '../data/models/checklist_model.dart';
 import '../data/services/device_location_service.dart';
@@ -19,7 +20,22 @@ enum ChecklistAnswer {
 }
 
 final _vehicleChecklistVehiclesProvider = StreamProvider<List<Vehicle>>((ref) {
-  return ref.watch(vehicleRepositoryProvider).watchAllVehicles();
+  final uid = ref.watch(firebaseAuthProvider).currentUser?.uid;
+  if (uid == null || uid.isEmpty) {
+    return const Stream<List<Vehicle>>.empty();
+  }
+  final tripVehicleIds =
+      ref
+          .watch(currentDriverTripsProvider)
+          .asData
+          ?.value
+          .map((trip) => trip.vehicleId)
+          .where((vehicleId) => vehicleId.isNotEmpty)
+          .toSet() ??
+      const <String>{};
+  return ref
+      .watch(vehicleRepositoryProvider)
+      .watchVehiclesForDriver(uid, extraVehicleIds: tripVehicleIds);
 });
 
 final class VehicleChecklistPage extends ConsumerStatefulWidget {

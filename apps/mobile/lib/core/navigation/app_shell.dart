@@ -7,6 +7,7 @@ import 'package:lucide_flutter/lucide_flutter.dart';
 import '../../features/checklists/application/checklist_providers.dart';
 import '../../features/checklists/presentation/checklists_page.dart';
 import '../../features/deliveries/application/delivery_providers.dart';
+import '../../features/equipment/presentation/driver_equipment_page.dart';
 import '../../features/deliveries/data/models/delivery_model.dart';
 import '../../features/driver/presentation/driver_home_page.dart';
 import '../../features/driver/presentation/driver_notifications_page.dart';
@@ -109,6 +110,11 @@ final class _AppShellState extends ConsumerState<AppShell>
         _openFeature(
           title: 'Minha Media',
           child: const DriverPerformancePage(),
+        );
+      case DriverHomeAction.equipment:
+        _openFeature(
+          title: 'Equipamentos do Veiculo',
+          child: const DriverEquipmentPage(),
         );
     }
   }

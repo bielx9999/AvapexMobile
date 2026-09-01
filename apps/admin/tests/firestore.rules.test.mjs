@@ -6,7 +6,7 @@ import {
   assertSucceeds,
   initializeTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc, Timestamp, updateDoc } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, setDoc, Timestamp, updateDoc } from 'firebase/firestore';
 
 let environment;
 
@@ -38,6 +38,13 @@ beforeEach(async () => {
         role: 'admin',
         status: 'active',
       }),
+      setDoc(doc(firestore, 'loginIdentifiers', '39053344705'), {
+        uid: 'driver-1',
+        email: 'driver@example.com',
+        cpf: '39053344705',
+        kind: 'cpf',
+        updatedAt: Timestamp.now(),
+      }),
       setDoc(doc(firestore, 'trips', 'trip-1'), tripData()),
       setDoc(doc(firestore, 'deliveries', 'delivery-1'), deliveryData()),
     ]);
@@ -46,6 +53,31 @@ beforeEach(async () => {
 
 after(async () => {
   await environment.cleanup();
+});
+
+describe('CPF login identifier permissions', { concurrency: false }, () => {
+  test('unauthenticated login can resolve one CPF identifier', async () => {
+    const firestore = environment.unauthenticatedContext().firestore();
+    await assertSucceeds(getDoc(doc(firestore, 'loginIdentifiers', '39053344705')));
+  });
+
+  test('login identifiers cannot be listed by unauthenticated users', async () => {
+    const firestore = environment.unauthenticatedContext().firestore();
+    await assertFails(getDocs(collection(firestore, 'loginIdentifiers')));
+  });
+
+  test('administrator can create a CPF login identifier', async () => {
+    const firestore = environment.authenticatedContext('admin-1').firestore();
+    await assertSucceeds(
+      setDoc(doc(firestore, 'loginIdentifiers', '52998224725'), {
+        uid: 'driver-2',
+        email: 'driver2@example.com',
+        cpf: '52998224725',
+        kind: 'cpf',
+        updatedAt: Timestamp.now(),
+      }),
+    );
+  });
 });
 
 describe('trip response permissions', { concurrency: false }, () => {
@@ -114,7 +146,7 @@ describe('trip response permissions', { concurrency: false }, () => {
     );
   });
 
-  test('driver cannot respond after the schedule or after the trip starts', async () => {
+  test('assigned driver can respond after schedule while trip is still pending', async () => {
     const response = {
       driverResponse: 'accepted',
       driverRespondedAt: Timestamp.now(),
@@ -129,20 +161,7 @@ describe('trip response permissions', { concurrency: false }, () => {
         scheduledAt: Timestamp.fromMillis(Date.now() - 60_000),
       });
     });
-    await assertFails(
-      updateDoc(
-        doc(environment.authenticatedContext(driverContext).firestore(), referencePath),
-        response,
-      ),
-    );
-
-    await environment.withSecurityRulesDisabled(async (context) => {
-      await updateDoc(doc(context.firestore(), referencePath), {
-        scheduledAt: Timestamp.fromMillis(Date.now() + 86_400_000),
-        status: 'in_progress',
-      });
-    });
-    await assertFails(
+    await assertSucceeds(
       updateDoc(
         doc(environment.authenticatedContext(driverContext).firestore(), referencePath),
         response,
@@ -150,13 +169,119 @@ describe('trip response permissions', { concurrency: false }, () => {
     );
   });
 
-  test('driver cannot alter trip or delivery operational status', async () => {
+  test('assigned driver can respond after the trip starts if still unanswered', async () => {
+    const response = {
+      driverResponse: 'accepted',
+      driverRespondedAt: Timestamp.now(),
+      driverResponseDriverId: 'driver-1',
+      driverRejection: null,
+    };
+    const referencePath = 'trips/trip-1';
+    const driverContext = 'driver-1';
+
+    await environment.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(), referencePath), {
+        status: 'in_progress',
+      });
+    });
+    await assertSucceeds(
+      updateDoc(
+        doc(environment.authenticatedContext(driverContext).firestore(), referencePath),
+        response,
+      ),
+    );
+  });
+
+  test('driver can advance and complete an accepted trip with proof', async () => {
+    const firestore = environment.authenticatedContext('driver-1').firestore();
+    const reference = doc(firestore, 'trips', 'trip-1');
+
+    await environment.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(), 'trips/trip-1'), {
+        driverResponse: 'accepted',
+      });
+    });
+
+    await assertSucceeds(
+      updateDoc(reference, {
+        status: 'in_progress',
+        programmingStatus: 'loading',
+        operationalStatus: 'loading',
+        statusUpdatedAt: Timestamp.now(),
+        startedAt: Timestamp.now(),
+      }),
+    );
+
+    await assertSucceeds(
+      updateDoc(reference, {
+        status: 'completed',
+        programmingStatus: 'released',
+        operationalStatus: 'released_loading',
+        statusUpdatedAt: Timestamp.now(),
+        completedAt: Timestamp.now(),
+        proofPhotoUrls: ['https://example.test/proof.jpg'],
+        pendingProofPhotoLocalPaths: [],
+        proofSubmittedAt: Timestamp.now(),
+        proofSubmittedBy: 'driver-1',
+      }),
+    );
+  });
+
+  test('driver cannot complete an accepted trip without proof', async () => {
+    const firestore = environment.authenticatedContext('driver-1').firestore();
+    await environment.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(), 'trips/trip-1'), {
+        driverResponse: 'accepted',
+      });
+    });
+
+    await assertFails(
+      updateDoc(doc(firestore, 'trips', 'trip-1'), {
+        status: 'completed',
+        programmingStatus: 'released',
+        operationalStatus: 'released_loading',
+        statusUpdatedAt: Timestamp.now(),
+        completedAt: Timestamp.now(),
+        proofPhotoUrls: [],
+        pendingProofPhotoLocalPaths: [],
+        proofSubmittedAt: Timestamp.now(),
+        proofSubmittedBy: 'driver-1',
+      }),
+    );
+  });
+
+  test('driver can attach queued proof upload after completing trip', async () => {
+    const firestore = environment.authenticatedContext('driver-1').firestore();
+    await environment.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(), 'trips/trip-1'), {
+        status: 'completed',
+        programmingStatus: 'released',
+        operationalStatus: 'released_loading',
+        completedAt: Timestamp.now(),
+        driverResponse: 'accepted',
+        proofPhotoUrls: [],
+        pendingProofPhotoLocalPaths: ['C:/tmp/proof.jpg'],
+        proofSubmittedAt: Timestamp.now(),
+        proofSubmittedBy: 'driver-1',
+      });
+    });
+
+    await assertSucceeds(
+      updateDoc(doc(firestore, 'trips', 'trip-1'), {
+        proofPhotoUrls: ['https://example.test/proof.jpg'],
+        pendingProofPhotoLocalPaths: [],
+      }),
+    );
+  });
+
+  test('driver cannot alter trip assignment or delivery operational status', async () => {
     const firestore = environment.authenticatedContext('driver-1').firestore();
     await assertFails(
       updateDoc(doc(firestore, 'trips', 'trip-1'), {
         status: 'in_progress',
         programmingStatus: 'in_transit',
         operationalStatus: 'transit_to_loading',
+        driverId: 'driver-2',
       }),
     );
     await assertFails(

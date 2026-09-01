@@ -11,4 +11,7 @@ abstract final class FirestoreCollections {
   static const deliveryReceipts = 'deliveryReceipts';
   static const fuelingRecords = 'fuelingRecords';
   static const driverEquipments = 'driverEquipments';
+  static const equipment = 'equipment';
+  static const equipmentInspections = 'equipmentInspections';
+  static const equipmentOccurrences = 'equipmentOccurrences';
 }

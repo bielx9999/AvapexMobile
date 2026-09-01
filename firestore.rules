@@ -65,6 +65,68 @@ service cloud.firestore {
         );
     }
 
+    function validLoginIdentifier(data, identifier) {
+      return identifier.matches('^[0-9]{11}$')
+        && data.keys().hasOnly(['uid', 'email', 'cpf', 'kind', 'updatedAt'])
+        && data.uid is string
+        && data.uid.size() > 0
+        && data.email is string
+        && data.email.matches('^.+@.+\\..+$')
+        && data.cpf == identifier
+        && data.kind == 'cpf'
+        && data.updatedAt is timestamp;
+    }
+
+    function validDriverTripProgressUpdate(data) {
+      return resource.data.driverResponse == 'accepted'
+        && data.driverResponse == resource.data.driverResponse
+        && data.driverId == resource.data.driverId
+        && data.vehicleId == resource.data.vehicleId
+        && data.operationType == resource.data.operationType
+        && data.status in ['in_progress', 'completed']
+        && data.programmingStatus in ['loading', 'in_transit', 'unloading', 'released']
+        && data.statusUpdatedAt is timestamp
+        && (
+          !('operationalStatus' in data)
+          || data.operationalStatus == null
+          || data.operationalStatus in [
+            'transit_to_loading',
+            'transit_to_unloading',
+            'waiting_loading',
+            'loading',
+            'waiting_unloading',
+            'unloading',
+            'released_unloading',
+            'released_loading'
+          ]
+        )
+        && (
+          data.status != 'completed'
+          || (
+            data.completedAt is timestamp
+            && data.proofSubmittedAt is timestamp
+            && data.proofSubmittedBy == request.auth.uid
+            && data.proofPhotoUrls is list
+            && data.pendingProofPhotoLocalPaths is list
+            && (
+              data.proofPhotoUrls.size() > 0
+              || data.pendingProofPhotoLocalPaths.size() > 0
+            )
+          )
+        );
+    }
+
+    function validDriverTripProofAttachment(data) {
+      return resource.data.status == 'completed'
+        && resource.data.driverResponse == 'accepted'
+        && resource.data.proofSubmittedBy == request.auth.uid
+        && data.driverId == resource.data.driverId
+        && data.vehicleId == resource.data.vehicleId
+        && data.proofSubmittedBy == resource.data.proofSubmittedBy
+        && data.proofPhotoUrls is list
+        && data.pendingProofPhotoLocalPaths is list;
+    }
+
     function validAddress(data) {
       return data is map
         && data.keys().hasAll(['formattedAddress', 'latitude', 'longitude'])
@@ -519,6 +581,14 @@ service cloud.firestore {
       allow create, delete: if isAdmin();
     }
 
+    match /loginIdentifiers/{identifier} {
+      allow get: if identifier.matches('^[0-9]{11}$');
+      allow list: if false;
+      allow create, update: if isAdmin()
+        && validLoginIdentifier(request.resource.data, identifier);
+      allow delete: if isAdmin();
+    }
+
     match /vehicles/{vehicleId} {
       allow read: if isActiveUser();
       allow write: if isAdmin();
@@ -559,9 +629,7 @@ service cloud.firestore {
             'lastGpsUpdateAt'
           ])
           || (
-            resource.data.status == 'pending'
-            && resource.data.scheduledAt is timestamp
-            && resource.data.scheduledAt > request.time
+            resource.data.status in ['pending', 'in_progress']
             && (
               !('driverResponse' in resource.data)
               || resource.data.driverResponse == 'pending'
@@ -573,6 +641,30 @@ service cloud.firestore {
               'driverRejection'
             ])
             && validDriverTripResponse(request.resource.data)
+          )
+          || (
+            resource.data.status in ['pending', 'in_progress']
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'status',
+              'startedAt',
+              'completedAt',
+              'programmingStatus',
+              'operationType',
+              'operationalStatus',
+              'statusUpdatedAt',
+              'proofPhotoUrls',
+              'pendingProofPhotoLocalPaths',
+              'proofSubmittedAt',
+              'proofSubmittedBy'
+            ])
+            && validDriverTripProgressUpdate(request.resource.data)
+          )
+          || (
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'proofPhotoUrls',
+              'pendingProofPhotoLocalPaths'
+            ])
+            && validDriverTripProofAttachment(request.resource.data)
           )
         )
       );
@@ -718,6 +810,63 @@ service cloud.firestore {
     match /driverEquipments/{equipmentId} {
       allow read: if isAdmin() || ownedExistingDriverData();
       allow write: if isAdmin();
+    }
+
+    match /storageLocations/{locationId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /equipment/{equipmentId} {
+      allow read: if isAdmin() || (
+        isActiveUser()
+        && resource.data.currentDriverId == request.auth.uid
+      );
+      allow write: if isAdmin();
+    }
+
+    match /equipmentCodeRegistry/{code} {
+      allow read, write: if isAdmin();
+    }
+
+    match /equipmentAssignments/{assignmentId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /equipmentMovements/{movementId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /equipmentInspections/{inspectionId} {
+      allow read: if isAdmin() || (
+        isActiveUser()
+        && resource.data.responsibleDriverId == request.auth.uid
+      );
+      allow create: if isAdmin() || (
+        isActiveUser()
+        && request.resource.data.inspectionType == 'driver_checklist'
+        && request.resource.data.responsibleDriverId == request.auth.uid
+        && request.resource.data.performedByUserId == request.auth.uid
+      );
+      allow update: if isAdmin() || (
+        isActiveUser()
+        && resource.data.responsibleDriverId == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['photoUrls'])
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /equipmentOccurrences/{occurrenceId} {
+      allow read: if isAdmin() || (
+        isActiveUser()
+        && resource.data.reportedBy == request.auth.uid
+      );
+      allow create: if isAdmin() || (
+        isActiveUser()
+        && request.resource.data.reportedBy == request.auth.uid
+        && exists(/databases/$(database)/documents/equipment/$(request.resource.data.equipmentId))
+        && get(/databases/$(database)/documents/equipment/$(request.resource.data.equipmentId)).data.currentDriverId == request.auth.uid
+      );
+      allow update, delete: if isAdmin();
     }
   }
 }

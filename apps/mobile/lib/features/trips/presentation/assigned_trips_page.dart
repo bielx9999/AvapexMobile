@@ -160,7 +160,7 @@ final class _AssignmentCard extends StatelessWidget {
                 children: [
                   Expanded(
                     child: Text(
-                      '${trip.origin} -> ${trip.destination}',
+                      trip.displayTitle,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(

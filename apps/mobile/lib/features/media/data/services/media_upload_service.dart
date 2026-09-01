@@ -143,6 +143,15 @@ final class MediaUploadService {
           ]),
         },
       ),
+      DriverMediaType.tripProof => (
+        collection: FirestoreCollections.trips,
+        data: <String, Object>{
+          'proofPhotoUrls': FieldValue.arrayUnion([url]),
+          'pendingProofPhotoLocalPaths': FieldValue.arrayRemove([
+            pending.localPath,
+          ]),
+        },
+      ),
       DriverMediaType.incident => (
         collection: FirestoreCollections.incidents,
         data: <String, Object>{
@@ -159,6 +168,12 @@ final class MediaUploadService {
       DriverMediaType.signature => (
         collection: FirestoreCollections.checklists,
         data: <String, Object>{'signatureUrl': url},
+      ),
+      DriverMediaType.equipmentInspection => (
+        collection: FirestoreCollections.equipmentInspections,
+        data: <String, Object>{
+          'photoUrls': FieldValue.arrayUnion([url]),
+        },
       ),
       DriverMediaType.profile => (
         collection: FirestoreCollections.users,

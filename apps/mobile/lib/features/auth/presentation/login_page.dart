@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/errors/firebase_failure.dart';
 import '../../../core/providers/firebase_providers.dart';
+import '../../../core/utils/cpf.dart';
 
 final class LoginPage extends ConsumerStatefulWidget {
   const LoginPage({super.key});
@@ -17,8 +18,10 @@ final class _LoginPageState extends ConsumerState<LoginPage> {
   final _passwordController = TextEditingController();
   var _isSubmitting = false;
   var _isGoogleSubmitting = false;
+  var _isResettingPassword = false;
   var _obscurePassword = true;
   String? _errorMessage;
+  String? _successMessage;
 
   @override
   void dispose() {
@@ -36,6 +39,7 @@ final class _LoginPageState extends ConsumerState<LoginPage> {
     setState(() {
       _isSubmitting = true;
       _errorMessage = null;
+      _successMessage = null;
     });
 
     try {
@@ -61,6 +65,7 @@ final class _LoginPageState extends ConsumerState<LoginPage> {
     setState(() {
       _isGoogleSubmitting = true;
       _errorMessage = null;
+      _successMessage = null;
     });
 
     try {
@@ -80,6 +85,44 @@ final class _LoginPageState extends ConsumerState<LoginPage> {
   void _clearPassword() {
     _passwordController.clear();
     setState(() => _errorMessage = null);
+  }
+
+  Future<void> _sendPasswordReset() async {
+    final email = _emailController.text.trim();
+    if (!_isValidLoginIdentifier(email)) {
+      setState(() {
+        _errorMessage =
+            'Informe seu e-mail ou CPF cadastrado para recuperar a senha.';
+        _successMessage = null;
+      });
+      return;
+    }
+
+    setState(() {
+      _isResettingPassword = true;
+      _errorMessage = null;
+      _successMessage = null;
+    });
+
+    try {
+      await ref.read(authRepositoryProvider).sendPasswordResetEmail(email);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _successMessage =
+            'Se este e-mail ou CPF estiver cadastrado, enviaremos as instrucoes de recuperacao em instantes.';
+      });
+    } on FirebaseFailure catch (failure) {
+      if (!mounted) {
+        return;
+      }
+      setState(() => _errorMessage = failure.message);
+    } finally {
+      if (mounted) {
+        setState(() => _isResettingPassword = false);
+      }
+    }
   }
 
   @override
@@ -120,18 +163,18 @@ final class _LoginPageState extends ConsumerState<LoginPage> {
                           controller: _emailController,
                           keyboardType: TextInputType.emailAddress,
                           textInputAction: TextInputAction.next,
-                          autofillHints: const [AutofillHints.email],
+                          autofillHints: const [AutofillHints.username],
                           style: const TextStyle(color: Colors.white),
                           cursorColor: Colors.white,
                           decoration: _loginInputDecoration(
-                            hintText: 'Digite o email',
-                            icon: Icons.mail,
+                            hintText: 'Digite e-mail ou CPF',
+                            icon: Icons.badge_outlined,
                             borderColor: fieldBorder,
                           ),
                           validator: (value) {
-                            final email = value?.trim() ?? '';
-                            if (email.isEmpty || !email.contains('@')) {
-                              return 'Informe um e-mail valido.';
+                            final identifier = value?.trim() ?? '';
+                            if (!_isValidLoginIdentifier(identifier)) {
+                              return 'Informe um e-mail ou CPF valido.';
                             }
                             return null;
                           },
@@ -192,21 +235,42 @@ final class _LoginPageState extends ConsumerState<LoginPage> {
                         Align(
                           alignment: Alignment.centerRight,
                           child: TextButton(
-                            onPressed: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                    'Recuperacao de senha sera implementada em breve.',
-                                  ),
-                                ),
-                              );
-                            },
-                            child: const Text(
-                              'Esqueceu a senha?',
-                              style: TextStyle(color: Colors.white),
+                            onPressed:
+                                _isSubmitting ||
+                                    _isGoogleSubmitting ||
+                                    _isResettingPassword
+                                ? null
+                                : _sendPasswordReset,
+                            child: Text(
+                              _isResettingPassword
+                                  ? 'Enviando...'
+                                  : 'Esqueceu a senha?',
+                              style: const TextStyle(color: Colors.white),
                             ),
                           ),
                         ),
+                        if (_successMessage != null) ...[
+                          const SizedBox(height: 10),
+                          DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEAF8F0),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: const Color(0xFFA7E3BF),
+                              ),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Text(
+                                _successMessage!,
+                                style: const TextStyle(
+                                  color: Color(0xFF14532D),
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                         if (_errorMessage != null) ...[
                           const SizedBox(height: 10),
                           DecoratedBox(
@@ -231,7 +295,10 @@ final class _LoginPageState extends ConsumerState<LoginPage> {
                         ],
                         const SizedBox(height: 24),
                         FilledButton.icon(
-                          onPressed: _isSubmitting || _isGoogleSubmitting
+                          onPressed:
+                              _isSubmitting ||
+                                  _isGoogleSubmitting ||
+                                  _isResettingPassword
                               ? null
                               : _submit,
                           style: FilledButton.styleFrom(
@@ -258,7 +325,10 @@ final class _LoginPageState extends ConsumerState<LoginPage> {
                         ),
                         const SizedBox(height: 18),
                         FilledButton.icon(
-                          onPressed: _isSubmitting || _isGoogleSubmitting
+                          onPressed:
+                              _isSubmitting ||
+                                  _isGoogleSubmitting ||
+                                  _isResettingPassword
                               ? null
                               : _submitGoogle,
                           style: FilledButton.styleFrom(
@@ -337,6 +407,11 @@ InputDecoration _loginInputDecoration({
       borderSide: const BorderSide(color: Colors.white, width: 1.4),
     ),
   );
+}
+
+bool _isValidLoginIdentifier(String value) {
+  final trimmed = value.trim();
+  return trimmed.contains('@') || isValidCpf(trimmed);
 }
 
 final class _GoogleGlyph extends StatelessWidget {

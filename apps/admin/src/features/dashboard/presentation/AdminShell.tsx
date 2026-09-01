@@ -3,11 +3,14 @@ import {
   Bell,
   ChevronDown,
   ClipboardCheck,
+  Boxes,
   Database,
+  ListChecks,
   FileCheck2,
+  FolderOpen,
+  BarChart3,
   Fuel,
   LogOut,
-  MapPinned,
   MapPin,
   Menu,
   Navigation,
@@ -20,9 +23,22 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import avapexLogo from '../../../assets/images/avapex_transportes_logo.png';
+import avapexMinimalLogo from '../../../assets/images/avapex_minimal_logo.png';
 import { logoutAdmin, type AdminSession } from '../../auth/data/authRepository';
 
-export type AdminPage = 'scheduling' | 'route-planner' | 'routes' | 'checklists' | 'receipts' | 'fueling' | 'users' | 'vehicles' | 'localities';
+export type AdminPage =
+  | 'scheduling'
+  | 'route-planner'
+  | 'deliveries'
+  | 'checklists'
+  | 'receipts'
+  | 'fueling'
+  | 'equipment'
+  | 'users'
+  | 'vehicles'
+  | 'localities'
+  | 'onedrive'
+  | 'powerbi';
 
 type NavSection = {
   icon: LucideIcon;
@@ -37,10 +53,11 @@ const navSections: NavSection[] = [
     items: [
       { icon: Route, key: 'scheduling', label: 'Programacao' },
       { icon: Navigation, key: 'route-planner', label: 'Roteirizador' },
-      { icon: MapPinned, key: 'routes', label: 'Rotas' },
+      { icon: ListChecks, key: 'deliveries', label: 'Gestao de Entregas' },
       { icon: ClipboardCheck, key: 'checklists', label: 'Checklists' },
       { icon: FileCheck2, key: 'receipts', label: 'Comprovantes' },
       { icon: Fuel, key: 'fueling', label: 'Abastecimento' },
+      { icon: Boxes, key: 'equipment', label: 'Equipamentos' },
     ],
   },
   {
@@ -50,6 +67,14 @@ const navSections: NavSection[] = [
       { icon: Users, key: 'users', label: 'Usuarios' },
       { icon: Truck, key: 'vehicles', label: 'Veiculos' },
       { icon: MapPin, key: 'localities', label: 'Localidades' },
+    ],
+  },
+  {
+    icon: FolderOpen,
+    label: 'Documentacao',
+    items: [
+      { icon: FolderOpen, key: 'onedrive', label: 'OneDrive' },
+      { icon: BarChart3, key: 'powerbi', label: 'Power BI' },
     ],
   },
 ];
@@ -88,13 +113,19 @@ export function AdminShell({
 
   const sidebar = (
     <div className="flex h-full min-h-0 flex-col">
-      <div className={`flex h-16 shrink-0 items-center border-b border-white/10 ${sidebarCollapsed ? 'justify-center px-3' : 'px-5'}`}>
+      <div className={`flex h-20 shrink-0 items-center border-b border-white/10 ${sidebarCollapsed ? 'justify-center px-3' : 'justify-center px-6'}`}>
         {sidebarCollapsed ? (
-          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-avapex-yellow text-xs font-black text-avapex-black">
-            AV
-          </span>
+          <img
+            alt="Avapex"
+            className="h-11 w-11 rounded-xl object-cover"
+            src={avapexMinimalLogo}
+          />
         ) : (
-          <img alt="Avapex Transportes" className="h-8 w-auto object-contain" src={avapexLogo} />
+          <img
+            alt="Avapex Transportes"
+            className="h-12 w-auto max-w-[180px] object-contain"
+            src={avapexLogo}
+          />
         )}
       </div>
 
@@ -234,9 +265,6 @@ export function AdminShell({
               <button aria-label="Notificacoes" className="ui-icon-button h-9 w-9 border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50 hover:text-zinc-950" title="Notificacoes" type="button">
                 <Bell size={17} />
               </button>
-              <span className="hidden h-9 w-9 items-center justify-center rounded-lg bg-zinc-900 text-xs font-bold text-white sm:flex" title={session.profile.name || session.firebaseUser.email || 'Administrador'}>
-                {initials}
-              </span>
             </div>
           </div>
         </header>

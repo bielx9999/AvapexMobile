@@ -528,6 +528,10 @@ final class Trip {
     this.routeSnapshot,
     this.originLocation = const {},
     this.destinationLocation = const {},
+    this.proofPhotoUrls = const [],
+    this.pendingProofPhotoLocalPaths = const [],
+    this.proofSubmittedAt,
+    this.proofSubmittedBy = '',
   });
 
   final String id;
@@ -567,12 +571,31 @@ final class Trip {
   final TripRouteSnapshot? routeSnapshot;
   final Map<String, dynamic> originLocation;
   final Map<String, dynamic> destinationLocation;
+  final List<String> proofPhotoUrls;
+  final List<String> pendingProofPhotoLocalPaths;
+  final DateTime? proofSubmittedAt;
+  final String proofSubmittedBy;
 
-  bool canDriverRespondAt(DateTime now) {
+  bool canDriverRespondAt(DateTime _) {
     return driverResponse == DriverTripResponse.pending &&
-        status == TripStatus.pending &&
-        scheduledAt.isAfter(now);
+        status != TripStatus.completed &&
+        status != TripStatus.cancelled;
   }
+
+  String get displayTitle {
+    final cleanRouteName = routeName.trim();
+    if (cleanRouteName.isNotEmpty) {
+      return cleanRouteName;
+    }
+    final snapshotName = routeSnapshot?.name.trim() ?? '';
+    if (snapshotName.isNotEmpty) {
+      return snapshotName;
+    }
+    return '$origin -> $destination';
+  }
+
+  bool get hasProof =>
+      proofPhotoUrls.isNotEmpty || pendingProofPhotoLocalPaths.isNotEmpty;
 
   factory Trip.fromDocument(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data();
@@ -640,6 +663,13 @@ final class Trip {
       destinationLocation: json['destinationLocation'] is Map
           ? Map<String, dynamic>.from(json['destinationLocation'] as Map)
           : const {},
+      proofPhotoUrls: readStringList(json, 'proofPhotoUrls'),
+      pendingProofPhotoLocalPaths: readStringList(
+        json,
+        'pendingProofPhotoLocalPaths',
+      ),
+      proofSubmittedAt: readNullableDateTime(json, 'proofSubmittedAt'),
+      proofSubmittedBy: (json['proofSubmittedBy'] as String?) ?? '',
     );
   }
 
@@ -689,6 +719,10 @@ final class Trip {
       if (originLocation.isNotEmpty) 'originLocation': originLocation,
       if (destinationLocation.isNotEmpty)
         'destinationLocation': destinationLocation,
+      'proofPhotoUrls': proofPhotoUrls,
+      'pendingProofPhotoLocalPaths': pendingProofPhotoLocalPaths,
+      'proofSubmittedAt': writeNullableTimestamp(proofSubmittedAt),
+      'proofSubmittedBy': proofSubmittedBy,
     };
   }
 }

@@ -13,11 +13,13 @@
     "test:storage-rules": "node --test tests/storage.rules.test.mjs"
   },
   "dependencies": {
+    "@azure/msal-browser": "^5.20.0",
     "@googlemaps/js-api-loader": "^2.1.1",
     "@vitejs/plugin-react": "^5.0.4",
     "apexcharts": "^6.6.1",
     "firebase": "^12.6.0",
     "lucide-react": "^0.553.0",
+    "powerbi-client": "^2.24.1",
     "react": "^19.2.0",
     "react-apexcharts": "^2.1.1",
     "react-dom": "^19.2.0",

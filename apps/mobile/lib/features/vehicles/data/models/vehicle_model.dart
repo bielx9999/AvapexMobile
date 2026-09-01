@@ -26,6 +26,8 @@ final class Vehicle {
     required this.model,
     required this.currentKm,
     required this.status,
+    this.currentDriverId,
+    this.currentDriverName,
     this.lastChecklistId,
   });
 
@@ -34,6 +36,8 @@ final class Vehicle {
   final String model;
   final num currentKm;
   final VehicleStatus status;
+  final String? currentDriverId;
+  final String? currentDriverName;
   final String? lastChecklistId;
 
   factory Vehicle.fromDocument(DocumentSnapshot<Map<String, dynamic>> doc) {
@@ -54,6 +58,8 @@ final class Vehicle {
       model: json['model'] as String,
       currentKm: json['currentKm'] as num,
       status: VehicleStatus.fromFirestore(json['status'] as String),
+      currentDriverId: json['currentDriverId'] as String?,
+      currentDriverName: json['currentDriverName'] as String?,
       lastChecklistId: json['lastChecklistId'] as String?,
     );
   }
@@ -65,6 +71,8 @@ final class Vehicle {
       'model': model,
       'currentKm': currentKm,
       'status': status.value,
+      'currentDriverId': currentDriverId,
+      'currentDriverName': currentDriverName,
       'lastChecklistId': lastChecklistId,
     };
   }

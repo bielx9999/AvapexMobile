@@ -62,7 +62,7 @@ final class DriverNotificationsPage extends ConsumerWidget {
           icon: LucideIcons.calendarCheck,
           title: 'Nova viagem atribuida',
           description:
-              '${trip.origin} -> ${trip.destination} - ${_formatDateTime(trip.scheduledAt)}',
+              '${trip.displayTitle} - ${_formatDateTime(trip.scheduledAt)}',
           action: DriverHomeAction.assignedTrips,
         ),
       for (final delivery in pendingProofs)

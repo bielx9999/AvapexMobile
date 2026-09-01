@@ -23,6 +23,8 @@ final class DriverEquipment {
   const DriverEquipment({
     required this.id,
     required this.driverId,
+    required this.vehicleId,
+    required this.vehiclePlate,
     required this.type,
     required this.tagNumber,
     required this.status,
@@ -31,12 +33,14 @@ final class DriverEquipment {
 
   final String id;
   final String driverId;
+  final String vehicleId;
+  final String vehiclePlate;
   final DriverEquipmentType type;
   final String tagNumber;
   final String status;
   final String? description;
 
-  bool get isAvailable => status == 'available' || status == 'active';
+  bool get isAvailable => status == 'assigned' || status == 'in_use';
 
   factory DriverEquipment.fromDocument(
     DocumentSnapshot<Map<String, dynamic>> doc,
@@ -48,10 +52,16 @@ final class DriverEquipment {
 
     return DriverEquipment(
       id: (data['id'] as String?) ?? doc.id,
-      driverId: data['driverId'] as String,
+      driverId: (data['currentDriverId'] as String?) ??
+          (data['driverId'] as String?) ??
+          '',
+      vehicleId: (data['currentVehicleId'] as String?) ?? '',
+      vehiclePlate: (data['currentVehiclePlate'] as String?) ?? '',
       type: DriverEquipmentType.fromFirestore(data['type'] as String),
-      tagNumber: data['tagNumber'] as String,
-      status: (data['status'] as String?) ?? 'available',
+      tagNumber: (data['code'] as String?) ??
+          (data['tagNumber'] as String?) ??
+          '',
+      status: (data['status'] as String?) ?? 'assigned',
       description: data['description'] as String?,
     );
   }

@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useState } from 'react';
 import { Filter, RefreshCw } from 'lucide-react';
 import type { AdminSession } from '../../auth/data/authRepository';
 import { adminReadRepository } from '../../shared/data/firestoreCollections';
-import type { AppUser, Checklist, Delivery, DeliveryReceipt, FuelingRecord, Locality, RoutePlan, RouteTemplate, Trip, Vehicle } from '../../shared/domain/models';
+import type { AppUser, Checklist, Delivery, DeliveryReceipt, FuelingRecord, Locality, RouteTemplate, Trip, Vehicle } from '../../shared/domain/models';
 import { ErrorBanner, PageSkeleton } from '../../shared/presentation/ui';
 import { AdminShell, type AdminPage } from './AdminShell';
 
@@ -15,8 +15,10 @@ const AbastecimentoPage = lazy(async () => ({
 const ComprovantesPage = lazy(async () => ({
   default: (await import('../../receipts/presentation/ComprovantesPage')).ComprovantesPage,
 }));
-const RotasPage = lazy(async () => ({ default: (await import('../../routes/presentation/RotasPage')).RotasPage }));
 const RoutePlannerPage = lazy(async () => ({ default: (await import('../../route-planner/presentation/RoutePlannerPage')).RoutePlannerPage }));
+const DeliveryManagementPage = lazy(async () => ({
+  default: (await import('../../deliveries/presentation/DeliveryManagementPage')).DeliveryManagementPage,
+}));
 const LocalitiesPage = lazy(async () => ({ default: (await import('../../localities/presentation/LocalitiesPage')).LocalitiesPage }));
 const ProgramacaoPage = lazy(async () => ({
   default: (await import('../../scheduling/presentation/ProgramacaoPage')).ProgramacaoPage,
@@ -24,6 +26,12 @@ const ProgramacaoPage = lazy(async () => ({
 const UsersPage = lazy(async () => ({ default: (await import('../../users/presentation/UsersPage')).UsersPage }));
 const VehiclesPage = lazy(async () => ({
   default: (await import('../../vehicles/presentation/VehiclesPage')).VehiclesPage,
+}));
+const EquipmentPage = lazy(async () => ({
+  default: (await import('../../equipment/presentation/EquipmentPage')).EquipmentPage,
+}));
+const DocumentationReportsPage = lazy(async () => ({
+  default: (await import('../../documentation-reports/presentation/DocumentationReportsPage')).DocumentationReportsPage,
 }));
 
 type AdminData = {
@@ -33,7 +41,6 @@ type AdminData = {
   checklists: Checklist[];
   receipts: DeliveryReceipt[];
   deliveries: Delivery[];
-  routes: RoutePlan[];
   localities: Locality[];
   routeTemplates: RouteTemplate[];
   fueling: FuelingRecord[];
@@ -46,7 +53,6 @@ const emptyData: AdminData = {
   checklists: [],
   receipts: [],
   deliveries: [],
-  routes: [],
   localities: [],
   routeTemplates: [],
   fueling: [],
@@ -59,13 +65,16 @@ type AdminDashboardProps = {
 const pageConfig: Record<AdminPage, { category: string; description: string; title: string }> = {
   checklists: { category: 'Operacao', description: 'Acompanhe conformidade e volume de inspecoes.', title: 'Checklists' },
   fueling: { category: 'Operacao', description: 'Monitore registros e comprovantes de abastecimento.', title: 'Abastecimento' },
+  equipment: { category: 'Operacao', description: 'Controle o estoque, atribuicoes e inspecoes dos equipamentos de amarracao.', title: 'Equipamentos de Amarracao' },
+  deliveries: { category: 'Operacao', description: 'Acompanhe pedidos, status, motoristas e comprovantes em tempo real.', title: 'Gestao de Entregas' },
   receipts: { category: 'Operacao', description: 'Valide comprovantes enviados pelos motoristas.', title: 'Comprovantes' },
-  routes: { category: 'Operacao', description: 'Visualize trajetos e compartilhe orientacoes de rota.', title: 'Rotas' },
   'route-planner': { category: 'Operacao', description: 'Monte, visualize e salve rotas utilizadas nas programacoes de transporte.', title: 'Roteirizador' },
   scheduling: { category: 'Operacao', description: 'Planeje e acompanhe cargas e descargas.', title: 'Programacao' },
   users: { category: 'Cadastros', description: 'Gerencie acessos e dados dos usuarios.', title: 'Usuarios' },
   vehicles: { category: 'Cadastros', description: 'Gerencie e acompanhe os veiculos da frota.', title: 'Veiculos' },
   localities: { category: 'Cadastros', description: 'Gerencie os pontos de origem, destino e parada utilizados nas operacoes.', title: 'Localidades' },
+  onedrive: { category: 'Documentacao', description: 'Acesse os documentos compartilhados da equipe.', title: 'OneDrive' },
+  powerbi: { category: 'Documentacao', description: 'Acompanhe os paineis corporativos da operacao.', title: 'Power BI' },
 };
 
 export function AdminDashboard({ session }: AdminDashboardProps) {
@@ -79,11 +88,10 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
     setLoading(true);
     setError('');
     try {
-      const [users, vehicles, trips, routes, checklists, receipts, deliveries, fueling, localities, routeTemplates] = await Promise.all([
+      const [users, vehicles, trips, checklists, receipts, deliveries, fueling, localities, routeTemplates] = await Promise.all([
         adminReadRepository.users(),
         adminReadRepository.vehicles(),
         adminReadRepository.trips(),
-        adminReadRepository.routes(),
         adminReadRepository.checklists(),
         adminReadRepository.deliveryReceipts(),
         adminReadRepository.deliveries(),
@@ -91,7 +99,7 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
         adminReadRepository.localities(),
         adminReadRepository.routeTemplates(),
       ]);
-      setData({ users, vehicles, trips, routes, checklists, receipts, deliveries, fueling, localities, routeTemplates });
+      setData({ users, vehicles, trips, checklists, receipts, deliveries, fueling, localities, routeTemplates });
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Erro ao carregar painel.');
     } finally {
@@ -114,15 +122,15 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
   }, []);
 
   useEffect(() => {
-    return adminReadRepository.watchRoutes(
-      (routes) => setData((current) => ({ ...current, routes })),
+    return adminReadRepository.watchDeliveries(
+      (deliveries) => setData((current) => ({ ...current, deliveries })),
       (watchError) => setError(watchError.message),
     );
   }, []);
 
   useEffect(() => {
-    return adminReadRepository.watchDeliveries(
-      (deliveries) => setData((current) => ({ ...current, deliveries })),
+    return adminReadRepository.watchChecklists(
+      (checklists) => setData((current) => ({ ...current, checklists })),
       (watchError) => setError(watchError.message),
     );
   }, []);
@@ -193,10 +201,10 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
               users={data.users}
               vehicles={data.vehicles}
             />
-          ) : activePage === 'routes' ? (
-            <RotasPage deliveries={data.deliveries} loading={loading} routes={data.routes} trips={data.trips} />
           ) : activePage === 'route-planner' ? (
             <RoutePlannerPage loading={loading} localities={data.localities} onChanged={loadData} routeTemplates={data.routeTemplates} />
+          ) : activePage === 'deliveries' ? (
+            <DeliveryManagementPage deliveries={data.deliveries} loading={loading} />
           ) : activePage === 'checklists' ? (
             <ChecklistsPage
               checklists={data.checklists}
@@ -210,6 +218,8 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
             <ComprovantesPage deliveries={data.deliveries} loading={loading} onChanged={loadData} receipts={data.receipts} />
           ) : activePage === 'fueling' ? (
             <AbastecimentoPage fueling={data.fueling} loading={loading} onChanged={loadData} />
+          ) : activePage === 'equipment' ? (
+            <EquipmentPage users={data.users} vehicles={data.vehicles} />
           ) : activePage === 'users' ? (
             <UsersPage
               currentUid={session.firebaseUser.uid}
@@ -218,7 +228,11 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
               onChanged={loadData}
             />
           ) : activePage === 'vehicles' ? (
-            <VehiclesPage vehicles={data.vehicles} loading={loading} onChanged={loadData} />
+            <VehiclesPage vehicles={data.vehicles} users={data.users} loading={loading} onChanged={loadData} />
+          ) : activePage === 'onedrive' ? (
+            <DocumentationReportsPage view="onedrive" />
+          ) : activePage === 'powerbi' ? (
+            <DocumentationReportsPage view="powerbi" />
           ) : (
             <LocalitiesPage loading={loading} localities={data.localities} onChanged={loadData} />
           )}

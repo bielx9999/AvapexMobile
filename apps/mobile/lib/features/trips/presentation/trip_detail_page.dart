@@ -1,9 +1,14 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:lucide_flutter/lucide_flutter.dart';
 
 import '../../../core/errors/firebase_failure.dart';
 import '../../../core/providers/firebase_providers.dart';
+import '../../media/application/media_providers.dart';
+import '../../media/data/models/driver_media_type.dart';
 import '../application/trip_providers.dart';
 import '../data/models/trip_model.dart';
 import '../data/services/trip_document_service.dart';
@@ -20,6 +25,10 @@ final class TripDetailPage extends ConsumerStatefulWidget {
 
 final class _TripDetailPageState extends ConsumerState<TripDetailPage> {
   var _isResponding = false;
+  var _isUpdatingProgress = false;
+  var _isCompleting = false;
+  final _imagePicker = ImagePicker();
+  final _proofPhotos = <File>[];
 
   Trip _currentTrip() {
     final items = ref.watch(currentDriverTripsProvider).asData?.value;
@@ -33,7 +42,7 @@ final class _TripDetailPageState extends ConsumerState<TripDetailPage> {
       builder: (dialogContext) => AlertDialog(
         title: const Text('Aceitar esta viagem?'),
         content: Text(
-          '${trip.origin} -> ${trip.destination}\n${_formatDateTime(trip.scheduledAt)}',
+          '${trip.displayTitle}\n${_formatDateTime(trip.scheduledAt)}',
         ),
         actions: [
           TextButton(
@@ -123,6 +132,132 @@ final class _TripDetailPageState extends ConsumerState<TripDetailPage> {
     }
   }
 
+  Future<void> _pickProofPhoto(ImageSource source) async {
+    try {
+      final photo = await _imagePicker.pickImage(
+        source: source,
+        imageQuality: 82,
+        maxWidth: 1920,
+      );
+      if (photo == null) {
+        return;
+      }
+      setState(() => _proofPhotos.add(File(photo.path)));
+    } on Object {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Nao foi possivel anexar a foto.')),
+        );
+      }
+    }
+  }
+
+  void _removeProofPhoto(File photo) {
+    setState(() => _proofPhotos.remove(photo));
+  }
+
+  Future<void> _advanceTrip(Trip trip) async {
+    setState(() => _isUpdatingProgress = true);
+    try {
+      await ref
+          .read(tripRepositoryProvider)
+          .moveToNextProgressForCurrentDriver(trip);
+      ref.invalidate(currentDriverTripsProvider);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Andamento da viagem atualizado.')),
+        );
+      }
+    } on FirebaseFailure catch (failure) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(failure.message)));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isUpdatingProgress = false);
+      }
+    }
+  }
+
+  Future<void> _completeTrip(Trip trip) async {
+    if (_proofPhotos.isEmpty && !trip.hasProof) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Anexe o comprovante para finalizar.')),
+      );
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Finalizar viagem?'),
+        content: Text(
+          'A viagem ${trip.displayTitle} sera marcada como finalizada e o comprovante sera enviado para a logistica.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Finalizar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) {
+      return;
+    }
+
+    setState(() => _isCompleting = true);
+    try {
+      final uploadedPhotoUrls = [...trip.proofPhotoUrls];
+      final pendingPhotoPaths = [...trip.pendingProofPhotoLocalPaths];
+      for (final photo in _proofPhotos) {
+        final url = await ref
+            .read(mediaUploadServiceProvider)
+            .uploadOrQueueDriverImage(
+              localFile: photo,
+              mediaType: DriverMediaType.tripProof,
+              ownerEntityId: trip.id,
+            );
+        if (url == null) {
+          pendingPhotoPaths.add(photo.path);
+        } else {
+          uploadedPhotoUrls.add(url);
+        }
+      }
+
+      await ref
+          .read(tripRepositoryProvider)
+          .completeForCurrentDriver(
+            trip: trip,
+            proofPhotoUrls: uploadedPhotoUrls,
+            pendingProofPhotoLocalPaths: pendingPhotoPaths,
+          );
+      ref.invalidate(currentDriverTripsProvider);
+      if (mounted) {
+        setState(() => _proofPhotos.clear());
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Viagem finalizada com comprovante.')),
+        );
+      }
+    } on FirebaseFailure catch (failure) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(failure.message)));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isCompleting = false);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final trip = _currentTrip();
@@ -144,6 +279,17 @@ final class _TripDetailPageState extends ConsumerState<TripDetailPage> {
           _DocumentsSection(documents: trip.cteDocuments),
           const SizedBox(height: 12),
           _ReadOnlyTimeline(trip: trip),
+          const SizedBox(height: 12),
+          _DriverProgressActions(
+            trip: trip,
+            selectedProofPhotos: _proofPhotos,
+            isBusy: _isUpdatingProgress || _isCompleting,
+            onAdvance: () => _advanceTrip(trip),
+            onComplete: () => _completeTrip(trip),
+            onPickFromCamera: () => _pickProofPhoto(ImageSource.camera),
+            onPickFromGallery: () => _pickProofPhoto(ImageSource.gallery),
+            onRemoveProofPhoto: _removeProofPhoto,
+          ),
           const SizedBox(height: 12),
           _TripHistory(trip: trip),
         ],
@@ -220,7 +366,7 @@ final class _StatusHeader extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           Text(
-            '${trip.origin} -> ${trip.destination}',
+            trip.displayTitle,
             style: Theme.of(context).textTheme.titleLarge?.copyWith(
               color: Colors.white,
               fontWeight: FontWeight.w900,
@@ -843,6 +989,192 @@ final class _TripHistory extends StatelessWidget {
             ),
     );
   }
+}
+
+final class _DriverProgressActions extends StatelessWidget {
+  const _DriverProgressActions({
+    required this.trip,
+    required this.selectedProofPhotos,
+    required this.isBusy,
+    required this.onAdvance,
+    required this.onComplete,
+    required this.onPickFromCamera,
+    required this.onPickFromGallery,
+    required this.onRemoveProofPhoto,
+  });
+
+  final Trip trip;
+  final List<File> selectedProofPhotos;
+  final bool isBusy;
+  final VoidCallback onAdvance;
+  final VoidCallback onComplete;
+  final VoidCallback onPickFromCamera;
+  final VoidCallback onPickFromGallery;
+  final ValueChanged<File> onRemoveProofPhoto;
+
+  @override
+  Widget build(BuildContext context) {
+    final canOperate =
+        trip.driverResponse == DriverTripResponse.accepted &&
+        trip.status != TripStatus.completed &&
+        trip.status != TripStatus.cancelled;
+    if (!canOperate) {
+      return _SectionCard(
+        title: 'Acao do motorista',
+        icon: LucideIcons.circleCheck,
+        child: Text(
+          trip.status == TripStatus.completed
+              ? 'Viagem finalizada e informada para a logistica.'
+              : trip.driverResponse == DriverTripResponse.pending
+              ? 'Aceite a viagem para iniciar o acompanhamento.'
+              : 'Nenhuma acao disponivel para esta viagem.',
+        ),
+      );
+    }
+
+    final nextProgress = _nextProgressLabel(trip);
+    final canAdvance = nextProgress != null;
+    final existingProofCount =
+        trip.proofPhotoUrls.length + trip.pendingProofPhotoLocalPaths.length;
+
+    return _SectionCard(
+      title: 'Acao do motorista',
+      icon: LucideIcons.clipboardCheck,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Status atual: ${trip.progress.label}',
+            style: const TextStyle(fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(height: 12),
+          if (canAdvance) ...[
+            FilledButton.icon(
+              onPressed: isBusy ? null : onAdvance,
+              style: FilledButton.styleFrom(
+                minimumSize: const Size.fromHeight(52),
+              ),
+              icon: isBusy
+                  ? const SizedBox.square(
+                      dimension: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(LucideIcons.arrowRightCircle),
+              label: Text('Atualizar para $nextProgress'),
+            ),
+            const SizedBox(height: 12),
+          ],
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: isBusy ? null : onPickFromCamera,
+                  icon: const Icon(LucideIcons.camera),
+                  label: const Text('Foto'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: isBusy ? null : onPickFromGallery,
+                  icon: const Icon(LucideIcons.image),
+                  label: const Text('Galeria'),
+                ),
+              ),
+            ],
+          ),
+          if (selectedProofPhotos.isNotEmpty || existingProofCount > 0) ...[
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                if (existingProofCount > 0)
+                  _ProofChip(
+                    label:
+                        '$existingProofCount comprovante${existingProofCount == 1 ? '' : 's'} enviado${existingProofCount == 1 ? '' : 's'}',
+                  ),
+                for (final photo in selectedProofPhotos)
+                  _ProofChip(
+                    label: photo.path.split(Platform.pathSeparator).last,
+                    onRemove: () => onRemoveProofPhoto(photo),
+                  ),
+              ],
+            ),
+          ],
+          const SizedBox(height: 12),
+          FilledButton.icon(
+            onPressed: isBusy ? null : onComplete,
+            style: FilledButton.styleFrom(
+              minimumSize: const Size.fromHeight(54),
+            ),
+            icon: isBusy
+                ? const SizedBox.square(
+                    dimension: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(LucideIcons.uploadCloud),
+            label: const Text('Finalizar com comprovante'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+final class _ProofChip extends StatelessWidget {
+  const _ProofChip({required this.label, this.onRemove});
+
+  final String label;
+  final VoidCallback? onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF5F5F5),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFD9D9D9)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(LucideIcons.fileImage, size: 16),
+          const SizedBox(width: 6),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 170),
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.w800),
+            ),
+          ),
+          if (onRemove != null) ...[
+            const SizedBox(width: 4),
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              iconSize: 16,
+              onPressed: onRemove,
+              icon: const Icon(LucideIcons.x),
+              tooltip: 'Remover',
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+String? _nextProgressLabel(Trip trip) {
+  final stages = TripProgress.optionsFor(trip.operationType);
+  final currentIndex = stages.indexOf(trip.progress);
+  if (currentIndex < 0 || currentIndex >= stages.length - 1) {
+    return null;
+  }
+  final next = stages[currentIndex + 1];
+  return next.isFinished ? null : next.label;
 }
 
 final class _SectionCard extends StatelessWidget {

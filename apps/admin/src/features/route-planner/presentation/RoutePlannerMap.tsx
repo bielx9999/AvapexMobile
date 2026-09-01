@@ -4,20 +4,27 @@ import type { RouteTemplatePoint } from '../../shared/domain/models';
 
 type RoutePlannerMapProps = {
   addingVia: boolean;
+  canEdit: boolean;
   onMapClick: (latitude: number, longitude: number) => void;
+  onRouteDrag: (viaPoints: Array<{ latitude: number; longitude: number }>) => void;
   path: Array<{ latitude: number; longitude: number }>;
   points: RouteTemplatePoint[];
 };
 
 const brazilCenter = { lat: -15.78, lng: -47.93 };
 
-export function RoutePlannerMap({ addingVia, onMapClick, path, points }: RoutePlannerMapProps) {
+export function RoutePlannerMap({ addingVia, canEdit, onMapClick, onRouteDrag, path, points }: RoutePlannerMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const directionsListenerRef = useRef<google.maps.MapsEventListener | null>(null);
+  const directionsRendererRef = useRef<google.maps.DirectionsRenderer | null>(null);
+  const directionsServiceRef = useRef<google.maps.DirectionsService | null>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
   const markersRef = useRef<google.maps.marker.AdvancedMarkerElement[]>([]);
   const polylineRef = useRef<google.maps.Polyline | null>(null);
   const clickListenerRef = useRef<google.maps.MapsEventListener | null>(null);
   const onMapClickRef = useRef(onMapClick);
+  const onRouteDragRef = useRef(onRouteDrag);
+  const suppressDirectionsChangeRef = useRef(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -25,10 +32,14 @@ export function RoutePlannerMap({ addingVia, onMapClick, path, points }: RoutePl
   }, [onMapClick]);
 
   useEffect(() => {
+    onRouteDragRef.current = onRouteDrag;
+  }, [onRouteDrag]);
+
+  useEffect(() => {
     let cancelled = false;
     async function initialize() {
       try {
-        await ensureGoogleMaps(['maps', 'marker']);
+        await ensureGoogleMaps(['maps', 'marker', 'routes']);
         if (cancelled || !containerRef.current) return;
         mapRef.current = new google.maps.Map(containerRef.current, {
           center: brazilCenter,
@@ -43,6 +54,21 @@ export function RoutePlannerMap({ addingVia, onMapClick, path, points }: RoutePl
           if (!event.latLng) return;
           onMapClickRef.current(event.latLng.lat(), event.latLng.lng());
         });
+        directionsServiceRef.current = new google.maps.DirectionsService();
+        directionsRendererRef.current = new google.maps.DirectionsRenderer({
+          draggable: true,
+          map: mapRef.current,
+          preserveViewport: true,
+          suppressMarkers: true,
+        });
+        directionsListenerRef.current = directionsRendererRef.current.addListener('directions_changed', () => {
+          if (suppressDirectionsChangeRef.current) return;
+          const directions = directionsRendererRef.current?.getDirections();
+          const viaPoints = extractDraggedViaPoints(directions);
+          if (viaPoints.length > 0) {
+            onRouteDragRef.current(viaPoints);
+          }
+        });
       } catch (mapError) {
         setError(mapError instanceof Error ? mapError.message : 'Erro ao carregar o mapa.');
       }
@@ -51,7 +77,9 @@ export function RoutePlannerMap({ addingVia, onMapClick, path, points }: RoutePl
     return () => {
       cancelled = true;
       clickListenerRef.current?.remove();
+      directionsListenerRef.current?.remove();
       markersRef.current.forEach((marker) => { marker.map = null; });
+      directionsRendererRef.current?.setMap(null);
       polylineRef.current?.setMap(null);
     };
   }, []);
@@ -79,7 +107,37 @@ export function RoutePlannerMap({ addingVia, onMapClick, path, points }: RoutePl
     });
 
     polylineRef.current?.setMap(null);
-    if (path.length > 1) {
+    const origin = points.find((point) => point.type === 'origin');
+    const destination = points.find((point) => point.type === 'destination');
+    if (origin && destination && directionsServiceRef.current && directionsRendererRef.current) {
+      suppressDirectionsChangeRef.current = true;
+      directionsRendererRef.current.setOptions({ draggable: canEdit, preserveViewport: true, suppressMarkers: true });
+      directionsServiceRef.current.route(
+        {
+          destination: coordinate(destination),
+          origin: coordinate(origin),
+          travelMode: google.maps.TravelMode.DRIVING,
+          waypoints: points
+            .filter((point) => point.type === 'stop' || point.type === 'via')
+            .map((point) => ({
+              location: coordinate(point),
+              stopover: point.type !== 'via',
+            })),
+        },
+        (result, status) => {
+          suppressDirectionsChangeRef.current = false;
+          if (status === google.maps.DirectionsStatus.OK && result) {
+            directionsRendererRef.current?.setDirections(result);
+            return;
+          }
+          setError('O Google Maps nao conseguiu desenhar o percurso editavel.');
+        },
+      );
+    } else {
+      directionsRendererRef.current?.set('directions', null);
+    }
+
+    if ((!origin || !destination) && path.length > 1) {
       polylineRef.current = new google.maps.Polyline({
         map,
         path: path.map((point) => ({ lat: point.latitude, lng: point.longitude })),
@@ -97,7 +155,7 @@ export function RoutePlannerMap({ addingVia, onMapClick, path, points }: RoutePl
       });
     });
     if (!bounds.isEmpty()) map.fitBounds(bounds, 56);
-  }, [path, points]);
+  }, [canEdit, path, points]);
 
   if (error) {
     return <div className="flex h-full min-h-[520px] items-center justify-center bg-zinc-100 p-6 text-center text-sm font-medium text-red-700">{error}</div>;
@@ -105,7 +163,26 @@ export function RoutePlannerMap({ addingVia, onMapClick, path, points }: RoutePl
   return (
     <div className={`relative h-full min-h-[520px] overflow-hidden bg-zinc-100 ${addingVia ? 'cursor-crosshair' : ''}`}>
       <div className="h-full min-h-[520px] w-full" ref={containerRef} />
+      {canEdit && points.length > 1 ? (
+        <div className="pointer-events-none absolute left-4 top-4 rounded-lg bg-white/95 px-3 py-2 text-xs font-medium text-zinc-700 shadow-lg ring-1 ring-zinc-200">
+          Puxe o tracado da rota para criar desvios no percurso.
+        </div>
+      ) : null}
       {addingVia ? <div className="pointer-events-none absolute left-1/2 top-4 -translate-x-1/2 rounded-lg bg-zinc-950 px-4 py-2 text-sm font-medium text-white shadow-lg">Clique no mapa para adicionar o ponto VIA</div> : null}
     </div>
   );
+}
+
+function coordinate(point: RouteTemplatePoint): google.maps.LatLngLiteral {
+  return { lat: point.latitude, lng: point.longitude };
+}
+
+function extractDraggedViaPoints(directions: google.maps.DirectionsResult | null | undefined) {
+  const route = directions?.routes?.[0];
+  if (!route?.legs?.length) {
+    return [];
+  }
+  return route.legs
+    .flatMap((leg) => leg.via_waypoints ?? [])
+    .map((point) => ({ latitude: point.lat(), longitude: point.lng() }));
 }

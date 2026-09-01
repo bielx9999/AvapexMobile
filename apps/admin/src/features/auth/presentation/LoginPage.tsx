@@ -1,6 +1,6 @@
 import { FormEvent, useState } from 'react';
-import { Eye, EyeOff, Lock, LogIn, Mail, X } from 'lucide-react';
-import { loginAdmin, loginAdminWithGoogle } from '../data/authRepository';
+import { Eye, EyeOff, IdCard, Lock, LogIn, X } from 'lucide-react';
+import { loginAdmin, loginAdminWithGoogle, requestAdminPasswordReset } from '../data/authRepository';
 import avapexLogo from '../../../assets/images/avapex_transportes_logo.png';
 import googleLogo from '../../../assets/images/google_logo.png';
 
@@ -10,12 +10,14 @@ type LoginPageProps = {
 };
 
 export function LoginPage({ onSignedIn, message }: LoginPageProps) {
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState(message ?? '');
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [notice, setNotice] = useState('');
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -23,12 +25,27 @@ export function LoginPage({ onSignedIn, message }: LoginPageProps) {
     setLoading(true);
 
     try {
-      await loginAdmin(email.trim(), password);
+      await loginAdmin(identifier.trim(), password);
       onSignedIn();
     } catch (loginError) {
       setError(loginError instanceof Error ? loginError.message : 'Erro ao entrar.');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handlePasswordReset() {
+    setError('');
+    setNotice('');
+    setResetLoading(true);
+
+    try {
+      await requestAdminPasswordReset(identifier);
+      setNotice('Se este e-mail ou CPF estiver cadastrado, enviaremos as instrucoes de recuperacao em instantes.');
+    } catch (resetError) {
+      setError(resetError instanceof Error ? resetError.message : 'Erro ao enviar recuperacao de senha.');
+    } finally {
+      setResetLoading(false);
     }
   }
 
@@ -55,14 +72,14 @@ export function LoginPage({ onSignedIn, message }: LoginPageProps) {
 
         <form onSubmit={handleSubmit} className="space-y-7">
           <label className="relative block">
-            <Mail className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-white" size={28} />
+            <IdCard className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-white" size={28} />
             <input
               className="h-[54px] w-full rounded-2xl border border-[#E8E1DF] bg-transparent pl-[58px] pr-4 text-sm text-white outline-none placeholder:text-white focus:border-white focus:ring-1 focus:ring-white"
-              type="email"
-              placeholder="Digite o email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              autoComplete="email"
+              type="text"
+              placeholder="Digite o e-mail ou CPF"
+              value={identifier}
+              onChange={(event) => setIdentifier(event.target.value)}
+              autoComplete="username"
               required
             />
           </label>
@@ -101,10 +118,21 @@ export function LoginPage({ onSignedIn, message }: LoginPageProps) {
           </label>
 
           <div className="-mt-5 flex justify-end">
-            <button className="text-sm text-white hover:underline" type="button">
-              Esqueceu a senha?
+            <button
+              className="text-sm text-white hover:underline disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={loading || googleLoading || resetLoading}
+              onClick={() => void handlePasswordReset()}
+              type="button"
+            >
+              {resetLoading ? 'Enviando...' : 'Esqueceu a senha?'}
             </button>
           </div>
+
+          {notice ? (
+            <p className="rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-3 text-sm font-semibold text-emerald-900">
+              {notice}
+            </p>
+          ) : null}
 
           {error ? (
             <p className="rounded-2xl border border-[#B8B8B8] bg-white px-3 py-3 text-sm font-semibold text-black">
@@ -114,7 +142,7 @@ export function LoginPage({ onSignedIn, message }: LoginPageProps) {
 
           <button
             className="flex h-[54px] w-full items-center justify-center gap-2 rounded-2xl bg-white font-medium text-black transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60"
-            disabled={loading || googleLoading}
+            disabled={loading || googleLoading || resetLoading}
             type="submit"
           >
             <LogIn size={20} />
@@ -123,7 +151,7 @@ export function LoginPage({ onSignedIn, message }: LoginPageProps) {
 
           <button
             className="flex h-[52px] w-full items-center justify-center gap-3 rounded-2xl bg-white font-medium text-black transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60"
-            disabled={loading || googleLoading}
+            disabled={loading || googleLoading || resetLoading}
             onClick={() => void handleGoogleLogin()}
             type="button"
           >

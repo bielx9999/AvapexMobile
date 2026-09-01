@@ -24,7 +24,10 @@ final firebaseStorageProvider = Provider<FirebaseStorage>((ref) {
 });
 
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
-  return AuthRepository(auth: ref.watch(firebaseAuthProvider));
+  return AuthRepository(
+    auth: ref.watch(firebaseAuthProvider),
+    firestore: ref.watch(firebaseFirestoreProvider),
+  );
 });
 
 final userRepositoryProvider = Provider<UserRepository>((ref) {

@@ -1,16 +1,23 @@
 import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
 import '../../../../core/errors/firebase_failure.dart';
+import '../../../../core/utils/cpf.dart';
 
 final class AuthRepository {
-  AuthRepository({FirebaseAuth? auth, GoogleSignIn? googleSignIn})
-    : _auth = auth ?? FirebaseAuth.instance,
-      _googleSignIn = googleSignIn ?? GoogleSignIn.instance;
+  AuthRepository({
+    FirebaseAuth? auth,
+    FirebaseFirestore? firestore,
+    GoogleSignIn? googleSignIn,
+  }) : _auth = auth ?? FirebaseAuth.instance,
+       _firestore = firestore ?? FirebaseFirestore.instance,
+       _googleSignIn = googleSignIn ?? GoogleSignIn.instance;
 
   final FirebaseAuth _auth;
+  final FirebaseFirestore _firestore;
   final GoogleSignIn _googleSignIn;
   Future<void>? _googleInitialization;
 
@@ -18,17 +25,60 @@ final class AuthRepository {
 
   User? get currentUser => _auth.currentUser;
 
-  Future<UserCredential> signInWithEmailAndPassword({
-    required String email,
+  Future<UserCredential> signInWithIdentifierAndPassword({
+    required String identifier,
     required String password,
   }) async {
     try {
+      final email = await _resolveEmailIdentifier(identifier);
       return await _auth
           .signInWithEmailAndPassword(email: email, password: password)
           .timeout(const Duration(seconds: 15));
+    } on FirebaseFailure {
+      rethrow;
     } on Object catch (error, stackTrace) {
       throw FirebaseFailure.fromException(error, stackTrace);
     }
+  }
+
+  Future<UserCredential> signInWithEmailAndPassword({
+    required String email,
+    required String password,
+  }) {
+    return signInWithIdentifierAndPassword(
+      identifier: email,
+      password: password,
+    );
+  }
+
+  Future<String> _resolveEmailIdentifier(String identifier) async {
+    final trimmed = identifier.trim().toLowerCase();
+    if (trimmed.contains('@')) {
+      return trimmed;
+    }
+
+    final cpf = normalizeCpf(trimmed);
+    if (cpf.isEmpty) {
+      throw const FirebaseFailure(
+        code: FirebaseFailureCode.unknown,
+        message: 'Informe um e-mail ou CPF valido.',
+      );
+    }
+
+    final snapshot = await _firestore
+        .collection('loginIdentifiers')
+        .doc(cpf)
+        .get()
+        .timeout(const Duration(seconds: 10));
+    final data = snapshot.data();
+    final email = data?['email'];
+    if (!snapshot.exists || email is! String || !email.contains('@')) {
+      throw const FirebaseFailure(
+        code: FirebaseFailureCode.unauthenticated,
+        message: 'CPF nao encontrado.',
+      );
+    }
+    return email.trim().toLowerCase();
   }
 
   Future<UserCredential> signInWithGoogle() async {
@@ -104,9 +154,15 @@ final class AuthRepository {
 
   Future<void> sendPasswordResetEmail(String email) async {
     try {
+      final resolvedEmail = await _resolveEmailIdentifier(email);
       await _auth
-          .sendPasswordResetEmail(email: email)
+          .sendPasswordResetEmail(email: resolvedEmail)
           .timeout(const Duration(seconds: 15));
+    } on FirebaseAuthException catch (error) {
+      if (error.code == 'user-not-found') {
+        return;
+      }
+      throw FirebaseFailure.fromException(error, StackTrace.current);
     } on Object catch (error, stackTrace) {
       throw FirebaseFailure.fromException(error, stackTrace);
     }

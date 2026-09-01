@@ -40,5 +40,9 @@ export function mapFirebaseError(error: unknown, fallbackMessage: string): Admin
     }
   }
 
+  if (error instanceof Error && error.message.trim()) {
+    return new AdminFirebaseFailure('unknown', error.message, error);
+  }
+
   return new AdminFirebaseFailure('unknown', fallbackMessage, error);
 }

@@ -281,7 +281,7 @@ final class _TripCard extends StatelessWidget {
               ),
               const SizedBox(height: 14),
               Text(
-                trip.origin,
+                trip.displayTitle,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
@@ -289,21 +289,14 @@ final class _TripCard extends StatelessWidget {
                   fontWeight: FontWeight.w800,
                 ),
               ),
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 6),
-                child: Icon(
-                  LucideIcons.arrowDown,
-                  size: 18,
-                  color: Color(0xFF777777),
-                ),
-              ),
+              const SizedBox(height: 6),
               Text(
-                trip.destination,
-                maxLines: 2,
+                '${trip.origin} -> ${trip.destination}',
+                maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF666666),
+                  fontWeight: FontWeight.w600,
                 ),
               ),
               const SizedBox(height: 14),
