@@ -761,6 +761,33 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    match /securityInspections/{inspectionId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin()
+        && request.resource.data.id == inspectionId
+        && request.resource.data.inspectorId == request.auth.uid
+        && request.resource.data.inspectorName is string
+        && request.resource.data.driverId is string
+        && request.resource.data.vehicleId is string
+        && request.resource.data.inspectionLocation is string
+        && request.resource.data.items is map
+        && request.resource.data.score is number
+        && request.resource.data.score >= 0
+        && request.resource.data.score <= 5
+        && request.resource.data.signaturePoints is list
+        && request.resource.data.photoUrls is list
+        && request.resource.data.createdAt is timestamp;
+      allow update, delete: if isAdmin();
+    }
+
+    match /lightVehicleWeeklyChecklists/{checklistId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /lightVehicleMaintenances/{maintenanceId} {
+      allow read, write: if isAdmin();
+    }
+
     match /incidents/{incidentId} {
       allow read: if isAdmin() || ownedExistingDriverData();
       allow create: if isAdmin() || ownsDriverData();

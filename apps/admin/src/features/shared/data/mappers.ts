@@ -15,17 +15,77 @@ import type {
   FuelingRecord,
   GeoLocation,
   Locality,
+  LightVehicleMaintenance,
+  LightVehicleWeeklyChecklist,
   OperationalSettings,
   RouteEvent,
   RouteTemplate,
   RouteTemplatePoint,
   RouteVersion,
   RouteVersionDefinition,
+  SecurityInspection,
   StorageLocation,
   Trip,
   TripRouteSnapshot,
   Vehicle,
 } from '../domain/models';
+
+export function mapLightVehicleWeeklyChecklist(id: string, data: Record<string, unknown>): LightVehicleWeeklyChecklist {
+  const rawItems = readRecord(data.items);
+  const items = Object.fromEntries(Object.entries(rawItems).filter(([, value]) => value === 'ok' || value === 'attention' || value === 'not_ok' || value === 'na')) as LightVehicleWeeklyChecklist['items'];
+  return {
+    id: readString(data.id, id),
+    vehicleId: readString(data.vehicleId),
+    vehiclePlate: readString(data.vehiclePlate),
+    vehicleFleet: readString(data.vehicleFleet),
+    responsibleId: readString(data.responsibleId),
+    responsibleName: readString(data.responsibleName),
+    weekStart: readString(data.weekStart),
+    checkedAt: readDate(data.checkedAt),
+    kmAtual: readNumber(data.kmAtual),
+    status: data.status === 'approved' || data.status === 'attention' ? data.status : 'pending',
+    items,
+    observations: readString(data.observations),
+    photoUrls: readStringList(data.photoUrls),
+    createdAt: readDate(data.createdAt),
+  };
+}
+
+export function mapLightVehicleMaintenance(id: string, data: Record<string, unknown>): LightVehicleMaintenance {
+  return {
+    id: readString(data.id, id),
+    vehicleId: readString(data.vehicleId),
+    vehiclePlate: readString(data.vehiclePlate),
+    vehicleFleet: readString(data.vehicleFleet),
+    currentKm: readNumber(data.currentKm),
+    nextRevisionKm: readNumber(data.nextRevisionKm),
+    notes: readString(data.notes),
+    updatedAt: readDate(data.updatedAt),
+  };
+}
+
+export function mapSecurityInspection(id: string, data: Record<string, unknown>): SecurityInspection {
+  const signaturePoints = Array.isArray(data.signaturePoints) ? data.signaturePoints.filter((point): point is Record<string, unknown> => Boolean(point && typeof point === 'object')).map((point) => ({ x: readNumber(point.x), y: readNumber(point.y) })) : [];
+  return {
+    id: readString(data.id, id),
+    inspectorId: readString(data.inspectorId),
+    inspectorName: readString(data.inspectorName),
+    driverId: readString(data.driverId),
+    driverName: readString(data.driverName),
+    vehicleId: readString(data.vehicleId),
+    vehiclePlate: readString(data.vehiclePlate),
+    vehicleFleet: readString(data.vehicleFleet),
+    inspectionLocation: readString(data.inspectionLocation),
+    items: readRecord(data.items),
+    positivePoints: readString(data.positivePoints),
+    improvementPoints: readString(data.improvementPoints),
+    score: readNumber(data.score),
+    signaturePoints,
+    photoUrls: readStringList(data.photoUrls),
+    location: data.location ? readRecord(data.location) : undefined,
+    createdAt: readDate(data.createdAt),
+  };
+}
 
 export function mapLocality(id: string, data: Record<string, unknown>): Locality {
   return {
@@ -117,7 +177,7 @@ export function mapVehicle(id: string, data: Record<string, unknown>): Vehicle {
           : '',
     year: typeof data.year === 'number' ? data.year : null,
     type:
-      type === 'mechanical_horse_trucado' || type === 'mechanical_horse_toco' || type === 'truck'
+      type === 'mechanical_horse_trucado' || type === 'mechanical_horse_toco' || type === 'truck' || type === 'light_vehicle'
         ? type
         : 'truck',
     currentDriverId: readString(data.currentDriverId) || undefined,

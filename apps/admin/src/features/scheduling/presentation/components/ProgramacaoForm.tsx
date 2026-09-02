@@ -593,6 +593,7 @@ function inferProgrammedVehicleType(vehicle: Vehicle, fallback?: ProgrammedVehic
 }
 
 function vehicleTypeLabel(vehicle: Vehicle) {
+  if (vehicle.type === 'light_vehicle') return 'Veiculo leve';
   if (vehicle.type === 'mechanical_horse_trucado') return 'Cavalo mecanico trucado';
   if (vehicle.type === 'mechanical_horse_toco') return 'Cavalo mecanico toco';
   return 'Caminhao Truck';

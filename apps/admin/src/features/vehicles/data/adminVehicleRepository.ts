@@ -117,6 +117,7 @@ export function vehicleTypeLabel(type: VehicleType) {
     mechanical_horse_trucado: 'Cavalo Mecanico Trucado',
     mechanical_horse_toco: 'Cavalo Mecanico Toco',
     truck: 'Caminhao Truck',
+    light_vehicle: 'Veiculo leve',
   };
   return labels[type];
 }

@@ -126,6 +126,7 @@ export function VehiclesPage({ vehicles, users, loading, onChanged }: VehiclesPa
       ['ABC1D23', 'FROTA 001', 'Caminhao Truck', '2024'],
       ['DEF4G56', 'FROTA 002', 'Cavalo Mecanico Toco', '2023'],
       ['GHI7J89', 'FROTA 003', 'Cavalo Mecanico Trucado', '2022'],
+      ['JKL0M12', 'FROTA 004', 'Veiculo leve', '2024'],
     ];
     const csv = rows.map((row) => row.map((cell) => `"${cell.replace(/"/g, '""')}"`).join(';')).join('\r\n');
     const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' });
@@ -306,6 +307,7 @@ export function VehiclesPage({ vehicles, users, loading, onChanged }: VehiclesPa
                         value={form.type}
                         onChange={(event) => setForm((current) => ({ ...current, type: event.target.value as VehicleType }))}
                       >
+                        <option value="light_vehicle">Veiculo leve</option>
                         <option value="mechanical_horse_trucado">Cavalo Mecanico Trucado</option>
                         <option value="mechanical_horse_toco">Cavalo Mecanico Toco</option>
                         <option value="truck">Caminhao Truck</option>
@@ -447,7 +449,7 @@ function VehicleImportModal({
         <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">
           <ErrorBanner message={error} />
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm text-zinc-600">Tipos aceitos: Caminhao Truck, Cavalo Mecanico Toco, Cavalo Mecanico Trucado.</p>
+            <p className="text-sm text-zinc-600">Tipos aceitos: Veiculo leve, Caminhao Truck, Cavalo Mecanico Toco e Cavalo Mecanico Trucado.</p>
             <label className="ui-button h-11 cursor-pointer gap-2 border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-700 hover:bg-zinc-50">
               {loading ? <LoaderCircle className="animate-spin" size={17} /> : <FileSpreadsheet size={17} />}
               {loading ? 'Lendo planilha...' : analysis ? 'Escolher outro arquivo' : 'Selecionar planilha'}

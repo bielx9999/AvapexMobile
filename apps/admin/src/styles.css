@@ -89,6 +89,49 @@ textarea:focus-visible {
   background: rgb(var(--accent) / 0.35);
 }
 
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(161 161 170 / 0.65) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: rgb(161 161 170 / 0.55);
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: rgb(113 113 122 / 0.72);
+  background-clip: padding-box;
+}
+
+.ui-scrollbar-dark {
+  scrollbar-color: rgb(250 204 21 / 0.55) transparent;
+}
+
+.ui-scrollbar-dark::-webkit-scrollbar {
+  width: 4px;
+}
+
+.ui-scrollbar-dark::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgb(250 204 21 / 0.34);
+}
+
+.ui-scrollbar-dark::-webkit-scrollbar-thumb:hover {
+  background: rgb(250 204 21 / 0.55);
+}
+
 @layer components {
   .ui-card {
     @apply border border-zinc-200 bg-white;
@@ -181,6 +224,32 @@ textarea:focus-visible {
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
+  }
+}
+
+@media print {
+  body:has(.print-inspection) #root > * {
+    visibility: hidden;
+  }
+
+  body:has(.print-inspection) .print-inspection,
+  body:has(.print-inspection) .print-inspection * {
+    visibility: visible;
+  }
+
+  .print-inspection {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    max-width: none;
+    max-height: none;
+    overflow: visible;
+    box-shadow: none;
+  }
+
+  .print-inspection header button,
+  .print-inspection footer {
+    display: none !important;
   }
 }
 

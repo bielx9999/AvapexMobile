@@ -30,8 +30,14 @@ const VehiclesPage = lazy(async () => ({
 const EquipmentPage = lazy(async () => ({
   default: (await import('../../equipment/presentation/EquipmentPage')).EquipmentPage,
 }));
+const SecurityInspectionsPage = lazy(async () => ({
+  default: (await import('../../security-inspections/presentation/SecurityInspectionsPage')).SecurityInspectionsPage,
+}));
 const DocumentationReportsPage = lazy(async () => ({
   default: (await import('../../documentation-reports/presentation/DocumentationReportsPage')).DocumentationReportsPage,
+}));
+const LightVehiclesPage = lazy(async () => ({
+  default: (await import('../../light-vehicles/presentation/LightVehiclesPage')).LightVehiclesPage,
 }));
 
 type AdminData = {
@@ -44,6 +50,9 @@ type AdminData = {
   localities: Locality[];
   routeTemplates: RouteTemplate[];
   fueling: FuelingRecord[];
+  securityInspections: import('../../shared/domain/models').SecurityInspection[];
+  lightVehicleChecklists: import('../../shared/domain/models').LightVehicleWeeklyChecklist[];
+  lightVehicleMaintenances: import('../../shared/domain/models').LightVehicleMaintenance[];
 };
 
 const emptyData: AdminData = {
@@ -56,6 +65,9 @@ const emptyData: AdminData = {
   localities: [],
   routeTemplates: [],
   fueling: [],
+  securityInspections: [],
+  lightVehicleChecklists: [],
+  lightVehicleMaintenances: [],
 };
 
 type AdminDashboardProps = {
@@ -63,7 +75,8 @@ type AdminDashboardProps = {
 };
 
 const pageConfig: Record<AdminPage, { category: string; description: string; title: string }> = {
-  checklists: { category: 'Operacao', description: 'Acompanhe conformidade e volume de inspecoes.', title: 'Checklists' },
+  checklists: { category: 'CheckLists', description: 'Acompanhe conformidade e volume de inspecoes.', title: 'Checklists operacionais' },
+  'security-inspections': { category: 'CheckLists', description: 'Inspecoes realizadas pelos tecnicos de seguranca.', title: 'Inspecoes de seguranca' },
   fueling: { category: 'Operacao', description: 'Monitore registros e comprovantes de abastecimento.', title: 'Abastecimento' },
   equipment: { category: 'Operacao', description: 'Controle o estoque, atribuicoes e inspecoes dos equipamentos de amarracao.', title: 'Equipamentos de Amarracao' },
   deliveries: { category: 'Operacao', description: 'Acompanhe pedidos, status, motoristas e comprovantes em tempo real.', title: 'Gestao de Entregas' },
@@ -72,6 +85,9 @@ const pageConfig: Record<AdminPage, { category: string; description: string; tit
   scheduling: { category: 'Operacao', description: 'Planeje e acompanhe cargas e descargas.', title: 'Programacao' },
   users: { category: 'Cadastros', description: 'Gerencie acessos e dados dos usuarios.', title: 'Usuarios' },
   vehicles: { category: 'Cadastros', description: 'Gerencie e acompanhe os veiculos da frota.', title: 'Veiculos' },
+  'light-vehicles': { category: 'Veiculos leves', description: 'Acompanhe checklists e revisoes dos veiculos leves.', title: 'Gerenciamento de veiculos leves' },
+  'light-vehicle-checklists': { category: 'Veiculos leves', description: 'Registre e acompanhe o checklist semanal dos veiculos leves.', title: 'Checklist semanal' },
+  'light-vehicle-maintenance': { category: 'Veiculos leves', description: 'Controle as proximas revisoes por quilometragem.', title: 'Revisoes por km' },
   localities: { category: 'Cadastros', description: 'Gerencie os pontos de origem, destino e parada utilizados nas operacoes.', title: 'Localidades' },
   onedrive: { category: 'Documentacao', description: 'Acesse os documentos compartilhados da equipe.', title: 'OneDrive' },
   powerbi: { category: 'Documentacao', description: 'Acompanhe os paineis corporativos da operacao.', title: 'Power BI' },
@@ -88,7 +104,7 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
     setLoading(true);
     setError('');
     try {
-      const [users, vehicles, trips, checklists, receipts, deliveries, fueling, localities, routeTemplates] = await Promise.all([
+      const [users, vehicles, trips, checklists, receipts, deliveries, fueling, localities, routeTemplates, securityInspections, lightVehicleChecklists, lightVehicleMaintenances] = await Promise.all([
         adminReadRepository.users(),
         adminReadRepository.vehicles(),
         adminReadRepository.trips(),
@@ -98,8 +114,11 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
         adminReadRepository.fuelingRecords(),
         adminReadRepository.localities(),
         adminReadRepository.routeTemplates(),
+        adminReadRepository.securityInspections(),
+        adminReadRepository.lightVehicleWeeklyChecklists(),
+        adminReadRepository.lightVehicleMaintenances(),
       ]);
-      setData({ users, vehicles, trips, checklists, receipts, deliveries, fueling, localities, routeTemplates });
+      setData({ users, vehicles, trips, checklists, receipts, deliveries, fueling, localities, routeTemplates, securityInspections, lightVehicleChecklists, lightVehicleMaintenances });
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Erro ao carregar painel.');
     } finally {
@@ -214,6 +233,8 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
               showFilters={showChecklistFilters}
               users={data.users}
             />
+          ) : activePage === 'security-inspections' ? (
+            <SecurityInspectionsPage inspections={data.securityInspections} loading={loading} users={data.users} vehicles={data.vehicles} />
           ) : activePage === 'receipts' ? (
             <ComprovantesPage deliveries={data.deliveries} loading={loading} onChanged={loadData} receipts={data.receipts} />
           ) : activePage === 'fueling' ? (
@@ -229,6 +250,8 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
             />
           ) : activePage === 'vehicles' ? (
             <VehiclesPage vehicles={data.vehicles} users={data.users} loading={loading} onChanged={loadData} />
+          ) : activePage === 'light-vehicles' || activePage === 'light-vehicle-checklists' || activePage === 'light-vehicle-maintenance' ? (
+            <LightVehiclesPage checklists={data.lightVehicleChecklists} initialTab={activePage === 'light-vehicle-maintenance' ? 'maintenance' : 'checklist'} loading={loading} maintenances={data.lightVehicleMaintenances} onChanged={loadData} users={data.users} vehicles={data.vehicles} />
           ) : activePage === 'onedrive' ? (
             <DocumentationReportsPage view="onedrive" />
           ) : activePage === 'powerbi' ? (

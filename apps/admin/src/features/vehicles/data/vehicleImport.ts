@@ -30,6 +30,10 @@ const typeByLabel: Record<string, VehicleType> = {
   'CAVALO MECANICO TRUCADO': 'mechanical_horse_trucado',
   TRUCADO: 'mechanical_horse_trucado',
   'CAVALO TRUCADO': 'mechanical_horse_trucado',
+  'VEICULO LEVE': 'light_vehicle',
+  'VEICULO LEVES': 'light_vehicle',
+  LEVE: 'light_vehicle',
+  'CARRO LEVE': 'light_vehicle',
 };
 
 export async function analyzeVehicleWorkbook(file: File, existingVehicles: Vehicle[]): Promise<VehicleImportAnalysis> {
@@ -112,7 +116,7 @@ function parseRow(
   if (plate && !isValidPlate(plate)) issues.push('Placa invalida');
   if (!fleetNumber) issues.push('Frota obrigatoria');
   if (!rawType) issues.push('Tipo de frota obrigatorio');
-  else if (!type) issues.push('Tipo invalido. Use Caminhao Truck, Cavalo Mecanico Toco ou Cavalo Mecanico Trucado');
+  else if (!type) issues.push('Tipo invalido. Use Veiculo leve, Caminhao Truck, Cavalo Mecanico Toco ou Cavalo Mecanico Trucado');
   if (year === null) issues.push('Ano obrigatorio ou invalido');
 
   return { sourceRow, plate, fleetNumber, type, year, issues };

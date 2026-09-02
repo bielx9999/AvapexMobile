@@ -1,7 +1,7 @@
 export type UserRole = 'driver' | 'admin';
 export type UserStatus = 'active' | 'inactive';
 export type VehicleStatus = 'active' | 'inactive';
-export type VehicleType = 'mechanical_horse_trucado' | 'mechanical_horse_toco' | 'truck';
+export type VehicleType = 'mechanical_horse_trucado' | 'mechanical_horse_toco' | 'truck' | 'light_vehicle';
 export type TripStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled';
 export type DriverTripResponse = 'pending' | 'accepted' | 'rejected';
 export type ProgrammingStatus = 'loading' | 'in_transit' | 'unloading' | 'awaiting_invoice' | 'released';
@@ -205,6 +205,34 @@ export type Vehicle = {
   currentKm: number;
   status: VehicleStatus;
   lastChecklistId?: string;
+};
+
+export type LightVehicleWeeklyChecklist = {
+  id: string;
+  vehicleId: string;
+  vehiclePlate: string;
+  vehicleFleet: string;
+  responsibleId: string;
+  responsibleName: string;
+  weekStart: string;
+  checkedAt?: Date | null;
+  kmAtual: number;
+  status: 'approved' | 'attention' | 'pending';
+  items: Record<string, 'ok' | 'attention' | 'not_ok' | 'na'>;
+  observations: string;
+  photoUrls: string[];
+  createdAt: Date | null;
+};
+
+export type LightVehicleMaintenance = {
+  id: string;
+  vehicleId: string;
+  vehiclePlate: string;
+  vehicleFleet: string;
+  currentKm: number;
+  nextRevisionKm: number;
+  notes: string;
+  updatedAt: Date | null;
 };
 
 export type Trip = {
@@ -422,6 +450,26 @@ export type Checklist = {
   driverNotificationStatus?: 'not_sent' | 'queued' | 'sent';
   reviewedAt?: Date | null;
   reviewedBy?: string;
+};
+
+export type SecurityInspection = {
+  id: string;
+  inspectorId: string;
+  inspectorName: string;
+  driverId: string;
+  driverName: string;
+  vehicleId: string;
+    vehiclePlate: string;
+    vehicleFleet: string;
+    inspectionLocation: string;
+    items: Record<string, unknown>;
+  positivePoints: string;
+  improvementPoints: string;
+  score: number;
+  signaturePoints: Array<{ x: number; y: number }>;
+  photoUrls: string[];
+  location?: Record<string, unknown>;
+  createdAt: Date | null;
 };
 
 export type DeliveryReceipt = {

@@ -8,8 +8,10 @@ import {
   ListChecks,
   FileCheck2,
   FolderOpen,
+  ShieldCheck,
   BarChart3,
   Fuel,
+  Gauge,
   LogOut,
   MapPin,
   Menu,
@@ -19,6 +21,7 @@ import {
   Route,
   Truck,
   Users,
+  Wrench,
   X,
   type LucideIcon,
 } from 'lucide-react';
@@ -31,11 +34,15 @@ export type AdminPage =
   | 'route-planner'
   | 'deliveries'
   | 'checklists'
+  | 'security-inspections'
   | 'receipts'
   | 'fueling'
   | 'equipment'
   | 'users'
   | 'vehicles'
+  | 'light-vehicles'
+  | 'light-vehicle-checklists'
+  | 'light-vehicle-maintenance'
   | 'localities'
   | 'onedrive'
   | 'powerbi';
@@ -54,10 +61,17 @@ const navSections: NavSection[] = [
       { icon: Route, key: 'scheduling', label: 'Programacao' },
       { icon: Navigation, key: 'route-planner', label: 'Roteirizador' },
       { icon: ListChecks, key: 'deliveries', label: 'Gestao de Entregas' },
-      { icon: ClipboardCheck, key: 'checklists', label: 'Checklists' },
       { icon: FileCheck2, key: 'receipts', label: 'Comprovantes' },
       { icon: Fuel, key: 'fueling', label: 'Abastecimento' },
       { icon: Boxes, key: 'equipment', label: 'Equipamentos' },
+    ],
+  },
+  {
+    icon: ClipboardCheck,
+    label: 'CheckLists',
+    items: [
+      { icon: ClipboardCheck, key: 'checklists', label: 'Checklists operacionais' },
+      { icon: ShieldCheck, key: 'security-inspections', label: 'Inspecoes de seguranca' },
     ],
   },
   {
@@ -75,6 +89,14 @@ const navSections: NavSection[] = [
     items: [
       { icon: FolderOpen, key: 'onedrive', label: 'OneDrive' },
       { icon: BarChart3, key: 'powerbi', label: 'Power BI' },
+    ],
+  },
+  {
+    icon: Gauge,
+    label: 'Veiculos leves',
+    items: [
+      { icon: ClipboardCheck, key: 'light-vehicle-checklists', label: 'Checklist semanal' },
+      { icon: Wrench, key: 'light-vehicle-maintenance', label: 'Revisoes por km' },
     ],
   },
 ];
@@ -129,7 +151,7 @@ export function AdminShell({
         )}
       </div>
 
-      <nav aria-label="Navegacao principal" className={`min-h-0 flex-1 overflow-y-auto py-4 ${sidebarCollapsed ? 'px-2' : 'px-3'}`}>
+      <nav aria-label="Navegacao principal" className={`ui-scrollbar-dark min-h-0 flex-1 overflow-y-auto py-4 ${sidebarCollapsed ? 'px-2' : 'px-3'}`}>
         <div className="space-y-5">
           {navSections.map((section) => {
             const SectionIcon = section.icon;

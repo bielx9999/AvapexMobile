@@ -21,6 +21,8 @@ import {
   type Unsubscribe,
 } from 'firebase/firestore';
 import { auth, firestore } from '../../../core/firebase/firebaseConfig';
+import { storage } from '../../../core/firebase/firebaseConfig';
+import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import { makeConverter } from '../../../core/firebase/firestoreConverters';
 import { mapFirebaseError } from '../../../core/firebase/firebaseErrors';
 import {
@@ -30,10 +32,13 @@ import {
   mapDriverEquipment,
   mapFuelingRecord,
   mapLocality,
+  mapLightVehicleMaintenance,
+  mapLightVehicleWeeklyChecklist,
   mapOperationalSettings,
   mapRouteEvent,
   mapRouteTemplate,
   mapRouteVersion,
+  mapSecurityInspection,
   mapTrip,
   mapUser,
   mapVehicle,
@@ -46,11 +51,14 @@ import type {
   DriverEquipment,
   FuelingRecord,
   Locality,
+  LightVehicleMaintenance,
+  LightVehicleWeeklyChecklist,
   OperationalSettings,
   RouteEvent,
   RouteTemplate,
   RouteVersion,
   RouteVersionDefinition,
+  SecurityInspection,
   Trip,
   TripRouteSnapshot,
   Vehicle,
@@ -70,6 +78,9 @@ const converters = {
   localities: makeConverter<Locality>(mapLocality),
   routeTemplates: makeConverter<RouteTemplate>(mapRouteTemplate),
   routeVersions: makeConverter<RouteVersion>(mapRouteVersion),
+  securityInspections: makeConverter<SecurityInspection>(mapSecurityInspection),
+  lightVehicleWeeklyChecklists: makeConverter<LightVehicleWeeklyChecklist>(mapLightVehicleWeeklyChecklist),
+  lightVehicleMaintenances: makeConverter<LightVehicleMaintenance>(mapLightVehicleMaintenance),
 };
 
 function typedCollection<T>(path: keyof typeof converters) {
@@ -132,6 +143,9 @@ type RouteTemplateWrite = {
   definition: Omit<RouteVersionDefinition, 'version'>;
 };
 
+type LightVehicleWeeklyChecklistWrite = Omit<LightVehicleWeeklyChecklist, 'id' | 'createdAt' | 'photoUrls'> & { id?: string; photoFiles?: File[] };
+type SecurityInspectionWrite = Omit<SecurityInspection, 'id' | 'createdAt' | 'photoUrls'> & { id?: string; photoFiles?: File[] };
+
 export const adminReadRepository = {
   users: () => listCollection<AppUser>('users', [orderBy('createdAt', 'desc'), limit(200)], 'Erro ao listar usuarios.'),
   vehicles: () => listCollection<Vehicle>('vehicles', [orderBy('plate', 'asc'), limit(200)], 'Erro ao listar veiculos.'),
@@ -140,6 +154,9 @@ export const adminReadRepository = {
   routeEvents: () => listCollection<RouteEvent>('routeEvents', [orderBy('occurredAt', 'desc'), limit(500)], 'Erro ao listar eventos de rota.'),
   settings: () => listCollection<OperationalSettings>('settings', [], 'Erro ao listar configuracoes operacionais.'),
   checklists: () => listCollection<Checklist>('checklists', [orderBy('createdAt', 'desc'), limit(200)], 'Erro ao listar checklists.'),
+  securityInspections: () => listCollection<SecurityInspection>('securityInspections', [orderBy('createdAt', 'desc'), limit(500)], 'Erro ao listar inspecoes de seguranca.'),
+  lightVehicleWeeklyChecklists: () => listCollection<LightVehicleWeeklyChecklist>('lightVehicleWeeklyChecklists', [orderBy('createdAt', 'desc'), limit(1000)], 'Erro ao listar checklists de veiculos leves.'),
+  lightVehicleMaintenances: () => listCollection<LightVehicleMaintenance>('lightVehicleMaintenances', [orderBy('updatedAt', 'desc'), limit(500)], 'Erro ao listar revisoes de veiculos leves.'),
   deliveryReceipts: () =>
     listCollection<DeliveryReceipt>('deliveryReceipts', [orderBy('createdAt', 'desc'), limit(200)], 'Erro ao listar comprovantes.'),
   fuelingRecords: () =>
@@ -201,6 +218,61 @@ export const adminReadRepository = {
 };
 
 export const adminWriteRepository = {
+  async saveLightVehicleWeeklyChecklist(input: LightVehicleWeeklyChecklistWrite) {
+    try {
+      const id = input.id ?? `light_checklist_${Date.now()}`;
+      const photoUrls: string[] = [];
+      for (const file of input.photoFiles ?? []) {
+        const fileRef = ref(storage, `light-vehicle-checklists/${id}/${crypto.randomUUID()}-${file.name}`);
+        const uploaded = await uploadBytes(fileRef, file);
+        photoUrls.push(await getDownloadURL(uploaded.ref));
+      }
+      const checklistFields = { ...input };
+      delete checklistFields.photoFiles;
+      await setDoc(doc(firestore, 'lightVehicleWeeklyChecklists', id), { ...checklistFields, id, photoUrls, createdAt: serverTimestamp() }, { merge: true });
+    } catch (error) {
+      throw mapFirebaseError(error, 'Erro ao salvar checklist semanal.');
+    }
+  },
+  async deleteLightVehicleWeeklyChecklist(id: string) {
+    try {
+      await deleteDoc(doc(firestore, 'lightVehicleWeeklyChecklists', id));
+    } catch (error) {
+      throw mapFirebaseError(error, 'Erro ao excluir checklist semanal.');
+    }
+  },
+  async saveLightVehicleMaintenance(input: Omit<LightVehicleMaintenance, 'updatedAt'>) {
+    try {
+      await setDoc(doc(firestore, 'lightVehicleMaintenances', input.id), { ...input, updatedAt: serverTimestamp() }, { merge: true });
+    } catch (error) {
+      throw mapFirebaseError(error, 'Erro ao salvar revisao do veiculo leve.');
+    }
+  },
+  async saveSecurityInspection(input: SecurityInspectionWrite) {
+    try {
+      const id = input.id ?? `security_${Date.now()}`;
+      const photoUrls: string[] = [];
+      for (const file of input.photoFiles ?? []) {
+        const fileRef = ref(storage, `security-inspections/${id}/${crypto.randomUUID()}-${file.name}`);
+        const uploaded = await uploadBytes(fileRef, file);
+        photoUrls.push(await getDownloadURL(uploaded.ref));
+      }
+      const inspectionFields = { ...input };
+      const location = inspectionFields.location;
+      delete inspectionFields.photoFiles;
+      delete inspectionFields.location;
+      const inspectionData = {
+        ...inspectionFields,
+        id,
+        photoUrls,
+        createdAt: serverTimestamp(),
+        ...(location ? { location } : {}),
+      };
+      await setDoc(doc(firestore, 'securityInspections', id), inspectionData);
+    } catch (error) {
+      throw mapFirebaseError(error, 'Erro ao salvar inspecao de seguranca.');
+    }
+  },
   createTripId() {
     return doc(collection(firestore, 'trips')).id;
   },

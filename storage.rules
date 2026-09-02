@@ -34,5 +34,19 @@ service firebase.storage {
         && request.resource.contentType == 'application/pdf';
       allow delete: if isAdmin();
     }
+
+    match /security-inspections/{inspectionId}/{fileName} {
+      allow read: if isAdmin();
+      allow write: if isAdmin()
+        && request.resource.size <= 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    match /light-vehicle-checklists/{checklistId}/{fileName} {
+      allow read: if isAdmin();
+      allow write: if isAdmin()
+        && request.resource.size <= 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
   }
 }
