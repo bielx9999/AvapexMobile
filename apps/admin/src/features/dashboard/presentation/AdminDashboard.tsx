@@ -30,6 +30,12 @@ const VehiclesPage = lazy(async () => ({
 const EquipmentPage = lazy(async () => ({
   default: (await import('../../equipment/presentation/EquipmentPage')).EquipmentPage,
 }));
+const LoadPlanningPage = lazy(async () => ({
+  default: (await import('../../load-planning/presentation/LoadPlanningPage')).LoadPlanningPage,
+}));
+const EquipmentChecklistsPage = lazy(async () => ({
+  default: (await import('../../equipment/presentation/EquipmentChecklistsPage')).EquipmentChecklistsPage,
+}));
 const SecurityInspectionsPage = lazy(async () => ({
   default: (await import('../../security-inspections/presentation/SecurityInspectionsPage')).SecurityInspectionsPage,
 }));
@@ -77,8 +83,10 @@ type AdminDashboardProps = {
 const pageConfig: Record<AdminPage, { category: string; description: string; title: string }> = {
   checklists: { category: 'CheckLists', description: 'Acompanhe conformidade e volume de inspecoes.', title: 'Checklists operacionais' },
   'security-inspections': { category: 'CheckLists', description: 'Inspecoes realizadas pelos tecnicos de seguranca.', title: 'Inspecoes de seguranca' },
+  'equipment-checklists': { category: 'CheckLists', description: 'Confira os equipamentos vinculados aos veiculos e registre as tratativas.', title: 'Checklist de equipamentos' },
   fueling: { category: 'Operacao', description: 'Monitore registros e comprovantes de abastecimento.', title: 'Abastecimento' },
   equipment: { category: 'Operacao', description: 'Controle o estoque, atribuicoes e inspecoes dos equipamentos de amarracao.', title: 'Equipamentos de Amarracao' },
+  'load-planning': { category: 'Operacao', description: 'Cadastre dimensoes de carrocerias e cargas para simular o posicionamento.', title: 'Planejamento de Carga 3D' },
   deliveries: { category: 'Operacao', description: 'Acompanhe pedidos, status, motoristas e comprovantes em tempo real.', title: 'Gestao de Entregas' },
   receipts: { category: 'Operacao', description: 'Valide comprovantes enviados pelos motoristas.', title: 'Comprovantes' },
   'route-planner': { category: 'Operacao', description: 'Monte, visualize e salve rotas utilizadas nas programacoes de transporte.', title: 'Roteirizador' },
@@ -235,12 +243,16 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
             />
           ) : activePage === 'security-inspections' ? (
             <SecurityInspectionsPage inspections={data.securityInspections} loading={loading} users={data.users} vehicles={data.vehicles} />
+          ) : activePage === 'equipment-checklists' ? (
+            <EquipmentChecklistsPage currentUser={session.profile} users={data.users} vehicles={data.vehicles} />
           ) : activePage === 'receipts' ? (
             <ComprovantesPage deliveries={data.deliveries} loading={loading} onChanged={loadData} receipts={data.receipts} />
           ) : activePage === 'fueling' ? (
             <AbastecimentoPage fueling={data.fueling} loading={loading} onChanged={loadData} />
           ) : activePage === 'equipment' ? (
             <EquipmentPage users={data.users} vehicles={data.vehicles} />
+          ) : activePage === 'load-planning' ? (
+            <LoadPlanningPage userId={session.firebaseUser.uid} />
           ) : activePage === 'users' ? (
             <UsersPage
               currentUid={session.firebaseUser.uid}

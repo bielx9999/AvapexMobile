@@ -5,9 +5,11 @@ import {
   CheckCircle2,
   ClipboardList,
   Eye,
+  FileSpreadsheet,
   Filter,
   LineChart,
   LoaderCircle,
+  Printer,
   Search,
   Send,
   UsersRound,
@@ -48,6 +50,8 @@ export function ChecklistsPage({
   const [driverId, setDriverId] = useState('');
   const [type, setType] = useState<'all' | ChecklistType>('all');
   const [query, setQuery] = useState('');
+  const [tableDate, setTableDate] = useState('');
+  const [reviewFilter, setReviewFilter] = useState<'all' | 'pending' | 'approved' | 'reported'>('all');
   const [selectedChecklist, setSelectedChecklist] = useState<Checklist | null>(null);
   const [reportMessage, setReportMessage] = useState('');
   const [actionError, setActionError] = useState('');
@@ -84,6 +88,12 @@ export function ChecklistsPage({
       if (type !== 'all' && checklist.type !== type) {
         return false;
       }
+      if (tableDate && checklist.createdAt?.toISOString().slice(0, 10) !== tableDate) {
+        return false;
+      }
+      if (reviewFilter !== 'all' && (checklist.adminReviewStatus ?? 'pending') !== reviewFilter) {
+        return false;
+      }
       if (!normalizedQuery) {
         return true;
       }
@@ -100,7 +110,7 @@ export function ChecklistsPage({
         .toLowerCase();
       return searchable.includes(normalizedQuery);
     });
-  }, [checklists, driverId, driverNames, endDate, query, startDate, type]);
+  }, [checklists, driverId, driverNames, endDate, query, reviewFilter, startDate, tableDate, type]);
 
   const stats = useMemo(() => {
     const total = filteredChecklists.length;
@@ -141,21 +151,7 @@ export function ChecklistsPage({
       .sort((a, b) => b.total - a.total);
   }, [filteredChecklists]);
 
-  const byDay = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const checklist of filteredChecklists) {
-      if (!checklist.createdAt) {
-        continue;
-      }
-      const key = checklist.createdAt.toISOString().slice(0, 10);
-      counts.set(key, (counts.get(key) ?? 0) + 1);
-    }
-    return [...counts.entries()]
-      .map(([date, total]) => ({ date, total }))
-      .sort((a, b) => a.date.localeCompare(b.date));
-  }, [filteredChecklists]);
-
-  const activeFilterCount = [startDate, endDate, driverId, type !== 'all' ? type : '', query].filter(Boolean).length;
+  const activeFilterCount = [startDate, endDate, driverId, type !== 'all' ? type : '', query, tableDate, reviewFilter !== 'all' ? reviewFilter : ''].filter(Boolean).length;
 
   useEffect(() => {
     onActiveFilterCountChange?.(activeFilterCount);
@@ -167,6 +163,8 @@ export function ChecklistsPage({
     setDriverId('');
     setType('all');
     setQuery('');
+    setTableDate('');
+    setReviewFilter('all');
   }
 
   function openAnalysis(checklist: Checklist) {
@@ -236,6 +234,12 @@ export function ChecklistsPage({
                 <input className="ui-input h-10 w-full px-3 text-sm" type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
               </label>
               <label className="block">
+                <span className="mb-2 block text-sm font-medium text-zinc-700">Status da analise</span>
+                <select className="ui-input h-10 w-full px-3 text-sm" value={reviewFilter} onChange={(event) => setReviewFilter(event.target.value as typeof reviewFilter)}>
+                  <option value="all">Todos</option><option value="pending">Pendentes</option><option value="approved">Aprovados</option><option value="reported">Erro reportado</option>
+                </select>
+              </label>
+              <label className="block">
                 <span className="mb-2 block text-sm font-medium text-zinc-700">Data final</span>
                 <input className="ui-input h-10 w-full px-3 text-sm" type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
               </label>
@@ -292,16 +296,6 @@ export function ChecklistsPage({
         <MetricCard icon={<AlertTriangle size={19} />} label="Reprovados" tone="danger" value={loading ? '-' : stats.rejected} />
       </section>
 
-      <section className="grid gap-4">
-        <ChartCard icon={<LineChart size={18} />} title="Evolucao de checklists">
-          {byDay.length > 0 ? (
-            <ApexDatetimeChart data={byDay} />
-          ) : (
-            <EmptyText>Nenhum checklist encontrado no filtro.</EmptyText>
-          )}
-        </ChartCard>
-      </section>
-
       <section className="grid gap-4 xl:grid-cols-2">
         <ChartCard icon={<UsersRound size={18} />} title="Checklists por motorista">
           {byDriver.length > 0 ? (
@@ -330,8 +324,13 @@ export function ChecklistsPage({
       </section>
 
       <section className="ui-card overflow-hidden">
-        <div className="border-b border-zinc-200 px-4 py-3">
-          <h2 className="font-semibold">Registros de checklist</h2>
+        <div className="flex flex-col gap-3 border-b border-zinc-200 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
+          <div><h2 className="font-semibold">Registros de checklist</h2><p className="mt-1 text-xs text-zinc-500">Selecione uma data ou situação para localizar os registros.</p></div>
+          <div className="grid grid-cols-2 gap-2 sm:flex">
+            <input aria-label="Data dos checklists" className="ui-input h-10 min-w-0 px-3 text-sm" title="Data dos checklists" type="date" value={tableDate} onChange={(event) => setTableDate(event.target.value)} />
+            <select aria-label="Status da analise" className="ui-input h-10 min-w-0 px-3 text-sm" value={reviewFilter} onChange={(event) => setReviewFilter(event.target.value as typeof reviewFilter)}><option value="all">Todos os status</option><option value="pending">Pendentes</option><option value="approved">Aprovados</option><option value="reported">Erro reportado</option></select>
+            {(tableDate || reviewFilter !== 'all') ? <button className="ui-button col-span-2 h-10 gap-2 border border-zinc-200 bg-white px-3 text-sm sm:col-span-1" onClick={() => { setTableDate(''); setReviewFilter('all'); }} type="button"><X size={15} />Limpar</button> : null}
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="ui-table min-w-[920px]">
@@ -371,7 +370,8 @@ export function ChecklistsPage({
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex justify-end">
+                    <div className="flex justify-end gap-2">
+                      {(checklist.adminReviewStatus ?? 'pending') !== 'pending' ? <><button aria-label="Imprimir checklist" className="ui-icon-button h-9 w-9 border-zinc-200 bg-white text-zinc-700" onClick={() => printOperationalChecklist(checklist, checklist.driverName || driverNames.get(checklist.driverId) || checklist.driverId)} title="Imprimir PDF" type="button"><Printer size={15} /></button><button aria-label="Exportar checklist para Excel" className="ui-icon-button h-9 w-9 border-zinc-200 bg-white text-zinc-700" onClick={() => exportOperationalChecklistExcel(checklist, checklist.driverName || driverNames.get(checklist.driverId) || checklist.driverId)} title="Exportar Excel" type="button"><FileSpreadsheet size={15} /></button></> : null}
                       <button
                         className="ui-button h-9 gap-2 border border-zinc-200 bg-white px-3 text-xs font-medium text-zinc-700 hover:bg-zinc-50"
                         onClick={() => openAnalysis(checklist)}
@@ -486,103 +486,6 @@ function ApexBarChart({ categories, data, color, seriesName }: ApexBarChartProps
 
   return (
     <Chart height={260} options={options} series={[{ data, name: seriesName }]} type="bar" />
-  );
-}
-
-type ApexDatetimeChartProps = {
-  data: Array<{ date: string; total: number }>;
-};
-
-function ApexDatetimeChart({ data }: ApexDatetimeChartProps) {
-  const seriesData = data.map((item) => ({
-    x: new Date(`${item.date}T12:00:00`).getTime(),
-    y: item.total,
-  }));
-
-  const options: ApexOptions = {
-    chart: {
-      id: 'checklist-datetime-xaxis',
-      fontFamily: 'Inter, system-ui, sans-serif',
-      toolbar: {
-        show: true,
-        tools: {
-          download: false,
-          pan: false,
-          reset: true,
-          selection: false,
-          zoom: true,
-          zoomin: true,
-          zoomout: true,
-        },
-      },
-      zoom: {
-        autoScaleYaxis: true,
-        enabled: true,
-        type: 'x',
-      },
-    },
-    colors: ['#FACC15'],
-    dataLabels: { enabled: false },
-    markers: {
-      hover: { size: 6 },
-      size: 3,
-      strokeColors: '#FFFFFF',
-      strokeWidth: 2,
-    },
-    noData: {
-      text: 'Sem dados no periodo',
-      style: {
-        color: '#71717A',
-      },
-    },
-    grid: {
-      borderColor: '#E5E7EB',
-      strokeDashArray: 4,
-    },
-    stroke: {
-      curve: 'smooth',
-      width: 2.5,
-    },
-    tooltip: {
-      theme: 'light',
-      x: { format: 'dd/MM/yyyy' },
-      y: {
-        formatter: (value) => `${Math.round(Number(value))} checklists`,
-      },
-    },
-    xaxis: {
-      axisBorder: { color: '#E5E7EB' },
-      axisTicks: { color: '#E5E7EB' },
-      labels: {
-        datetimeUTC: false,
-        format: 'dd/MM',
-        style: { colors: '#52525B' },
-      },
-      type: 'datetime',
-    },
-    yaxis: {
-      decimalsInFloat: 0,
-      forceNiceScale: true,
-      min: 0,
-      labels: {
-        formatter: (value) => `${Math.round(Number(value))}`,
-        style: { colors: '#52525B' },
-      },
-    },
-  };
-
-  return (
-    <Chart
-      height={230}
-      options={options}
-      series={[
-        {
-          data: seriesData,
-          name: 'Checklists',
-        },
-      ]}
-      type="line"
-    />
   );
 }
 
@@ -791,6 +694,33 @@ function checklistLabel(type: ChecklistType) {
     strap_ratchet: 'Cinta/Catraca',
   };
   return labels[type] ?? type;
+}
+
+function checklistHtmlEscape(value: unknown) {
+  return String(value ?? '').replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' })[character] ?? character);
+}
+
+function operationalChecklistFileName(checklist: Checklist, extension: string) {
+  const date = checklist.createdAt?.toISOString().slice(0, 10) ?? 'sem-data';
+  return `checklist-${checklist.vehiclePlate || checklist.vehicleId}-${date}${extension}`.replace(/\s+/g, '-').toLowerCase();
+}
+
+function printOperationalChecklist(checklist: Checklist, driverName: string) {
+  if ((checklist.adminReviewStatus ?? 'pending') === 'pending') return;
+  const answers = objectRows(checklist.answers && Object.keys(checklist.answers).length ? checklist.answers : checklist.items);
+  const rows = answers.map(([key, value], index) => `<tr><td>${index + 1}</td><td>${checklistHtmlEscape(formatFieldName(key))}</td><td>${checklistHtmlEscape(formatUnknownValue(value))}</td></tr>`).join('');
+  const photos = checklist.photoUrls.length ? `<section class="photos"><h2>Registros fotograficos</h2><div class="photo-grid">${checklist.photoUrls.map((url, index) => `<figure><img src="${checklistHtmlEscape(url)}" alt="Foto ${index + 1}"><figcaption>Foto ${index + 1}</figcaption></figure>`).join('')}</div></section>` : '';
+  const signature = checklist.signatureUrl ? `<img class="signature-image" src="${checklistHtmlEscape(checklist.signatureUrl)}" alt="Assinatura do motorista">` : '<div class="signature-space"></div>';
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${checklistHtmlEscape(checklistLabel(checklist.type))}</title><style>@page{size:A4;margin:12mm}*{box-sizing:border-box}body{margin:0;color:#18181b;font-family:Arial,sans-serif;font-size:11px}.page{position:relative;min-height:270mm;padding:10mm;overflow:hidden}.page:before{content:"";position:absolute;inset:0;background:url('/checklist-pdf-background.png') right 10mm bottom 10mm/55% auto no-repeat;opacity:.1;z-index:0}.content{position:relative;z-index:1}.brand{display:flex;align-items:flex-start;justify-content:space-between;border-bottom:3px solid #f3c400;padding-bottom:10px}.brand img{width:165px}.title{text-align:right}.title h1{margin:0;font-size:21px}.title p{margin:5px 0 0;color:#52525b}.info{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:14px 0}.box{border:1px solid #d4d4d8;border-radius:6px;background:rgba(255,255,255,.94);padding:8px}.label{display:block;color:#71717a;font-size:9px;text-transform:uppercase}.value{display:block;margin-top:3px;font-weight:700}table{width:100%;border-collapse:collapse;background:rgba(255,255,255,.94)}th,td{border:1px solid #d4d4d8;padding:7px;text-align:left;vertical-align:top}th{background:#f4f4f5;font-size:9px;text-transform:uppercase}.review{margin-top:12px;border:1px solid #d4d4d8;border-left:4px solid #f3c400;border-radius:6px;padding:9px;background:#fff}.review strong{display:block;margin-bottom:4px}.photos{margin-top:12px;break-inside:avoid}.photos h2{font-size:12px}.photo-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}.photo-grid figure{margin:0}.photo-grid img{width:100%;height:105px;object-fit:cover;border:1px solid #d4d4d8}.photo-grid figcaption{text-align:center;font-size:9px;color:#71717a}.signatures{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:28px;break-inside:avoid}.signature-wrap{height:86px;display:flex;align-items:flex-end;justify-content:center;border-bottom:1px solid #18181b}.signature-image{max-width:100%;max-height:80px;object-fit:contain}.signature-space{height:80px}.signature-label{text-align:center;padding-top:5px;font-size:10px}.footer{margin-top:14px;text-align:right;color:#71717a;font-size:9px}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.page{padding:0}}</style></head><body><main class="page"><div class="content"><header class="brand"><img src="/checklist-pdf-logo.png" alt="AVAPEX Transportes"><div class="title"><h1>Checklist operacional</h1><p>${checklistHtmlEscape(checklistLabel(checklist.type))}</p></div></header><section class="info"><div class="box"><span class="label">Data e hora</span><span class="value">${checklistHtmlEscape(formatDate(checklist.createdAt))}</span></div><div class="box"><span class="label">Motorista</span><span class="value">${checklistHtmlEscape(driverName)}</span></div><div class="box"><span class="label">Veiculo</span><span class="value">${checklistHtmlEscape(checklist.vehiclePlate || checklist.vehicleId || '-')}</span></div><div class="box"><span class="label">Quilometragem</span><span class="value">${checklist.kmRegistered ? checklist.kmRegistered.toLocaleString('pt-BR') + ' km' : '-'}</span></div><div class="box"><span class="label">Resultado</span><span class="value">${checklist.hasCriticalFailure ? 'Com nao conformidade' : 'Sem falha critica'}</span></div><div class="box"><span class="label">Analise administrativa</span><span class="value">${checklistHtmlEscape(reviewStatusLabel(checklist))}</span></div></section><table><thead><tr><th>#</th><th>Item verificado</th><th>Resposta</th></tr></thead><tbody>${rows}</tbody></table><section class="review"><strong>Resultado da analise administrativa</strong>${checklistHtmlEscape(checklist.adminReviewMessage || reviewStatusLabel(checklist))}<br><small>Revisado em ${checklistHtmlEscape(formatDate(checklist.reviewedAt ?? null))}</small></section>${photos}<section class="signatures"><div><div class="signature-wrap">${signature}</div><div class="signature-label">Assinatura do motorista<br>${checklistHtmlEscape(driverName)}</div></div><div><div class="signature-wrap"><div class="signature-space"></div></div><div class="signature-label">Assinatura do responsavel pela analise</div></div></section><div class="footer">Documento gerado em ${checklistHtmlEscape(formatDate(new Date()))}</div></div></main><script>window.addEventListener('load',()=>setTimeout(()=>window.print(),400));</script></body></html>`;
+  const printWindow = window.open('', '_blank', 'width=1000,height=1200'); if (!printWindow) return; printWindow.document.open(); printWindow.document.write(html); printWindow.document.close();
+}
+
+function exportOperationalChecklistExcel(checklist: Checklist, driverName: string) {
+  if ((checklist.adminReviewStatus ?? 'pending') === 'pending') return;
+  const answers = objectRows(checklist.answers && Object.keys(checklist.answers).length ? checklist.answers : checklist.items);
+  const rows = answers.map(([key, value], index) => `<tr><td>${index + 1}</td><td>${checklistHtmlEscape(formatFieldName(key))}</td><td>${checklistHtmlEscape(formatUnknownValue(value))}</td></tr>`).join('');
+  const content = `<!doctype html><html><head><meta charset="utf-8"></head><body><table border="1"><tr><th colspan="3" style="font-size:18px;background:#f3c400">CHECKLIST OPERACIONAL</th></tr><tr><th>Modelo</th><td colspan="2">${checklistHtmlEscape(checklistLabel(checklist.type))}</td></tr><tr><th>Data e hora</th><td colspan="2">${checklistHtmlEscape(formatDate(checklist.createdAt))}</td></tr><tr><th>Motorista</th><td colspan="2">${checklistHtmlEscape(driverName)}</td></tr><tr><th>Veiculo</th><td colspan="2">${checklistHtmlEscape(checklist.vehiclePlate || checklist.vehicleId)}</td></tr><tr><th>KM</th><td colspan="2">${checklist.kmRegistered || ''}</td></tr><tr><th>Status administrativo</th><td colspan="2">${checklistHtmlEscape(reviewStatusLabel(checklist))}</td></tr><tr><th>Mensagem da analise</th><td colspan="2">${checklistHtmlEscape(checklist.adminReviewMessage || '')}</td></tr><tr></tr><tr><th>#</th><th>Item verificado</th><th>Resposta</th></tr>${rows}</table></body></html>`;
+  const url = URL.createObjectURL(new Blob(['\ufeff', content], { type: 'application/vnd.ms-excel;charset=utf-8' })); const link = document.createElement('a'); link.href = url; link.download = operationalChecklistFileName(checklist, '.xls'); link.click(); URL.revokeObjectURL(url);
 }
 
 function formatDate(value: Date | null) {

@@ -689,6 +689,9 @@ export function mapEquipmentInspection(id: string, data: Record<string, unknown>
       result: readString(item.result, 'ok') as EquipmentInspection['items'][number]['result'],
       observation: readString(item.observation),
       photoUrl: readString(item.photoUrl),
+      disposition: readString(item.disposition) as EquipmentInspection['items'][number]['disposition'],
+      replacementEquipmentId: readString(item.replacementEquipmentId),
+      replacementEquipmentCode: readString(item.replacementEquipmentCode),
     }))
     : [];
   return {
@@ -704,6 +707,13 @@ export function mapEquipmentInspection(id: string, data: Record<string, unknown>
     responsibleDriverName: readString(data.responsibleDriverName),
     status: readString(data.status, 'pending') as EquipmentInspection['status'],
     notes: readString(data.notes),
+    inspectionLocation: readString(data.inspectionLocation),
+    location: data.location ? {
+      latitude: readNumber(readRecord(data.location).latitude),
+      longitude: readNumber(readRecord(data.location).longitude),
+      display: readString(readRecord(data.location).display),
+    } : undefined,
+    signaturePoints: Array.isArray(data.signaturePoints) ? data.signaturePoints.map((point) => readRecord(point)).map((point) => ({ x: readNumber(point.x), y: readNumber(point.y) })) : [],
     items,
     createdAt: readDate(data.createdAt),
     updatedAt: readDate(data.updatedAt),

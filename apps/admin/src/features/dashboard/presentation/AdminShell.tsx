@@ -18,6 +18,8 @@ import {
   Navigation,
   PanelLeftClose,
   PanelLeftOpen,
+  PackageCheck,
+  Box,
   Route,
   Truck,
   Users,
@@ -35,6 +37,7 @@ export type AdminPage =
   | 'deliveries'
   | 'checklists'
   | 'security-inspections'
+  | 'equipment-checklists'
   | 'receipts'
   | 'fueling'
   | 'equipment'
@@ -45,7 +48,8 @@ export type AdminPage =
   | 'light-vehicle-maintenance'
   | 'localities'
   | 'onedrive'
-  | 'powerbi';
+  | 'powerbi'
+  | 'load-planning';
 
 type NavSection = {
   icon: LucideIcon;
@@ -64,6 +68,7 @@ const navSections: NavSection[] = [
       { icon: FileCheck2, key: 'receipts', label: 'Comprovantes' },
       { icon: Fuel, key: 'fueling', label: 'Abastecimento' },
       { icon: Boxes, key: 'equipment', label: 'Equipamentos' },
+      { icon: Box, key: 'load-planning', label: 'Planejamento de Carga 3D' },
     ],
   },
   {
@@ -72,6 +77,7 @@ const navSections: NavSection[] = [
     items: [
       { icon: ClipboardCheck, key: 'checklists', label: 'Checklists operacionais' },
       { icon: ShieldCheck, key: 'security-inspections', label: 'Inspecoes de seguranca' },
+      { icon: PackageCheck, key: 'equipment-checklists', label: 'Checklist de equipamentos' },
     ],
   },
   {

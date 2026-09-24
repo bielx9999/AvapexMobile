@@ -1,6 +1,7 @@
 import {
   collection,
   doc,
+  getDoc,
   getDocs,
   limit,
   orderBy,
@@ -32,7 +33,7 @@ import type {
   Vehicle,
 } from '../../shared/domain/models';
 
-export type EquipmentTypeValue = 'strap' | 'ratchet' | 'chain' | 'tensioner';
+export type EquipmentTypeValue = 'strap' | 'ratchet' | 'chain' | 'tensioner' | 'tarp' | 'rope';
 export type EquipmentImportInput = { type: EquipmentTypeValue; code: string };
 
 export const equipmentLabels: Record<EquipmentTypeValue, string> = {
@@ -40,6 +41,8 @@ export const equipmentLabels: Record<EquipmentTypeValue, string> = {
   ratchet: 'Catraca',
   chain: 'Corrente',
   tensioner: 'Tensionador',
+  tarp: 'Lona',
+  rope: 'Corda',
 };
 
 export const equipmentStatusLabels: Record<EquipmentStatus, string> = {
@@ -389,6 +392,87 @@ export const equipmentRepository = {
       await batch.commit();
     } catch (error) {
       throw mapFirebaseError(error, 'Erro ao finalizar inspecao mensal.');
+    }
+  },
+
+  async saveEquipmentChecklist(input: { inspection: EquipmentInspection; items: EquipmentInspectionItem[]; vehicle: Vehicle }) {
+    try {
+      const invalid = input.items.find((item) => item.result !== 'ok' && (!item.disposition || (item.disposition === 'replace' && !item.replacementEquipmentId)));
+      if (invalid) throw new Error(`Informe a tratativa do equipamento ${invalid.equipmentCode}.`);
+
+      const replacementIds = input.items.flatMap((item) => item.disposition === 'replace' && item.replacementEquipmentId ? [item.replacementEquipmentId] : []);
+      if (new Set(replacementIds).size !== replacementIds.length) throw new Error('Um equipamento de reposicao nao pode ser usado mais de uma vez.');
+      const replacements = await Promise.all(replacementIds.map(async (id) => {
+        const snapshot = await getDoc(doc(firestore, 'equipment', id));
+        if (!snapshot.exists()) throw new Error('Equipamento de reposicao nao encontrado.');
+        return mapEquipment(snapshot.id, snapshot.data());
+      }));
+      replacements.forEach((equipment) => {
+        if (equipment.status !== 'in_stock') throw new Error(`${equipment.code} nao esta mais disponivel em estoque.`);
+      });
+
+      const nonConformingItems = input.items.filter((item) => item.result !== 'ok');
+      const activeAssignments = new Map(await Promise.all(nonConformingItems.map(async (item) => [
+        item.equipmentId,
+        await getDocs(query(collection(firestore, 'equipmentAssignments'), where('equipmentId', '==', item.equipmentId), where('status', '==', 'active'))),
+      ] as const)));
+      const ref = doc(collection(firestore, 'equipmentInspections'));
+      const batch = writeBatch(firestore);
+      const cleanItems = input.items.map((item) => ({
+        equipmentId: item.equipmentId, equipmentCode: item.equipmentCode, equipmentType: item.equipmentType,
+        expected: item.expected, result: item.result, observation: item.observation.trim(), photoUrl: item.photoUrl,
+        disposition: item.disposition ?? '', replacementEquipmentId: item.replacementEquipmentId ?? '', replacementEquipmentCode: item.replacementEquipmentCode ?? '',
+      }));
+      batch.set(ref, {
+        id: ref.id, vehicleId: input.vehicle.id, vehiclePlate: input.vehicle.plate, inspectionType: 'admin_monthly',
+        referenceMonth: input.inspection.referenceMonth, referenceYear: input.inspection.referenceYear,
+        performedAt: serverTimestamp(), performedByUserId: auth.currentUser?.uid ?? '',
+        responsibleDriverId: input.inspection.responsibleDriverId, responsibleDriverName: input.inspection.responsibleDriverName,
+        status: cleanItems.some((item) => item.result !== 'ok') ? 'divergence' : 'completed', notes: input.inspection.notes.trim(),
+        inspectionLocation: input.inspection.inspectionLocation?.trim() ?? '', location: input.inspection.location ?? null,
+        signaturePoints: input.inspection.signaturePoints ?? [], items: cleanItems, createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+      });
+
+      input.items.forEach((item) => {
+        const oldRef = doc(firestore, 'equipment', item.equipmentId);
+        if (item.result === 'ok') {
+          batch.update(oldRef, { lastInspectionAt: serverTimestamp(), updatedAt: serverTimestamp() });
+          return;
+        }
+        const replacement = replacements.find((candidate) => candidate.id === item.replacementEquipmentId);
+        batch.update(oldRef, {
+          status: 'retired', currentVehicleId: '', currentVehiclePlate: '', currentDriverId: '', currentDriverName: '',
+          lastInspectionAt: serverTimestamp(), updatedAt: serverTimestamp(),
+        });
+        activeAssignments.get(item.equipmentId)?.docs.forEach((assignment) => batch.update(assignment.ref, { status: 'returned', returnedAt: serverTimestamp(), returnedBy: auth.currentUser?.uid ?? '' }));
+        const occurrenceRef = doc(collection(firestore, 'equipmentOccurrences'));
+        batch.set(occurrenceRef, {
+          id: occurrenceRef.id, equipmentId: item.equipmentId, equipmentCode: item.equipmentCode, vehicleId: input.vehicle.id,
+          vehiclePlate: input.vehicle.plate, type: 'damaged', reportedBy: auth.currentUser?.uid ?? '', reportedAt: serverTimestamp(),
+          description: `${item.observation.trim()} | Tratativa: ${item.disposition === 'replace' ? `troca por ${replacement?.code ?? ''}` : 'descarte'}`,
+          status: item.disposition === 'discard' ? 'resolved' : 'open', resolvedAt: item.disposition === 'discard' ? serverTimestamp() : null,
+          resolvedBy: item.disposition === 'discard' ? auth.currentUser?.uid ?? '' : '', photoUrl: '',
+        });
+        if (replacement) {
+          const assignmentRef = doc(collection(firestore, 'equipmentAssignments'));
+          batch.update(doc(firestore, 'equipment', replacement.id), {
+            status: 'assigned', currentVehicleId: input.vehicle.id, currentVehiclePlate: input.vehicle.plate,
+            currentDriverId: input.inspection.responsibleDriverId, currentDriverName: input.inspection.responsibleDriverName,
+            currentStorageId: '', currentStorageName: '', updatedAt: serverTimestamp(),
+          });
+          batch.set(assignmentRef, {
+            id: assignmentRef.id, equipmentId: replacement.id, equipmentCode: replacement.code, equipmentType: replacement.type,
+            vehicleId: input.vehicle.id, vehiclePlate: input.vehicle.plate, responsibleDriverId: input.inspection.responsibleDriverId,
+            responsibleDriverName: input.inspection.responsibleDriverName, assignedAt: serverTimestamp(), assignedBy: auth.currentUser?.uid ?? '',
+            returnedAt: null, returnedBy: '', status: 'active', observation: `Reposicao da inspecao ${ref.id}`,
+          });
+          const movement = movementData({ equipment: replacement, type: 'assignment', destinationVehicle: input.vehicle, observation: `Reposicao do equipamento ${item.equipmentCode}` });
+          batch.set(movement.ref, movement.data);
+        }
+      });
+      await batch.commit();
+    } catch (error) {
+      throw mapFirebaseError(error, 'Erro ao salvar checklist de equipamentos.');
     }
   },
 };

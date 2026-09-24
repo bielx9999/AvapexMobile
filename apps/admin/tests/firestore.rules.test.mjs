@@ -55,6 +55,19 @@ after(async () => {
   await environment.cleanup();
 });
 
+describe('load planning permissions', { concurrency: false }, () => {
+  for (const path of ['loadVehicles', 'loadCargos', 'loadPlans']) {
+    test(`${path} is restricted to active administrators`, async () => {
+      const value = { name: 'test', updatedAt: Timestamp.now() };
+      await assertSucceeds(setDoc(doc(environment.authenticatedContext('admin-1').firestore(), path, 'sample'), value));
+      await assertSucceeds(getDoc(doc(environment.authenticatedContext('admin-1').firestore(), path, 'sample')));
+      await assertFails(getDoc(doc(environment.authenticatedContext('driver-1').firestore(), path, 'sample')));
+      await assertFails(setDoc(doc(environment.authenticatedContext('driver-1').firestore(), path, 'sample'), value));
+      await assertFails(getDoc(doc(environment.unauthenticatedContext().firestore(), path, 'sample')));
+    });
+  }
+});
+
 describe('CPF login identifier permissions', { concurrency: false }, () => {
   test('unauthenticated login can resolve one CPF identifier', async () => {
     const firestore = environment.unauthenticatedContext().firestore();

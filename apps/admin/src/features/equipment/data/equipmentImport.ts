@@ -28,6 +28,10 @@ const typeByLabel: Record<string, EquipmentTypeValue> = {
   CORRENTES: 'chain',
   TENSIONADOR: 'tensioner',
   TENSIONADORES: 'tensioner',
+  LONA: 'tarp',
+  LONAS: 'tarp',
+  CORDA: 'rope',
+  CORDAS: 'rope',
 };
 
 export async function analyzeEquipmentWorkbook(file: File, existingEquipment: Equipment[]): Promise<EquipmentImportAnalysis> {
@@ -81,7 +85,7 @@ function parseRow(row: unknown[], typeColumn: number, codeColumn: number, source
   const type = typeByLabel[normalize(rawType)] ?? null;
   const issues: string[] = [];
   if (!rawType) issues.push('Tipo do equipamento obrigatorio');
-  else if (!type) issues.push('Tipo invalido. Use Cinta, Catraca, Corrente ou Tensionador');
+  else if (!type) issues.push('Tipo invalido. Use Cinta, Catraca, Corrente, Tensionador, Lona ou Corda');
   if (!code) issues.push('Numero de identificacao obrigatorio');
   return { sourceRow, type, code, issues };
 }

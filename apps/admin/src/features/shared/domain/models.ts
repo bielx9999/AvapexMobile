@@ -27,7 +27,7 @@ export type ProgrammedVehicleType =
   | 'hr';
 export type ChecklistType = 'departure' | 'arrival' | 'vehicle_daily' | 'chain_tensioner' | 'strap_ratchet';
 export type FuelType = 'diesel' | 'arla';
-export type EquipmentType = 'strap' | 'ratchet' | 'chain' | 'tensioner';
+export type EquipmentType = 'strap' | 'ratchet' | 'chain' | 'tensioner' | 'tarp' | 'rope';
 export type EquipmentStatus = 'in_stock' | 'assigned' | 'in_use' | 'damaged' | 'under_review' | 'lost' | 'retired';
 export type EquipmentMovementType = 'registration' | 'stock_entry' | 'assignment' | 'transfer' | 'return' | 'lost' | 'found' | 'retirement';
 export type EquipmentInspectionStatus = 'pending' | 'completed' | 'divergence' | 'not_applicable';
@@ -597,6 +597,9 @@ export type EquipmentInspectionItem = {
   result: EquipmentInspectionResult;
   observation: string;
   photoUrl: string;
+  disposition?: 'replace' | 'discard' | '';
+  replacementEquipmentId?: string;
+  replacementEquipmentCode?: string;
 };
 
 export type EquipmentInspection = {
@@ -612,6 +615,9 @@ export type EquipmentInspection = {
   responsibleDriverName: string;
   status: EquipmentInspectionStatus;
   notes: string;
+  inspectionLocation?: string;
+  location?: { latitude: number; longitude: number; display: string };
+  signaturePoints?: Array<{ x: number; y: number }>;
   items: EquipmentInspectionItem[];
   createdAt: Date | null;
   updatedAt: Date | null;

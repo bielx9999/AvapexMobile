@@ -2,23 +2,23 @@ import {
   ArrowDown,
   ArrowUp,
   Calculator,
-  Copy,
+  ExternalLink,
   Eye,
   LoaderCircle,
   MapPin,
   Navigation,
   Pencil,
   Plus,
-  Power,
   Route,
   Save,
+  Search,
   Trash2,
   X,
 } from 'lucide-react';
 import { type DragEvent, useMemo, useRef, useState } from 'react';
 import { adminWriteRepository } from '../../shared/data/firestoreCollections';
 import type { Locality, RouteTemplate, RouteTemplatePoint, RouteVersionDefinition } from '../../shared/domain/models';
-import { ActionIconButton, EmptyState, MetricCard, TableSkeleton } from '../../shared/presentation/ui';
+import { EmptyState, MetricCard } from '../../shared/presentation/ui';
 import { SearchableCombobox, type ComboboxOption } from '../../scheduling/presentation/components/SearchableCombobox';
 import { calculateRoadRoute } from '../data/routeCalculationService';
 import { RoutePlannerMap } from './RoutePlannerMap';
@@ -32,7 +32,7 @@ type RoutePlannerPageProps = {
 
 type PlannerMode = 'new' | 'edit' | 'view';
 
-export function RoutePlannerPage({ loading, localities, onChanged, routeTemplates }: RoutePlannerPageProps) {
+export function RoutePlannerPage({ localities, onChanged, routeTemplates }: RoutePlannerPageProps) {
   const plannerRef = useRef<HTMLDivElement>(null);
   const [routeId, setRouteId] = useState('');
   const [mode, setMode] = useState<PlannerMode>('new');
@@ -45,20 +45,15 @@ export function RoutePlannerPage({ loading, localities, onChanged, routeTemplate
   const [addingVia, setAddingVia] = useState(false);
   const [calculating, setCalculating] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [busyId, setBusyId] = useState('');
   const [error, setError] = useState('');
-  const [query, setQuery] = useState('');
   const [showIntermediateEditor, setShowIntermediateEditor] = useState(false);
+  const [showRouteSearch, setShowRouteSearch] = useState(false);
+  const [endpointResetKey, setEndpointResetKey] = useState(0);
 
   const selectableLocalities = useMemo(
     () => localities.filter(validLocality).sort((a, b) => a.city.localeCompare(b.city) || a.reference.localeCompare(b.reference)),
     [localities],
   );
-  const filteredRoutes = useMemo(() => {
-    const term = query.trim().toLocaleLowerCase('pt-BR');
-    return routeTemplates.filter((routeTemplate) => !term
-      || `${routeTemplate.name} ${routeTemplate.description}`.toLocaleLowerCase('pt-BR').includes(term));
-  }, [query, routeTemplates]);
   const origin = points.find((point) => point.type === 'origin');
   const destination = points.find((point) => point.type === 'destination');
   const intermediates = points.filter((point) => point.type === 'stop' || point.type === 'via');
@@ -75,6 +70,31 @@ export function RoutePlannerPage({ loading, localities, onChanged, routeTemplate
     const locality = selectableLocalities.find((item) => item.id === localityId);
     const withoutCurrent = points.filter((point) => point.type !== type);
     replacePoints(locality ? [...withoutCurrent, localityPoint(locality, type)] : withoutCurrent);
+  }
+
+  function clearEndpoints() {
+    replacePoints(points.filter((point) => point.type !== 'origin' && point.type !== 'destination'));
+    setEndpointResetKey((current) => current + 1);
+  }
+
+  function openInGoogleMaps() {
+    const ordered = normalizePointOrder(points);
+    const routeOrigin = ordered.find((point) => point.type === 'origin');
+    const routeDestination = ordered.find((point) => point.type === 'destination');
+    if (!routeOrigin || !routeDestination) {
+      setError('Informe a origem e o destino antes de abrir a rota no Google Maps.');
+      return;
+    }
+    const coordinates = (point: RouteTemplatePoint) => `${point.latitude},${point.longitude}`;
+    const waypoints = ordered.filter((point) => point.type === 'stop' || point.type === 'via');
+    const params = new URLSearchParams({
+      api: '1',
+      origin: coordinates(routeOrigin),
+      destination: coordinates(routeDestination),
+      travelmode: 'driving',
+    });
+    if (waypoints.length) params.set('waypoints', waypoints.map(coordinates).join('|'));
+    window.open(`https://www.google.com/maps/dir/?${params.toString()}`, '_blank', 'noopener,noreferrer');
   }
 
   function addStop(localityId: string) {
@@ -217,50 +237,22 @@ export function RoutePlannerPage({ loading, localities, onChanged, routeTemplate
     setCalculated(null);
     setAddingVia(false);
     setShowIntermediateEditor(false);
+    setEndpointResetKey((current) => current + 1);
     setError('');
-  }
-
-  async function toggleStatus(routeTemplate: RouteTemplate) {
-    setBusyId(routeTemplate.id);
-    setError('');
-    try {
-      await adminWriteRepository.setRouteTemplateStatus(routeTemplate.id, routeTemplate.status === 'active' ? 'inactive' : 'active');
-      await onChanged();
-    } catch (updateError) {
-      setError(updateError instanceof Error ? updateError.message : 'Erro ao alterar o status da rota.');
-    } finally {
-      setBusyId('');
-    }
-  }
-
-  async function removeRoute(routeTemplate: RouteTemplate) {
-    if (!window.confirm(`Excluir definitivamente a rota ${routeTemplate.name}?`)) return;
-    setBusyId(routeTemplate.id);
-    setError('');
-    try {
-      await adminWriteRepository.deleteRouteTemplate(routeTemplate.id);
-      if (routeId === routeTemplate.id) resetPlanner();
-      await onChanged();
-    } catch (deleteError) {
-      setError(deleteError instanceof Error ? deleteError.message : 'Erro ao excluir a rota.');
-    } finally {
-      setBusyId('');
-    }
   }
 
   return (
-    <>
-      <section className="grid gap-3 sm:grid-cols-3">
+    <div className="flex flex-col gap-4 lg:h-[calc(100dvh-7.5rem)] lg:min-h-0 lg:overflow-hidden">
+      <section className="grid shrink-0 gap-3 sm:grid-cols-3">
         <MetricCard icon={<Route size={18} />} label="Rotas cadastradas" value={routeTemplates.length} />
         <MetricCard icon={<Navigation size={18} />} label="Rotas ativas" tone="success" value={routeTemplates.filter((routeTemplate) => routeTemplate.status === 'active').length} />
         <MetricCard icon={<MapPin size={18} />} label="Localidades disponiveis" value={selectableLocalities.length} />
       </section>
 
-      <section className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm" ref={plannerRef}>
-        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-200 px-5 py-4">
+      <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm" ref={plannerRef}>
+        <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-zinc-200 px-5 py-4">
           <div>
             <div className="flex items-center gap-2"><h2 className="font-semibold text-zinc-950">{mode === 'view' ? 'Visualizar rota' : routeId ? 'Editar rota' : 'Nova rota'}</h2>{routeId ? <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-semibold text-zinc-600">Nova versao ao salvar</span> : null}</div>
-            <p className="mt-0.5 text-sm text-zinc-500">Defina os pontos na ordem operacional e calcule o trajeto rodoviario.</p>
           </div>
           <div className="flex gap-2">
             {canEdit ? (
@@ -291,13 +283,30 @@ export function RoutePlannerPage({ loading, localities, onChanged, routeTemplate
                 Ponto intermediario
               </button>
             ) : null}
+            <button
+              className="ui-button h-9 gap-2 border border-zinc-300 bg-white px-3 text-sm font-medium text-zinc-800 hover:bg-zinc-50"
+              onClick={() => setShowRouteSearch(true)}
+              type="button"
+            >
+              <Search size={16} />
+              Pesquisar rota
+            </button>
+            <button
+              className="ui-button h-9 gap-2 border border-zinc-300 bg-white px-3 text-sm font-medium text-zinc-800 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={!origin || !destination}
+              onClick={openInGoogleMaps}
+              type="button"
+            >
+              <ExternalLink size={16} />
+              Abrir no Google Maps
+            </button>
             {mode === 'view' ? <button className="ui-button h-9 gap-2 border border-zinc-300 bg-white px-3 text-sm font-medium" onClick={() => setMode('edit')} type="button"><Pencil size={16} />Editar</button> : null}
             {(routeId || points.length > 0) ? <button className="ui-button h-9 gap-2 border border-zinc-300 bg-white px-3 text-sm font-medium" onClick={resetPlanner} type="button"><X size={16} />Limpar</button> : null}
           </div>
         </header>
 
-        <div className="grid min-h-[680px] lg:grid-cols-[minmax(380px,420px)_minmax(0,1fr)]">
-          <aside className="border-b border-zinc-200 bg-zinc-50/60 p-4 lg:border-b-0 lg:border-r">
+        <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(380px,420px)_minmax(0,1fr)]">
+          <aside className="ui-scrollbar-hidden border-b border-zinc-200 bg-zinc-50/60 p-4 lg:min-h-0 lg:overflow-y-auto lg:border-b-0 lg:border-r">
             <div className="space-y-4">
               <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
                 <div className="mb-4 flex items-center justify-between gap-3">
@@ -305,13 +314,20 @@ export function RoutePlannerPage({ loading, localities, onChanged, routeTemplate
                     <h3 className="text-sm font-semibold text-zinc-950">Cadastro da rota</h3>
                     <p className="mt-0.5 text-xs text-zinc-500">Selecione as localidades cadastradas.</p>
                   </div>
-                  <span className="rounded-full bg-zinc-100 px-2 py-1 text-xs font-semibold text-zinc-600">
-                    {points.length} pontos
-                  </span>
+                  <button
+                    aria-label="Limpar origem e destino"
+                    className="ui-icon-button h-9 w-9 shrink-0 border-zinc-200 bg-white hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40"
+                    disabled={!canEdit}
+                    onClick={clearEndpoints}
+                    title="Limpar origem e destino"
+                    type="button"
+                  >
+                    <img alt="" aria-hidden="true" className="h-4 w-4 object-contain" src="/brush.png" />
+                  </button>
                 </div>
                 <div className="space-y-4">
-                  <EndpointSelector disabled={!canEdit} label="Origem" localities={selectableLocalities} onChange={(value) => selectEndpoint('origin', value)} value={origin?.locationId ?? ''} />
-                  <EndpointSelector disabled={!canEdit} label="Destino" localities={selectableLocalities} onChange={(value) => selectEndpoint('destination', value)} value={destination?.locationId ?? ''} />
+                  <EndpointSelector disabled={!canEdit} key={`origin-${endpointResetKey}`} label="Origem" localities={selectableLocalities} onChange={(value) => selectEndpoint('origin', value)} value={origin?.locationId ?? ''} />
+                  <EndpointSelector disabled={!canEdit} key={`destination-${endpointResetKey}`} label="Destino" localities={selectableLocalities} onChange={(value) => selectEndpoint('destination', value)} value={destination?.locationId ?? ''} />
                 </div>
               </section>
 
@@ -337,7 +353,7 @@ export function RoutePlannerPage({ loading, localities, onChanged, routeTemplate
               {error ? <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700" role="alert">{error}</p> : null}
             </div>
           </aside>
-          <section className="min-h-[560px] bg-white">
+          <section className="min-h-[480px] bg-white lg:min-h-0">
             <RoutePlannerMap
               addingVia={addingVia}
               canEdit={canEdit}
@@ -350,27 +366,120 @@ export function RoutePlannerPage({ loading, localities, onChanged, routeTemplate
         </div>
       </section>
 
-      <section className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-200 px-5 py-4">
-          <div><h2 className="font-semibold text-zinc-950">Rotas salvas</h2><p className="text-sm text-zinc-500">Versoes utilizadas em programacoes permanecem preservadas.</p></div>
-          <input aria-label="Buscar rota" className="ui-input h-10 w-full px-3 text-sm sm:w-72" onChange={(event) => setQuery(event.target.value)} placeholder="Buscar por nome ou descricao" value={query} />
-        </div>
-        {loading ? <TableSkeleton columns={6} rows={5} /> : filteredRoutes.length === 0 ? <EmptyState description="Monte o primeiro trajeto usando as localidades cadastradas." title="Nenhuma rota encontrada" /> : (
-          <div className="overflow-x-auto">
-            <table className="min-w-[1180px] w-full text-left text-sm">
-              <thead className="bg-zinc-50 text-xs uppercase text-zinc-500"><tr><th className="px-4 py-3">Rota</th><th className="px-4 py-3">Trajeto</th><th className="px-4 py-3">Paradas</th><th className="px-4 py-3">Distancia</th><th className="px-4 py-3">Tempo</th><th className="px-4 py-3">Atualizacao</th><th className="px-4 py-3">Versao</th><th className="px-4 py-3">Status</th><th className="px-4 py-3 text-right">Acoes</th></tr></thead>
-              <tbody className="divide-y divide-zinc-100">{filteredRoutes.map((routeTemplate) => {
-                const routeOrigin = routeTemplate.currentVersion.points[0];
-                const routeDestination = routeTemplate.currentVersion.points.at(-1);
-                const stopCount = routeTemplate.currentVersion.points.filter((point) => point.type === 'stop').length;
-                return <tr className="hover:bg-zinc-50/70" key={routeTemplate.id}><td className="px-4 py-3"><strong className="block text-zinc-950">{routeTemplate.name}</strong><span className="text-xs text-zinc-500">{routeTemplate.description || 'Sem descricao'}</span></td><td className="px-4 py-3 text-zinc-700">{routeOrigin?.reference ?? '-'} <span className="text-zinc-400">para</span> {routeDestination?.reference ?? '-'}</td><td className="px-4 py-3 text-zinc-700">{stopCount}</td><td className="px-4 py-3 text-zinc-700">{formatDistance(routeTemplate.currentVersion.distanceMeters)}</td><td className="px-4 py-3 text-zinc-700">{formatDuration(routeTemplate.currentVersion.durationSeconds)}</td><td className="px-4 py-3 text-xs text-zinc-600">{formatDate(routeTemplate.updatedAt)}</td><td className="px-4 py-3"><span className="rounded-full bg-zinc-100 px-2 py-1 text-xs font-semibold text-zinc-700">v{routeTemplate.currentVersion.version}</span></td><td className="px-4 py-3"><span className={`rounded-full px-2 py-1 text-xs font-semibold ${routeTemplate.status === 'active' ? 'bg-emerald-100 text-emerald-800' : 'bg-zinc-200 text-zinc-700'}`}>{routeTemplate.status === 'active' ? 'Ativa' : 'Inativa'}</span></td><td className="px-4 py-3"><div className="flex justify-end gap-1.5"><ActionIconButton label="Visualizar rota" onClick={() => loadRoute(routeTemplate, 'view')}><Eye size={16} /></ActionIconButton><ActionIconButton label="Editar rota" onClick={() => loadRoute(routeTemplate, 'edit')}><Pencil size={16} /></ActionIconButton><ActionIconButton label="Duplicar rota" onClick={() => loadRoute(routeTemplate, 'new')}><Copy size={16} /></ActionIconButton><ActionIconButton label={routeTemplate.status === 'active' ? 'Inativar rota' : 'Ativar rota'} onClick={() => void toggleStatus(routeTemplate)}><Power className={busyId === routeTemplate.id ? 'animate-pulse' : ''} size={16} /></ActionIconButton><ActionIconButton danger label="Excluir rota" onClick={() => void removeRoute(routeTemplate)}><Trash2 size={16} /></ActionIconButton></div></td></tr>;
-              })}</tbody>
-            </table>
-          </div>
-        )}
-      </section>
-    </>
+      {showRouteSearch ? (
+        <RouteSearchModal
+          onClose={() => setShowRouteSearch(false)}
+          onSelect={(routeTemplate) => {
+            setShowRouteSearch(false);
+            loadRoute(routeTemplate, 'view');
+          }}
+          routes={routeTemplates}
+        />
+      ) : null}
+    </div>
   );
+}
+
+function RouteSearchModal({ onClose, onSelect, routes }: { onClose: () => void; onSelect: (route: RouteTemplate) => void; routes: RouteTemplate[] }) {
+  const [originQuery, setOriginQuery] = useState('');
+  const [destinationQuery, setDestinationQuery] = useState('');
+  const results = useMemo(() => {
+    const originTerm = normalizeSearch(originQuery);
+    const destinationTerm = normalizeSearch(destinationQuery);
+    return routes.filter((routeTemplate) => {
+      const routeOrigin = routeEndpoint(routeTemplate, 'origin');
+      const routeDestination = routeEndpoint(routeTemplate, 'destination');
+      return (!originTerm || pointSearchText(routeOrigin).includes(originTerm))
+        && (!destinationTerm || pointSearchText(routeDestination).includes(destinationTerm));
+    });
+  }, [destinationQuery, originQuery, routes]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3 sm:p-5" role="presentation">
+      <section aria-labelledby="route-search-title" aria-modal="true" className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl" role="dialog">
+        <header className="flex items-start justify-between gap-4 border-b border-zinc-200 px-4 py-4 sm:px-5">
+          <div>
+            <h2 className="font-semibold text-zinc-950" id="route-search-title">Pesquisar rota cadastrada</h2>
+            <p className="mt-1 text-sm text-zinc-500">Informe a origem e o destino para localizar os trajetos disponíveis.</p>
+          </div>
+          <button aria-label="Fechar pesquisa de rota" className="ui-icon-button h-10 w-10 shrink-0 border-zinc-200 bg-white" onClick={onClose} title="Fechar" type="button"><X size={18} /></button>
+        </header>
+
+        <div className="border-b border-zinc-200 bg-zinc-50/70 p-4 sm:p-5">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="block">
+              <span className="mb-1.5 block text-sm font-semibold text-zinc-800">Origem</span>
+              <span className="relative block">
+                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" size={17} />
+                <input autoFocus className="ui-input h-11 w-full pl-10 pr-3 text-sm" onChange={(event) => setOriginQuery(event.target.value)} placeholder="Cidade, localidade ou endereço" value={originQuery} />
+              </span>
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-sm font-semibold text-zinc-800">Destino</span>
+              <span className="relative block">
+                <Navigation className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" size={17} />
+                <input className="ui-input h-11 w-full pl-10 pr-3 text-sm" onChange={(event) => setDestinationQuery(event.target.value)} placeholder="Cidade, localidade ou endereço" value={destinationQuery} />
+              </span>
+            </label>
+          </div>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h3 className="text-sm font-semibold text-zinc-900">Rotas encontradas</h3>
+            <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-semibold text-zinc-600">{results.length}</span>
+          </div>
+          {results.length ? (
+            <div className="space-y-2">
+              {results.map((routeTemplate) => {
+                const routeOrigin = routeEndpoint(routeTemplate, 'origin');
+                const routeDestination = routeEndpoint(routeTemplate, 'destination');
+                const stops = routeTemplate.currentVersion.points.filter((point) => point.type === 'stop').length;
+                return (
+                  <button className="group w-full rounded-lg border border-zinc-200 bg-white p-4 text-left transition hover:border-zinc-400 hover:bg-zinc-50" key={routeTemplate.id} onClick={() => onSelect(routeTemplate)} type="button">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <strong className="text-sm text-zinc-950">{routeTemplate.name}</strong>
+                          <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${routeTemplate.status === 'active' ? 'bg-emerald-100 text-emerald-800' : 'bg-zinc-200 text-zinc-700'}`}>{routeTemplate.status === 'active' ? 'Ativa' : 'Inativa'}</span>
+                        </div>
+                        {routeTemplate.description ? <p className="mt-1 text-xs text-zinc-500">{routeTemplate.description}</p> : null}
+                      </div>
+                      <Eye className="shrink-0 text-zinc-400 group-hover:text-zinc-800" size={18} />
+                    </div>
+                    <div className="mt-3 grid gap-2 rounded-md bg-zinc-50 p-3 text-sm sm:grid-cols-[1fr_auto_1fr] sm:items-center">
+                      <div><span className="block text-[11px] font-semibold uppercase text-zinc-500">Origem</span><span className="font-medium text-zinc-800">{pointDisplayName(routeOrigin)}</span></div>
+                      <Navigation className="hidden text-zinc-400 sm:block" size={16} />
+                      <div><span className="block text-[11px] font-semibold uppercase text-zinc-500">Destino</span><span className="font-medium text-zinc-800">{pointDisplayName(routeDestination)}</span></div>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-600"><span>{formatDistance(routeTemplate.currentVersion.distanceMeters)}</span><span>{formatDuration(routeTemplate.currentVersion.durationSeconds)}</span><span>{stops} ponto(s) intermediário(s)</span><span>Versão {routeTemplate.currentVersion.version}</span></div>
+                  </button>
+                );
+              })}
+            </div>
+          ) : <EmptyState description="Revise a origem e o destino informados ou tente termos mais curtos." title="Nenhuma rota cadastrada encontrada" />}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function routeEndpoint(routeTemplate: RouteTemplate, type: 'origin' | 'destination') {
+  return routeTemplate.currentVersion.points.find((point) => point.type === type)
+    ?? (type === 'origin' ? routeTemplate.currentVersion.points[0] : routeTemplate.currentVersion.points.at(-1));
+}
+
+function pointSearchText(point?: RouteTemplatePoint) {
+  return normalizeSearch(`${point?.reference ?? ''} ${point?.city ?? ''} ${point?.uf ?? ''} ${point?.address ?? ''}`);
+}
+
+function pointDisplayName(point?: RouteTemplatePoint) {
+  if (!point) return 'Não informado';
+  return [point.reference, [point.city, point.uf].filter(Boolean).join(' / ')].filter(Boolean).join(' - ');
+}
+
+function normalizeSearch(value: string) {
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLocaleLowerCase('pt-BR');
 }
 
 function EndpointSelector({ disabled, label, localities, onChange, value }: { disabled: boolean; label: string; localities: Locality[]; onChange: (value: string) => void; value: string }) {
@@ -628,8 +737,4 @@ function formatDuration(seconds: number) {
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.round((seconds % 3600) / 60);
   return hours ? `${hours}h ${minutes}min` : `${minutes}min`;
-}
-
-function formatDate(value: Date | null) {
-  return value ? value.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '-';
 }

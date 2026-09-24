@@ -863,6 +863,18 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
+    match /loadVehicles/{profileId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /loadCargos/{cargoId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /loadPlans/{planId} {
+      allow read, write: if isAdmin();
+    }
+
     match /equipmentInspections/{inspectionId} {
       allow read: if isAdmin() || (
         isActiveUser()
