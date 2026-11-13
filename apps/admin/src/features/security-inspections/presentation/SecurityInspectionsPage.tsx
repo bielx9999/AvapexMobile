@@ -39,7 +39,7 @@ function SecurityInspectionForm({ users, vehicles, onClose }: { users: AppUser[]
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 sm:px-4 sm:py-6">
       <section className="flex h-full max-h-[94vh] w-full max-w-4xl flex-col overflow-hidden bg-white shadow-2xl sm:h-auto sm:rounded-lg">
         <header className="flex shrink-0 items-start justify-between gap-4 border-b border-zinc-200 px-4 py-4 sm:px-5">
-          <div><h2 className="text-lg font-semibold">Nova inspecao de seguranca</h2><p className="mt-1 text-sm text-zinc-500">Preencha a vistoria do veiculo e registre as evidencias.</p></div>
+          <div><h2 className="text-lg font-semibold">Nova inspecao de seguranca</h2></div>
           <button aria-label="Fechar inspecao" className="ui-icon-button h-11 w-11 shrink-0 border-zinc-200" onClick={onClose} type="button"><X size={18} /></button>
         </header>
 
@@ -92,7 +92,7 @@ function SecurityInspectionForm({ users, vehicles, onClose }: { users: AppUser[]
             <label className="ui-button min-h-12 cursor-pointer justify-start gap-3 border border-zinc-200 bg-white px-4 text-left text-sm text-zinc-800 hover:bg-zinc-50"><Camera className="shrink-0" size={19} /><span><strong className="block">Anexar fotos</strong><span className="text-xs text-zinc-500">{files.length ? `${files.length} foto(s) selecionada(s)` : 'Registrar nao conformidades'}</span></span><input accept="image/*" className="hidden" multiple onChange={(event) => setFiles(Array.from(event.target.files ?? []))} type="file" /></label>
           </section>
 
-          <section className="mt-6 border-t border-zinc-200 pt-5"><p className="mb-2 text-sm font-semibold">Assinatura do motorista *</p><SignaturePad onChange={setSignaturePoints} /><p className="mt-2 text-xs text-zinc-500">Use o dedo no celular ou o mouse para assinar.</p></section>
+          <section className="mt-6 border-t border-zinc-200 pt-5"><p className="mb-2 text-sm font-semibold">Assinatura do motorista *</p><SignaturePad onChange={setSignaturePoints} /></section>
           {error ? <p className="mt-4 rounded-lg bg-red-50 p-3 text-sm font-semibold text-red-700" role="alert">{error}</p> : null}
         </div>
 

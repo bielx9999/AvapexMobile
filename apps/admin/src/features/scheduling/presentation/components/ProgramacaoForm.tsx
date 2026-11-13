@@ -323,7 +323,6 @@ export function ProgramacaoForm({
         <header className="flex items-start justify-between gap-4 border-b border-zinc-200 bg-white px-5 py-4 sm:px-6">
           <div>
             <h2 className="text-lg font-semibold text-zinc-950">{editingTrip ? 'Editar Programacao' : 'Nova Programacao'}</h2>
-            <p className="mt-0.5 text-sm text-zinc-500">Cadastre uma programacao de transporte.</p>
           </div>
           <button aria-label="Fechar" className="ui-icon-button flex h-9 w-9 shrink-0 items-center justify-center text-zinc-600 hover:bg-zinc-100" disabled={submitting} onClick={onCancel} type="button">
             <X size={18} />
@@ -332,7 +331,7 @@ export function ProgramacaoForm({
 
         <form className="flex min-h-0 flex-1 flex-col" onSubmit={(event) => void handleSubmit(event)}>
           <div className="min-h-0 flex-1 overflow-y-auto bg-white">
-            <FormSection description="Identificacao, datas e etapa administrativa." icon={<ClipboardList size={18} />} title="Dados da programacao">
+            <FormSection icon={<ClipboardList size={18} />} title="Dados da programacao">
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <TextField error={errors.customerRequestNumber} icon={<FileText size={15} />} label="Numero da solicitacao do cliente" onChange={(value) => updateField('customerRequestNumber', value)} placeholder="Ex.: SOL-45875" required value={form.customerRequestNumber} />
                 <SearchableCombobox allowCustom error={errors.clientName} icon={<UserRound size={15} />} label="Cliente" onChange={(value) => updateField('clientName', value)} options={clientOptions} placeholder="Buscar cliente..." required value={form.clientName} />
@@ -352,7 +351,7 @@ export function ProgramacaoForm({
               </div>
             </FormSection>
 
-            <FormSection description="Motorista elegivel e veiculo ativo da frota." icon={<Truck size={18} />} title="Atribuicao">
+            <FormSection icon={<Truck size={18} />} title="Atribuicao">
               <div className="grid gap-4 md:grid-cols-2">
                 <SearchableCombobox error={errors.driverId} icon={<UserRound size={15} />} label="Motorista" onChange={(value) => updateField('driverId', value)} options={driverOptions} placeholder="Buscar motorista..." required value={form.driverId} />
                 <SearchableCombobox error={errors.vehicleId} icon={<Truck size={15} />} label="Veiculo" onChange={(value) => updateField('vehicleId', value)} options={vehicleOptions} placeholder="Buscar frota, placa ou modelo..." required value={form.vehicleId} />
@@ -367,7 +366,7 @@ export function ProgramacaoForm({
               ) : null}
             </FormSection>
 
-            <FormSection description="Selecione uma rota existente ou use localidades ja conhecidas pelo sistema." icon={<Route size={18} />} title="Rota da viagem">
+            <FormSection icon={<Route size={18} />} title="Rota da viagem">
               <SearchableCombobox icon={<Route size={15} />} label="Rota cadastrada" onChange={selectRoute} options={routeOptions} placeholder="Selecione uma rota" value={form.routeTemplateId} />
               <div className="mt-4 grid gap-4 md:grid-cols-2">
                 <SearchableCombobox allowCustom disabled={Boolean(form.routeTemplateId)} error={errors.origin} icon={<MapPin size={15} />} label="Origem" onChange={(value) => selectLocation('origin', value)} options={locationOptions} placeholder="Selecione uma localidade" required value={form.origin} />
@@ -378,7 +377,7 @@ export function ProgramacaoForm({
 
             <CteDocumentSection documents={form.cteDocuments} errors={errors} onChange={(documents) => updateField('cteDocuments', documents)} />
 
-            <FormSection description="Use este campo somente para observacoes livres." icon={<Info size={18} />} title="Informacoes adicionais">
+            <FormSection icon={<Info size={18} />} title="Informacoes adicionais">
               <label className="block">
                 <span className="mb-2 block text-sm font-medium text-zinc-700">Observacoes da programacao</span>
                 <textarea className="ui-input min-h-24 w-full resize-y px-3 py-2" onChange={(event) => updateField('additionalInfo', event.target.value)} value={form.additionalInfo} />
@@ -466,14 +465,13 @@ function emptyStoredDocument(document: CteDocumentDraft): TripCteDocument {
   };
 }
 
-function FormSection({ children, description, icon, title }: { children: ReactNode; description: string; icon: ReactNode; title: string }) {
+function FormSection({ children, icon, title }: { children: ReactNode; icon: ReactNode; title: string }) {
   return (
     <section className="border-t border-zinc-200 px-5 py-5 first:border-t-0 sm:px-6">
       <div className="flex items-start gap-3">
         <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-zinc-900 text-white">{icon}</span>
         <div>
           <h3 className="text-sm font-semibold text-zinc-950">{title}</h3>
-          <p className="mt-0.5 text-xs text-zinc-500">{description}</p>
         </div>
       </div>
       <div className="mt-4">{children}</div>

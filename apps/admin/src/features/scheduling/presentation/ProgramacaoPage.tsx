@@ -14,6 +14,7 @@ import {
   Search,
   Trash2,
   Truck,
+  Upload,
   Wifi,
   WifiOff,
 } from 'lucide-react';
@@ -24,11 +25,13 @@ import type {
   Locality,
   ProgrammingOperationType,
   ProgrammingStatus,
+  ProgrammedVehicleType,
   RouteTemplate,
   Trip,
   Vehicle,
 } from '../../shared/domain/models';
 import { ProgramacaoForm } from './components/ProgramacaoForm';
+import { ProgramacaoImportDialog } from './components/ProgramacaoImportDialog';
 import {
   dailyStatusOptions,
   findDailyStatusOption,
@@ -62,6 +65,8 @@ export function ProgramacaoPage({ loading, localities, onChanged, routeTemplates
   const [startDate, setStartDate] = useState(today);
   const [endDate, setEndDate] = useState(today);
   const [showForm, setShowForm] = useState(false);
+  const [showImportDialog, setShowImportDialog] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [editingTrip, setEditingTrip] = useState<Trip | null>(null);
   const [busyTripId, setBusyTripId] = useState('');
   const [error, setError] = useState('');
@@ -206,6 +211,66 @@ export function ProgramacaoPage({ loading, localities, onChanged, routeTemplates
     await onChanged();
   }
 
+  async function importProgramacao(rows: import('../data/programacaoImport').ProgramacaoImportRow[]) {
+    setImporting(true);
+    setError('');
+    const results = await Promise.allSettled(rows.map((row) => {
+      const driver = row.driver;
+      const vehicle = row.vehicle;
+      const selectedStatus = dailyStatusOptions.find((option) => option.value === row.statusValue) ?? dailyStatusOptions[2];
+      const vehicleType = vehicle ? inferImportedVehicleType(vehicle) : undefined;
+      return adminWriteRepository.saveTrip({
+        additionalInfo: row.additionalInfo,
+        assignedAt: null,
+        clientId: '',
+        clientName: '',
+        customerRequestNumber: row.customerRequestNumber,
+        destination: row.destination,
+        destinationLocationId: '',
+        driverId: driver?.uid ?? '',
+        driverName: driver?.name || driver?.email || row.driverText,
+        driverResponse: 'pending',
+        driverResponseDriverId: '',
+        driverRejection: null,
+        driverRespondedAt: null,
+        expectedArrivalAt: row.expectedArrivalAt,
+        fleetNumber: vehicle?.fleetNumber ?? '',
+        id: adminWriteRepository.createTripId(),
+        operationType: row.operationType,
+        operationalStatus: selectedStatus.operationalStatus,
+        origin: row.origin,
+        originLocationId: '',
+        programmedVehicleType: vehicleType,
+        programmingStatus: selectedStatus.programmingStatus,
+        returnTrip: row.returnTrip,
+        routeId: '',
+        routeName: '',
+        routeStops: [],
+        routeTemplateId: '',
+        routeVersionId: '',
+        scheduledAt: row.scheduledAt,
+        status: selectedStatus.programmingStatus === 'released' ? 'completed' : selectedStatus.programmingStatus === 'loading' ? 'pending' : 'in_progress',
+        vehicleId: vehicle?.id ?? '',
+        vehicleModel: vehicle?.model || row.vehicleText,
+        vehiclePlate: vehicle?.plate || row.plateText,
+      }, { create: true });
+    }));
+    const created = results.filter((result) => result.status === 'fulfilled').length;
+    const failures = results.flatMap((result, index) => result.status === 'rejected'
+      ? [{ sourceRow: rows[index].sourceRow, message: result.reason instanceof Error ? result.reason.message : 'Falha ao gravar.' }]
+      : []);
+    try {
+      if (created) await onChanged();
+      setToastMessage(failures.length ? `${created} programacao(oes) importada(s); ${failures.length} falha(s).` : `${created} programacao(oes) importada(s) com sucesso.`);
+    } catch (refreshError) {
+      setError(refreshError instanceof Error ? refreshError.message : 'Importacao concluida, mas nao foi possivel atualizar a lista.');
+    } finally {
+      setImporting(false);
+    }
+    if (!failures.length) setShowImportDialog(false);
+    return { created, failures };
+  }
+
   async function createUnloadingTrip(trip: Trip) {
     const confirmed = window.confirm('Gerar uma programacao de descarga para esta carga? Ela sera enviada ao motorista para aceite.');
     if (!confirmed) {
@@ -290,14 +355,10 @@ export function ProgramacaoPage({ loading, localities, onChanged, routeTemplates
         <div className="border-b border-zinc-200 bg-white px-4 py-4">
           <div className="flex items-center justify-between gap-3">
             <h2 className="text-base font-semibold text-zinc-950">Programacao diaria</h2>
-            <button
-              className="ui-button h-10 shrink-0 gap-2 bg-zinc-900 px-4 text-sm font-semibold text-white hover:bg-zinc-800"
-              onClick={openCreateForm}
-              type="button"
-            >
-              <Plus size={18} />
-              Nova Programacao
-            </button>
+            <div className="flex shrink-0 gap-2">
+              <button className="ui-button h-10 gap-2 border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-700 hover:bg-zinc-50" disabled={importing} onClick={() => setShowImportDialog(true)} type="button"><Upload size={16} />Importar Excel</button>
+              <button className="ui-button h-10 gap-2 bg-zinc-900 px-4 text-sm font-semibold text-white hover:bg-zinc-800" onClick={openCreateForm} type="button"><Plus size={18} />Nova Programacao</button>
+            </div>
           </div>
           <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-[140px_140px_minmax(180px,1fr)_minmax(170px,1fr)_minmax(220px,1.4fr)]">
               <input aria-label="Data inicial" className="ui-input h-10 px-3 text-sm" type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
@@ -372,6 +433,7 @@ export function ProgramacaoPage({ loading, localities, onChanged, routeTemplates
           vehicles={activeVehicles}
         />
       ) : null}
+      {showImportDialog ? <ProgramacaoImportDialog drivers={drivers} existingTrips={trips} importing={importing} onClose={() => { if (!importing) setShowImportDialog(false); }} onImport={importProgramacao} vehicles={activeVehicles} /> : null}
       {toastMessage ? (
         <div className="fixed right-4 top-4 z-[70] rounded-lg bg-zinc-950 px-4 py-3 text-sm font-medium text-white shadow-xl" role="status">
           {toastMessage}
@@ -510,6 +572,7 @@ function CardInfo({ icon, label, value }: { icon: ReactNode; label: string; valu
 }
 
 function DriverResponseSummary({ trip }: { trip: Trip }) {
+  if (!trip.driverId) return <div className="mt-2"><span className="inline-flex rounded-md bg-amber-100 px-2 py-1 text-[9px] font-bold text-amber-900">MOTORISTA SEM VINCULO</span></div>;
   const response = trip.driverResponse ?? 'pending';
   const label = response === 'accepted' ? 'ACEITA' : response === 'rejected' ? 'RECUSADA' : 'AGUARDANDO ACEITE';
   const className = response === 'accepted'
@@ -712,4 +775,12 @@ function addDays(value: Date, days: number) {
 function formatDateInput(value: Date) {
   const offset = value.getTimezoneOffset() * 60_000;
   return new Date(value.getTime() - offset).toISOString().slice(0, 10);
+}
+
+function inferImportedVehicleType(vehicle: Vehicle): ProgrammedVehicleType {
+  const searchable = `${vehicle.model} ${vehicle.type}`.toLowerCase();
+  const match = (['vanderleia', 'sprinter', 'munck', 'rodotrem', 'prancha', 'saveiro', 'hr'] as ProgrammedVehicleType[])
+    .find((type) => searchable.includes(type));
+  if (match) return match;
+  return vehicle.type === 'truck' ? 'truck' : 'carreta';
 }

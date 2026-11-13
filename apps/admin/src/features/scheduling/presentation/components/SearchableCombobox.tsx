@@ -33,24 +33,35 @@ export function SearchableCombobox({
   required = false,
   value,
 }: SearchableComboboxProps) {
-  const selected = options.find((option) => option.value === value);
   const [draftQuery, setDraftQuery] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const blurTimer = useRef<number | null>(null);
   const listboxId = useId();
+
+  const optionIndex = useMemo(() => {
+    const byValue = new Map<string, ComboboxOption>();
+    const search = options.map((option) => {
+      byValue.set(option.value, option);
+      return {
+        option,
+        search: `${option.label} ${option.description ?? ''} ${option.searchText ?? ''}`.toLocaleLowerCase('pt-BR'),
+      };
+    });
+    return { byValue, search };
+  }, [options]);
+  const selected = optionIndex.byValue.get(value);
   const query = draftQuery ?? selected?.label ?? value;
 
   const filtered = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase('pt-BR');
     if (!normalized || selected?.label === query) {
-      return options.slice(0, 12);
+      return optionIndex.search.slice(0, 12).map(({ option }) => option);
     }
-    return options
-      .filter((option) => `${option.label} ${option.description ?? ''} ${option.searchText ?? ''}`
-        .toLocaleLowerCase('pt-BR')
-        .includes(normalized))
-      .slice(0, 12);
-  }, [options, query, selected?.label]);
+    return optionIndex.search
+      .filter(({ search }) => search.includes(normalized))
+      .slice(0, 12)
+      .map(({ option }) => option);
+  }, [optionIndex, query, selected?.label]);
 
   function closeAfterBlur() {
     blurTimer.current = window.setTimeout(() => {

@@ -12,6 +12,7 @@ import {
   Printer,
   Search,
   Send,
+  Trash2,
   UsersRound,
   X,
   XCircle,
@@ -20,7 +21,7 @@ import Chart from 'react-apexcharts';
 import type { ApexOptions } from 'apexcharts';
 import { adminWriteRepository } from '../../shared/data/firestoreCollections';
 import type { AppUser, Checklist, ChecklistType } from '../../shared/domain/models';
-import { MetricCard } from '../../shared/presentation/ui';
+import { ErrorBanner, MetricCard } from '../../shared/presentation/ui';
 
 type ChecklistsPageProps = {
   checklists: Checklist[];
@@ -56,6 +57,7 @@ export function ChecklistsPage({
   const [reportMessage, setReportMessage] = useState('');
   const [actionError, setActionError] = useState('');
   const [busyAction, setBusyAction] = useState<'approve' | 'report' | ''>('');
+  const [deletingChecklistId, setDeletingChecklistId] = useState('');
 
   const drivers = useMemo(
     () =>
@@ -200,8 +202,24 @@ export function ChecklistsPage({
     }
   }
 
+  async function deleteChecklist(checklist: Checklist) {
+    const vehicle = checklist.vehiclePlate || checklist.vehicleId || 'veiculo nao informado';
+    if (!window.confirm(`Excluir permanentemente o checklist de ${vehicle}, feito por ${checklist.driverName || driverNames.get(checklist.driverId) || 'motorista'}?`)) return;
+    setDeletingChecklistId(checklist.id);
+    setActionError('');
+    try {
+      await adminWriteRepository.deleteOperationalChecklist(checklist.id);
+      if (selectedChecklist?.id === checklist.id) setSelectedChecklist(null);
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Erro ao excluir checklist.');
+    } finally {
+      setDeletingChecklistId('');
+    }
+  }
+
   return (
     <div className="space-y-5">
+      <ErrorBanner message={actionError} />
       {showFilters ? (
         <div className="fixed inset-0 z-50 bg-black/35 backdrop-blur-[1px]">
           <button
@@ -325,7 +343,7 @@ export function ChecklistsPage({
 
       <section className="ui-card overflow-hidden">
         <div className="flex flex-col gap-3 border-b border-zinc-200 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
-          <div><h2 className="font-semibold">Registros de checklist</h2><p className="mt-1 text-xs text-zinc-500">Selecione uma data ou situação para localizar os registros.</p></div>
+          <div><h2 className="font-semibold">Registros de checklist</h2></div>
           <div className="grid grid-cols-2 gap-2 sm:flex">
             <input aria-label="Data dos checklists" className="ui-input h-10 min-w-0 px-3 text-sm" title="Data dos checklists" type="date" value={tableDate} onChange={(event) => setTableDate(event.target.value)} />
             <select aria-label="Status da analise" className="ui-input h-10 min-w-0 px-3 text-sm" value={reviewFilter} onChange={(event) => setReviewFilter(event.target.value as typeof reviewFilter)}><option value="all">Todos os status</option><option value="pending">Pendentes</option><option value="approved">Aprovados</option><option value="reported">Erro reportado</option></select>
@@ -352,17 +370,11 @@ export function ChecklistsPage({
                     <span className="block text-sm font-medium text-zinc-900">{formatDateOnly(checklist.createdAt)}</span>
                     <span className="text-xs text-zinc-500">{formatTimeOnly(checklist.createdAt)}</span>
                   </td>
-                  <td className="px-4 py-3">
-                    <span className="block font-medium text-zinc-900">{checklist.driverName || driverNames.get(checklist.driverId) || checklist.driverId}</span>
-                    <span className="text-xs text-zinc-500">{checklist.driverId}</span>
-                  </td>
+                  <td className="px-4 py-3 font-medium text-zinc-900">{checklist.driverName || driverNames.get(checklist.driverId) || 'Motorista nao identificado'}</td>
                   <td className="px-4 py-3">
                     <span className="rounded-lg bg-zinc-100 px-2 py-1 text-xs font-semibold text-zinc-700">{checklistLabel(checklist.type)}</span>
                   </td>
-                  <td className="px-4 py-3">
-                    <span className="block font-medium text-zinc-900">{checklist.vehiclePlate || checklist.vehicleId || '-'}</span>
-                    <span className="text-xs text-zinc-500">{checklist.photoUrls.length} foto(s)</span>
-                  </td>
+                  <td className="px-4 py-3 font-medium text-zinc-900">{checklist.vehiclePlate || checklist.vehicleId || '-'}</td>
                   <td className="px-4 py-3">{checklist.kmRegistered || '-'}</td>
                   <td className="px-4 py-3">
                     <span className={reviewStatusClass(checklist)}>
@@ -372,13 +384,17 @@ export function ChecklistsPage({
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-2">
                       {(checklist.adminReviewStatus ?? 'pending') !== 'pending' ? <><button aria-label="Imprimir checklist" className="ui-icon-button h-9 w-9 border-zinc-200 bg-white text-zinc-700" onClick={() => printOperationalChecklist(checklist, checklist.driverName || driverNames.get(checklist.driverId) || checklist.driverId)} title="Imprimir PDF" type="button"><Printer size={15} /></button><button aria-label="Exportar checklist para Excel" className="ui-icon-button h-9 w-9 border-zinc-200 bg-white text-zinc-700" onClick={() => exportOperationalChecklistExcel(checklist, checklist.driverName || driverNames.get(checklist.driverId) || checklist.driverId)} title="Exportar Excel" type="button"><FileSpreadsheet size={15} /></button></> : null}
-                      <button
+                        <button
+                        disabled={Boolean(deletingChecklistId)}
                         className="ui-button h-9 gap-2 border border-zinc-200 bg-white px-3 text-xs font-medium text-zinc-700 hover:bg-zinc-50"
                         onClick={() => openAnalysis(checklist)}
                         type="button"
                       >
                         <Eye size={15} />
                         Analisar
+                      </button>
+                      <button aria-label="Excluir checklist" className="ui-icon-button h-9 w-9 border-red-200 bg-white text-red-600 hover:bg-red-50 disabled:opacity-50" disabled={Boolean(deletingChecklistId)} onClick={() => void deleteChecklist(checklist)} title="Excluir checklist" type="button">
+                        {deletingChecklistId === checklist.id ? <LoaderCircle className="animate-spin" size={15} /> : <Trash2 size={15} />}
                       </button>
                     </div>
                   </td>
@@ -423,10 +439,8 @@ function ChartCard({ icon, title, children }: ChartCardProps) {
   return (
     <section className="ui-card overflow-hidden p-4">
       <div className="mb-2 flex items-center gap-2">
-        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-zinc-100 text-avapex-black">
-          {icon}
-        </span>
-        <h2 className="text-sm font-semibold">{title}</h2>
+        <span className="text-zinc-400">{icon}</span>
+        <h2 className="text-sm font-medium text-zinc-700">{title}</h2>
       </div>
       {children}
     </section>
@@ -449,17 +463,16 @@ function ApexBarChart({ categories, data, color, seriesName }: ApexBarChartProps
     colors: [color],
     dataLabels: {
       enabled: true,
-      offsetX: 2,
-      style: { colors: ['#111111'] },
+      offsetX: 3,
+      style: { colors: ['#52525B'], fontSize: '10px', fontWeight: 500 },
     },
     grid: {
-      borderColor: '#E5E7EB',
-      strokeDashArray: 4,
+      show: false,
     },
     plotOptions: {
       bar: {
-        barHeight: '58%',
-        borderRadius: 7,
+        barHeight: '42%',
+        borderRadius: 2,
         horizontal: true,
       },
     },
@@ -471,21 +484,18 @@ function ApexBarChart({ categories, data, color, seriesName }: ApexBarChartProps
     },
     xaxis: {
       categories,
-      labels: {
-        show: false,
-        style: { colors: '#52525B' },
-      },
+      labels: { show: false },
     },
     yaxis: {
       labels: {
-        maxWidth: 180,
-        style: { colors: '#52525B' },
+        maxWidth: 160,
+        style: { colors: '#71717A', fontSize: '11px' },
       },
     },
   };
 
   return (
-    <Chart height={260} options={options} series={[{ data, name: seriesName }]} type="bar" />
+    <Chart height={Math.max(140, Math.min(220, categories.length * 24 + 30))} options={options} series={[{ data, name: seriesName }]} type="bar" />
   );
 }
 
@@ -517,7 +527,7 @@ function ChecklistAnalysisPanel({
   setReportMessage,
 }: ChecklistAnalysisPanelProps) {
   const reviewed = (checklist.adminReviewStatus ?? 'pending') !== 'pending';
-  const answerRows = objectRows(checklist.answers && Object.keys(checklist.answers).length > 0 ? checklist.answers : checklist.items);
+  const answerRows = checklistAnswerRows(checklist);
 
   return (
     <div className="fixed inset-0 z-50 bg-black/35 backdrop-blur-[1px]">
@@ -549,13 +559,16 @@ function ChecklistAnalysisPanel({
           <section className="rounded-lg border border-zinc-200 bg-white shadow-sm">
             <div className="flex items-center justify-between gap-3 border-b border-zinc-100 px-4 py-3">
               <h3 className="text-sm font-semibold text-zinc-950">Respostas registradas</h3>
-              <span className="text-xs font-medium text-zinc-500">{answerRows.length} campos</span>
+              <span className="text-xs font-medium text-zinc-500">{answerRows.length} itens</span>
             </div>
             <div className="divide-y divide-zinc-100">
-              {answerRows.length > 0 ? answerRows.map(([key, value]) => (
-                <div className="grid gap-2 px-4 py-3 text-sm sm:grid-cols-[210px_1fr]" key={key}>
-                  <span className="font-medium text-zinc-600">{formatFieldName(key)}</span>
-                  <span className={answerValueClass(value)}>{formatUnknownValue(value)}</span>
+              {answerRows.length > 0 ? answerRows.map((row, index) => (
+                <div className="px-4 py-3" key={`${row.section}-${row.number}-${index}`}>
+                  {row.section && (index === 0 || answerRows[index - 1]?.section !== row.section) ? <h4 className="mb-2 text-xs font-bold uppercase text-zinc-500">{row.section}</h4> : null}
+                  <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                    <span className="text-sm font-medium text-zinc-800">{row.number ? <span className="mr-2 text-zinc-500">{row.number}</span> : null}{row.label}</span>
+                    <span className={answerPillClass(row.answer)}>{answerLabel(row.answer)}</span>
+                  </div>
                 </div>
               )) : (
                 <p className="px-4 py-6 text-sm text-zinc-500">Nenhuma resposta detalhada encontrada.</p>
@@ -638,6 +651,27 @@ function objectRows(value: Record<string, unknown> | undefined) {
   return Object.entries(value ?? {}).filter(([, item]) => item !== undefined && item !== null && item !== '');
 }
 
+type ChecklistAnswerRow = { key: string; section: string; number: string; label: string; answer: unknown };
+
+function checklistAnswerRows(checklist: Checklist): ChecklistAnswerRow[] {
+  const source = checklist.answers && Object.keys(checklist.answers).length ? checklist.answers : checklist.items;
+  return objectRows(source).map(([key, value], index) => {
+    const fields = value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
+    const section = String(fields?.Section ?? fields?.section ?? '');
+    const number = String(fields?.Number ?? fields?.number ?? '');
+    const label = String(fields?.Label ?? fields?.label ?? formatFieldName(key));
+    const answer = fields?.Answer ?? fields?.answer ?? fields?.status ?? value;
+    return { key, section, number, label, answer, index };
+  }).sort((left, right) => {
+    const sectionOrder = left.section.localeCompare(right.section, 'pt-BR');
+    if (sectionOrder !== 0) return sectionOrder;
+    const leftNumber = Number(left.number.match(/\d+/)?.[0]);
+    const rightNumber = Number(right.number.match(/\d+/)?.[0]);
+    if (Number.isFinite(leftNumber) && Number.isFinite(rightNumber) && leftNumber !== rightNumber) return leftNumber - rightNumber;
+    return left.index - right.index;
+  }).map(({ key, section, number, label, answer }) => ({ key, section, number, label, answer }));
+}
+
 function formatFieldName(value: string) {
   return value
     .replace(/[_-]/g, ' ')
@@ -658,18 +692,35 @@ function formatUnknownValue(value: unknown): string {
   return '-';
 }
 
-function answerValueClass(value: unknown) {
-  const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
-  if (value === true || normalized === 'c' || normalized === 'conforme' || normalized === 'sim' || normalized === 'approved') {
-    return 'break-words font-semibold text-emerald-700';
+function answerPillClass(value: unknown) {
+  const kind = answerKind(value);
+  if (kind === 'ok') {
+    return 'inline-flex min-w-28 items-center justify-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700';
   }
-  if (value === false || normalized === 'nc' || normalized === 'nao conforme' || normalized === 'não conforme' || normalized === 'nao' || normalized === 'não' || normalized === 'reproved') {
-    return 'break-words font-semibold text-red-700';
+  if (kind === 'nc') {
+    return 'inline-flex min-w-28 items-center justify-center gap-1.5 rounded-full bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700';
   }
-  if (normalized === 'na' || normalized === 'n/a') {
-    return 'break-words font-semibold text-zinc-500';
+  if (kind === 'na') {
+    return 'inline-flex min-w-28 items-center justify-center gap-1.5 rounded-full bg-zinc-100 px-3 py-1.5 text-xs font-semibold text-zinc-700';
   }
-  return 'break-words text-zinc-900';
+  return 'inline-flex max-w-full justify-center rounded-md bg-zinc-100 px-3 py-1.5 text-xs font-medium text-zinc-800';
+}
+
+function answerKind(value: unknown): 'ok' | 'nc' | 'na' | 'other' {
+  const rawAnswer = value;
+  const normalized = typeof rawAnswer === 'string' ? rawAnswer.trim().toLowerCase() : '';
+  if (rawAnswer === true || ['c', 'ok', 'conforme', 'sim', 'approved', 'pass'].includes(normalized)) return 'ok';
+  if (rawAnswer === false || ['nc', 'nao conforme', 'não conforme', 'nao', 'não', 'reproved', 'fail'].includes(normalized)) return 'nc';
+  if (['na', 'n/a', 'nao se aplica', 'não se aplica'].includes(normalized)) return 'na';
+  return 'other';
+}
+
+function answerLabel(value: unknown) {
+  const kind = answerKind(value);
+  if (kind === 'ok') return 'C - Conforme';
+  if (kind === 'nc') return 'N - Nao conforme';
+  if (kind === 'na') return 'N/A';
+  return formatUnknownValue(value);
 }
 
 function reviewStatusLabel(checklist: Checklist) {
@@ -707,18 +758,25 @@ function operationalChecklistFileName(checklist: Checklist, extension: string) {
 
 function printOperationalChecklist(checklist: Checklist, driverName: string) {
   if ((checklist.adminReviewStatus ?? 'pending') === 'pending') return;
-  const answers = objectRows(checklist.answers && Object.keys(checklist.answers).length ? checklist.answers : checklist.items);
-  const rows = answers.map(([key, value], index) => `<tr><td>${index + 1}</td><td>${checklistHtmlEscape(formatFieldName(key))}</td><td>${checklistHtmlEscape(formatUnknownValue(value))}</td></tr>`).join('');
+  const answers = checklistAnswerRows(checklist);
+  const rows = answers.map((row, index) => {
+    const section = row.section && (index === 0 || answers[index - 1]?.section !== row.section) ? `<tr class="section"><th colspan="3">${checklistHtmlEscape(row.section)}</th></tr>` : '';
+    return `${section}<tr><td>${checklistHtmlEscape(row.number || String(index + 1))}</td><td>${checklistHtmlEscape(row.label)}</td><td><span class="answer ${answerKind(row.answer)}">${checklistHtmlEscape(answerLabel(row.answer))}</span></td></tr>`;
+  }).join('');
   const photos = checklist.photoUrls.length ? `<section class="photos"><h2>Registros fotograficos</h2><div class="photo-grid">${checklist.photoUrls.map((url, index) => `<figure><img src="${checklistHtmlEscape(url)}" alt="Foto ${index + 1}"><figcaption>Foto ${index + 1}</figcaption></figure>`).join('')}</div></section>` : '';
   const signature = checklist.signatureUrl ? `<img class="signature-image" src="${checklistHtmlEscape(checklist.signatureUrl)}" alt="Assinatura do motorista">` : '<div class="signature-space"></div>';
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${checklistHtmlEscape(checklistLabel(checklist.type))}</title><style>@page{size:A4;margin:12mm}*{box-sizing:border-box}body{margin:0;color:#18181b;font-family:Arial,sans-serif;font-size:11px}.page{position:relative;min-height:270mm;padding:10mm;overflow:hidden}.page:before{content:"";position:absolute;inset:0;background:url('/checklist-pdf-background.png') right 10mm bottom 10mm/55% auto no-repeat;opacity:.1;z-index:0}.content{position:relative;z-index:1}.brand{display:flex;align-items:flex-start;justify-content:space-between;border-bottom:3px solid #f3c400;padding-bottom:10px}.brand img{width:165px}.title{text-align:right}.title h1{margin:0;font-size:21px}.title p{margin:5px 0 0;color:#52525b}.info{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:14px 0}.box{border:1px solid #d4d4d8;border-radius:6px;background:rgba(255,255,255,.94);padding:8px}.label{display:block;color:#71717a;font-size:9px;text-transform:uppercase}.value{display:block;margin-top:3px;font-weight:700}table{width:100%;border-collapse:collapse;background:rgba(255,255,255,.94)}th,td{border:1px solid #d4d4d8;padding:7px;text-align:left;vertical-align:top}th{background:#f4f4f5;font-size:9px;text-transform:uppercase}.review{margin-top:12px;border:1px solid #d4d4d8;border-left:4px solid #f3c400;border-radius:6px;padding:9px;background:#fff}.review strong{display:block;margin-bottom:4px}.photos{margin-top:12px;break-inside:avoid}.photos h2{font-size:12px}.photo-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}.photo-grid figure{margin:0}.photo-grid img{width:100%;height:105px;object-fit:cover;border:1px solid #d4d4d8}.photo-grid figcaption{text-align:center;font-size:9px;color:#71717a}.signatures{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:28px;break-inside:avoid}.signature-wrap{height:86px;display:flex;align-items:flex-end;justify-content:center;border-bottom:1px solid #18181b}.signature-image{max-width:100%;max-height:80px;object-fit:contain}.signature-space{height:80px}.signature-label{text-align:center;padding-top:5px;font-size:10px}.footer{margin-top:14px;text-align:right;color:#71717a;font-size:9px}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.page{padding:0}}</style></head><body><main class="page"><div class="content"><header class="brand"><img src="/checklist-pdf-logo.png" alt="AVAPEX Transportes"><div class="title"><h1>Checklist operacional</h1><p>${checklistHtmlEscape(checklistLabel(checklist.type))}</p></div></header><section class="info"><div class="box"><span class="label">Data e hora</span><span class="value">${checklistHtmlEscape(formatDate(checklist.createdAt))}</span></div><div class="box"><span class="label">Motorista</span><span class="value">${checklistHtmlEscape(driverName)}</span></div><div class="box"><span class="label">Veiculo</span><span class="value">${checklistHtmlEscape(checklist.vehiclePlate || checklist.vehicleId || '-')}</span></div><div class="box"><span class="label">Quilometragem</span><span class="value">${checklist.kmRegistered ? checklist.kmRegistered.toLocaleString('pt-BR') + ' km' : '-'}</span></div><div class="box"><span class="label">Resultado</span><span class="value">${checklist.hasCriticalFailure ? 'Com nao conformidade' : 'Sem falha critica'}</span></div><div class="box"><span class="label">Analise administrativa</span><span class="value">${checklistHtmlEscape(reviewStatusLabel(checklist))}</span></div></section><table><thead><tr><th>#</th><th>Item verificado</th><th>Resposta</th></tr></thead><tbody>${rows}</tbody></table><section class="review"><strong>Resultado da analise administrativa</strong>${checklistHtmlEscape(checklist.adminReviewMessage || reviewStatusLabel(checklist))}<br><small>Revisado em ${checklistHtmlEscape(formatDate(checklist.reviewedAt ?? null))}</small></section>${photos}<section class="signatures"><div><div class="signature-wrap">${signature}</div><div class="signature-label">Assinatura do motorista<br>${checklistHtmlEscape(driverName)}</div></div><div><div class="signature-wrap"><div class="signature-space"></div></div><div class="signature-label">Assinatura do responsavel pela analise</div></div></section><div class="footer">Documento gerado em ${checklistHtmlEscape(formatDate(new Date()))}</div></div></main><script>window.addEventListener('load',()=>setTimeout(()=>window.print(),400));</script></body></html>`;
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${checklistHtmlEscape(checklistLabel(checklist.type))}</title><style>@page{size:A4 landscape;margin:10mm}*{box-sizing:border-box}body{margin:0;color:#18181b;font-family:Arial,sans-serif;font-size:10px}.page{position:relative;min-height:190mm;padding:7mm;overflow:hidden}.page:before{content:"";position:absolute;inset:0;background:url('/checklist-pdf-background.png') right 8mm bottom 8mm/40% auto no-repeat;opacity:.1;z-index:0}.content{position:relative;z-index:1}.brand{display:flex;align-items:flex-start;justify-content:space-between;border-bottom:3px solid #f3c400;padding-bottom:8px}.brand img{width:145px}.title{text-align:right}.title h1{margin:0;font-size:19px}.title p{margin:4px 0 0;color:#52525b}.info{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:10px 0}.box{border:1px solid #d4d4d8;border-radius:5px;background:rgba(255,255,255,.94);padding:6px}.label{display:block;color:#71717a;font-size:8px;text-transform:uppercase}.value{display:block;margin-top:2px;font-weight:700}table{width:100%;border-collapse:collapse;background:rgba(255,255,255,.94)}th,td{border:1px solid #d4d4d8;padding:5px 7px;text-align:left;vertical-align:middle}th{background:#f4f4f5;font-size:8px;text-transform:uppercase}.answer{display:inline-block;min-width:82px;border-radius:20px;padding:4px 9px;text-align:center;font-size:9px;font-weight:bold}.answer.ok{background:#dcfce7;color:#047857}.answer.nc{background:#fee2e2;color:#b91c1c}.answer.na{background:#f4f4f5;color:#52525b}.review{margin-top:9px;border:1px solid #d4d4d8;border-left:4px solid #f3c400;border-radius:5px;padding:7px;background:#fff}.review strong{display:block;margin-bottom:3px}.photos{margin-top:9px;break-inside:avoid}.photos h2{font-size:11px}.photo-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}.photo-grid figure{margin:0}.photo-grid img{width:100%;height:90px;object-fit:cover;border:1px solid #d4d4d8}.photo-grid figcaption{text-align:center;font-size:8px;color:#71717a}.signatures{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:18px;break-inside:avoid}.signature-wrap{height:58px;display:flex;align-items:flex-end;justify-content:center;border-bottom:1px solid #18181b}.signature-image{max-width:100%;max-height:54px;object-fit:contain}.signature-space{height:54px}.signature-label{text-align:center;padding-top:4px;font-size:9px}.footer{margin-top:10px;text-align:right;color:#71717a;font-size:8px}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.page{padding:0}}</style></head><body><main class="page"><div class="content"><header class="brand"><img src="/checklist-pdf-logo.png" alt="AVAPEX Transportes"><div class="title"><h1>Checklist operacional</h1><p>${checklistHtmlEscape(checklistLabel(checklist.type))}</p></div></header><section class="info"><div class="box"><span class="label">Data e hora</span><span class="value">${checklistHtmlEscape(formatDate(checklist.createdAt))}</span></div><div class="box"><span class="label">Motorista</span><span class="value">${checklistHtmlEscape(driverName)}</span></div><div class="box"><span class="label">Veiculo</span><span class="value">${checklistHtmlEscape(checklist.vehiclePlate || checklist.vehicleId || '-')}</span></div><div class="box"><span class="label">Quilometragem</span><span class="value">${checklist.kmRegistered ? checklist.kmRegistered.toLocaleString('pt-BR') + ' km' : '-'}</span></div><div class="box"><span class="label">Resultado</span><span class="value">${checklist.hasCriticalFailure ? 'Com nao conformidade' : 'Sem falha critica'}</span></div><div class="box"><span class="label">Analise administrativa</span><span class="value">${checklistHtmlEscape(reviewStatusLabel(checklist))}</span></div></section><table><thead><tr><th>#</th><th>Item verificado</th><th>Resposta</th></tr></thead><tbody>${rows}</tbody></table><section class="review"><strong>Resultado da analise administrativa</strong>${checklistHtmlEscape(checklist.adminReviewMessage || reviewStatusLabel(checklist))}<br><small>Revisado em ${checklistHtmlEscape(formatDate(checklist.reviewedAt ?? null))}</small></section>${photos}<section class="signatures"><div><div class="signature-wrap">${signature}</div><div class="signature-label">Assinatura do motorista<br>${checklistHtmlEscape(driverName)}</div></div><div><div class="signature-wrap"><div class="signature-space"></div></div><div class="signature-label">Assinatura do responsavel pela analise</div></div></section><div class="footer">Documento gerado em ${checklistHtmlEscape(formatDate(new Date()))}</div></div></main><script>window.addEventListener('load',()=>setTimeout(()=>window.print(),400));</script></body></html>`;
   const printWindow = window.open('', '_blank', 'width=1000,height=1200'); if (!printWindow) return; printWindow.document.open(); printWindow.document.write(html); printWindow.document.close();
 }
 
 function exportOperationalChecklistExcel(checklist: Checklist, driverName: string) {
   if ((checklist.adminReviewStatus ?? 'pending') === 'pending') return;
-  const answers = objectRows(checklist.answers && Object.keys(checklist.answers).length ? checklist.answers : checklist.items);
-  const rows = answers.map(([key, value], index) => `<tr><td>${index + 1}</td><td>${checklistHtmlEscape(formatFieldName(key))}</td><td>${checklistHtmlEscape(formatUnknownValue(value))}</td></tr>`).join('');
+  const answers = checklistAnswerRows(checklist);
+  const rows = answers.map((row, index) => {
+    const section = row.section && (index === 0 || answers[index - 1]?.section !== row.section) ? `<tr><th colspan="3" style="background:#e4e4e7">${checklistHtmlEscape(row.section)}</th></tr>` : '';
+    const color = answerKind(row.answer) === 'ok' ? '#047857' : answerKind(row.answer) === 'nc' ? '#b91c1c' : '#52525b';
+    return `${section}<tr><td>${checklistHtmlEscape(row.number || String(index + 1))}</td><td>${checklistHtmlEscape(row.label)}</td><td style="font-weight:bold;color:${color}">${checklistHtmlEscape(answerLabel(row.answer))}</td></tr>`;
+  }).join('');
   const content = `<!doctype html><html><head><meta charset="utf-8"></head><body><table border="1"><tr><th colspan="3" style="font-size:18px;background:#f3c400">CHECKLIST OPERACIONAL</th></tr><tr><th>Modelo</th><td colspan="2">${checklistHtmlEscape(checklistLabel(checklist.type))}</td></tr><tr><th>Data e hora</th><td colspan="2">${checklistHtmlEscape(formatDate(checklist.createdAt))}</td></tr><tr><th>Motorista</th><td colspan="2">${checklistHtmlEscape(driverName)}</td></tr><tr><th>Veiculo</th><td colspan="2">${checklistHtmlEscape(checklist.vehiclePlate || checklist.vehicleId)}</td></tr><tr><th>KM</th><td colspan="2">${checklist.kmRegistered || ''}</td></tr><tr><th>Status administrativo</th><td colspan="2">${checklistHtmlEscape(reviewStatusLabel(checklist))}</td></tr><tr><th>Mensagem da analise</th><td colspan="2">${checklistHtmlEscape(checklist.adminReviewMessage || '')}</td></tr><tr></tr><tr><th>#</th><th>Item verificado</th><th>Resposta</th></tr>${rows}</table></body></html>`;
   const url = URL.createObjectURL(new Blob(['\ufeff', content], { type: 'application/vnd.ms-excel;charset=utf-8' })); const link = document.createElement('a'); link.href = url; link.download = operationalChecklistFileName(checklist, '.xls'); link.click(); URL.revokeObjectURL(url);
 }

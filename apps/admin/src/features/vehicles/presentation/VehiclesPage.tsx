@@ -439,7 +439,6 @@ function VehicleImportModal({
         <header className="flex items-start justify-between gap-4 border-b border-zinc-200 px-5 py-4">
           <div>
             <h2 className="text-lg font-semibold text-zinc-950">Importar veiculos por planilha</h2>
-            <p className="text-sm text-zinc-500">Use o modelo com PLACA, FROTA, TIPO DE FROTA e ANO.</p>
           </div>
           <button aria-label="Fechar importacao" className="ui-icon-button flex h-9 w-9 shrink-0 items-center justify-center border-zinc-300 text-zinc-700 hover:bg-zinc-50" onClick={onClose} type="button">
             <X size={18} />
@@ -461,7 +460,6 @@ function VehicleImportModal({
             <div className="rounded-xl border border-dashed border-zinc-300 bg-zinc-50 px-5 py-8 text-center">
               <FileSpreadsheet className="mx-auto text-zinc-400" size={30} />
               <p className="mt-3 text-sm font-medium text-zinc-800">Selecione a planilha preenchida</p>
-              <p className="mt-1 text-sm text-zinc-500">O sistema valida duplicidades, placa, frota, tipo e ano antes de gravar.</p>
             </div>
           ) : (
             <>
@@ -475,7 +473,6 @@ function VehicleImportModal({
                 <div className="flex items-center justify-between border-b border-zinc-200 bg-zinc-50 px-4 py-3">
                   <div>
                     <p className="text-sm font-semibold text-zinc-900">{analysis.fileName}</p>
-                    <p className="text-xs text-zinc-500">Somente as linhas sem pendencias serao cadastradas.</p>
                   </div>
                   <span className="text-sm font-semibold text-zinc-700">{validRows.length} veiculo(s)</span>
                 </div>

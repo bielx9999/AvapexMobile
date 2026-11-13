@@ -45,7 +45,6 @@ export function CteDocumentSection({ documents, errors, onChange }: CteDocumentS
   return (
     <section aria-labelledby="cte-section-title" className="border-t border-zinc-200 px-5 py-5 sm:px-6">
       <SectionHeading
-        description="Associe cada numero ao respectivo arquivo PDF."
         icon={<FileText size={18} />}
         title="Documento da viagem"
       />
@@ -142,13 +141,12 @@ export function CteDocumentSection({ documents, errors, onChange }: CteDocumentS
   );
 }
 
-function SectionHeading({ description, icon, title }: { description: string; icon: React.ReactNode; title: string }) {
+function SectionHeading({ icon, title }: { icon: React.ReactNode; title: string }) {
   return (
     <div className="flex items-start gap-3">
       <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-zinc-900 text-white">{icon}</span>
       <div>
         <h3 className="text-sm font-semibold text-zinc-950" id="cte-section-title">{title}</h3>
-        <p className="mt-0.5 text-xs text-zinc-500">{description}</p>
       </div>
     </div>
   );

@@ -30,9 +30,6 @@ const VehiclesPage = lazy(async () => ({
 const EquipmentPage = lazy(async () => ({
   default: (await import('../../equipment/presentation/EquipmentPage')).EquipmentPage,
 }));
-const LoadPlanningPage = lazy(async () => ({
-  default: (await import('../../load-planning/presentation/LoadPlanningPage')).LoadPlanningPage,
-}));
 const EquipmentChecklistsPage = lazy(async () => ({
   default: (await import('../../equipment/presentation/EquipmentChecklistsPage')).EquipmentChecklistsPage,
 }));
@@ -80,25 +77,24 @@ type AdminDashboardProps = {
   session: AdminSession;
 };
 
-const pageConfig: Record<AdminPage, { category: string; description: string; title: string }> = {
-  checklists: { category: 'CheckLists', description: 'Acompanhe conformidade e volume de inspecoes.', title: 'Checklists operacionais' },
-  'security-inspections': { category: 'CheckLists', description: 'Inspecoes realizadas pelos tecnicos de seguranca.', title: 'Inspecoes de seguranca' },
-  'equipment-checklists': { category: 'CheckLists', description: 'Confira os equipamentos vinculados aos veiculos e registre as tratativas.', title: 'Checklist de equipamentos' },
-  fueling: { category: 'Operacao', description: 'Monitore registros e comprovantes de abastecimento.', title: 'Abastecimento' },
-  equipment: { category: 'Operacao', description: 'Controle o estoque, atribuicoes e inspecoes dos equipamentos de amarracao.', title: 'Equipamentos de Amarracao' },
-  'load-planning': { category: 'Operacao', description: 'Cadastre dimensoes de carrocerias e cargas para simular o posicionamento.', title: 'Planejamento de Carga 3D' },
-  deliveries: { category: 'Operacao', description: 'Acompanhe pedidos, status, motoristas e comprovantes em tempo real.', title: 'Gestao de Entregas' },
-  receipts: { category: 'Operacao', description: 'Valide comprovantes enviados pelos motoristas.', title: 'Comprovantes' },
-  'route-planner': { category: 'Operacao', description: 'Monte, visualize e salve rotas utilizadas nas programacoes de transporte.', title: 'Roteirizador' },
-  scheduling: { category: 'Operacao', description: 'Planeje e acompanhe cargas e descargas.', title: 'Programacao' },
-  users: { category: 'Cadastros', description: 'Gerencie acessos e dados dos usuarios.', title: 'Usuarios' },
-  vehicles: { category: 'Cadastros', description: 'Gerencie e acompanhe os veiculos da frota.', title: 'Veiculos' },
-  'light-vehicles': { category: 'Veiculos leves', description: 'Acompanhe checklists e revisoes dos veiculos leves.', title: 'Gerenciamento de veiculos leves' },
-  'light-vehicle-checklists': { category: 'Veiculos leves', description: 'Registre e acompanhe o checklist semanal dos veiculos leves.', title: 'Checklist semanal' },
-  'light-vehicle-maintenance': { category: 'Veiculos leves', description: 'Controle as proximas revisoes por quilometragem.', title: 'Revisoes por km' },
-  localities: { category: 'Cadastros', description: 'Gerencie os pontos de origem, destino e parada utilizados nas operacoes.', title: 'Localidades' },
-  onedrive: { category: 'Documentacao', description: 'Acesse os documentos compartilhados da equipe.', title: 'OneDrive' },
-  powerbi: { category: 'Documentacao', description: 'Acompanhe os paineis corporativos da operacao.', title: 'Power BI' },
+const pageConfig: Record<AdminPage, { category: string; title: string }> = {
+  checklists: { category: 'CheckLists', title: 'Checklists operacionais' },
+  'security-inspections': { category: 'CheckLists', title: 'Inspecoes de seguranca' },
+  'equipment-checklists': { category: 'CheckLists', title: 'Checklist de equipamentos' },
+  fueling: { category: 'Operacao', title: 'Abastecimento' },
+  equipment: { category: 'Operacao', title: 'Equipamentos de Amarracao' },
+  deliveries: { category: 'Operacao', title: 'Gestao de Entregas' },
+  receipts: { category: 'Operacao', title: 'Comprovantes' },
+  'route-planner': { category: 'Operacao', title: 'Roteirizador' },
+  scheduling: { category: 'Operacao', title: 'Programacao' },
+  users: { category: 'Cadastros', title: 'Usuarios' },
+  vehicles: { category: 'Cadastros', title: 'Veiculos' },
+  'light-vehicles': { category: 'Veiculos leves', title: 'Gerenciamento de veiculos leves' },
+  'light-vehicle-checklists': { category: 'Veiculos leves', title: 'Checklist semanal' },
+  'light-vehicle-maintenance': { category: 'Veiculos leves', title: 'Revisoes por km' },
+  localities: { category: 'Cadastros', title: 'Localidades' },
+  onedrive: { category: 'Documentacao', title: 'OneDrive' },
+  powerbi: { category: 'Documentacao', title: 'Power BI' },
 };
 
 export function AdminDashboard({ session }: AdminDashboardProps) {
@@ -209,7 +205,6 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
     <AdminShell
       activePage={activePage}
       category={currentPage.category}
-      description={currentPage.description}
       headerActions={headerActions}
       onNavigate={setActivePage}
       session={session}
@@ -251,8 +246,6 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
             <AbastecimentoPage fueling={data.fueling} loading={loading} onChanged={loadData} />
           ) : activePage === 'equipment' ? (
             <EquipmentPage users={data.users} vehicles={data.vehicles} />
-          ) : activePage === 'load-planning' ? (
-            <LoadPlanningPage userId={session.firebaseUser.uid} />
           ) : activePage === 'users' ? (
             <UsersPage
               currentUid={session.firebaseUser.uid}

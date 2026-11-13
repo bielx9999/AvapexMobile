@@ -218,6 +218,13 @@ export const adminReadRepository = {
 };
 
 export const adminWriteRepository = {
+  async deleteOperationalChecklist(id: string) {
+    try {
+      await deleteDoc(doc(firestore, 'checklists', id));
+    } catch (error) {
+      throw mapFirebaseError(error, 'Erro ao excluir checklist operacional.');
+    }
+  },
   async saveLightVehicleWeeklyChecklist(input: LightVehicleWeeklyChecklistWrite) {
     try {
       const id = input.id ?? `light_checklist_${Date.now()}`;

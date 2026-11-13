@@ -29,6 +29,7 @@ const initialForm = {
 export function UsersPage({ users, loading, currentUid, onChanged }: UsersPageProps) {
   const [form, setForm] = useState(initialForm);
   const [query, setQuery] = useState('');
+  const [roleFilter, setRoleFilter] = useState<'all' | UserRole>('all');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [busyUid, setBusyUid] = useState('');
@@ -38,16 +39,13 @@ export function UsersPage({ users, loading, currentUid, onChanged }: UsersPagePr
 
   const filteredUsers = useMemo(() => {
     const normalized = query.trim().toLowerCase();
-    if (!normalized) {
-      return users;
-    }
     return users.filter((user) =>
-      [user.name, user.email, user.cpf, user.phone, user.role, user.status]
+      (roleFilter === 'all' || user.role === roleFilter) && (!normalized || [user.name, user.email, user.cpf, user.phone, user.role, user.status]
         .join(' ')
         .toLowerCase()
-        .includes(normalized),
+        .includes(normalized)),
     );
-  }, [query, users]);
+  }, [query, roleFilter, users]);
 
   async function handleSubmitUser(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -175,6 +173,11 @@ export function UsersPage({ users, loading, currentUid, onChanged }: UsersPagePr
               <Plus size={18} />
               Novo Usuario
             </button>
+            <select aria-label="Filtrar por perfil" className="ui-input h-10 px-3 text-sm" value={roleFilter} onChange={(event) => setRoleFilter(event.target.value as 'all' | UserRole)}>
+              <option value="all">Todos os perfis</option>
+              <option value="admin">Administrativo</option>
+              <option value="driver">Motorista</option>
+            </select>
             <label className="relative block sm:w-80">
               <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" size={18} />
               <input
@@ -508,7 +511,6 @@ function UserImportModal({
         <header className="flex items-start justify-between gap-4 border-b border-zinc-200 px-5 py-4">
           <div>
             <h2 className="text-lg font-semibold text-zinc-950">Importar usuarios por planilha</h2>
-            <p className="text-sm text-zinc-500">Use o modelo com dados de acesso, CPF e CNH quando o perfil for motorista.</p>
           </div>
           <button aria-label="Fechar importacao" className="ui-icon-button flex h-9 w-9 shrink-0 items-center justify-center border-zinc-300 text-zinc-700 hover:bg-zinc-50" onClick={onClose} type="button">
             <X size={18} />
@@ -530,7 +532,6 @@ function UserImportModal({
             <div className="rounded-xl border border-dashed border-zinc-300 bg-zinc-50 px-5 py-8 text-center">
               <FileSpreadsheet className="mx-auto text-zinc-400" size={30} />
               <p className="mt-3 text-sm font-medium text-zinc-800">Selecione a planilha preenchida</p>
-              <p className="mt-1 text-sm text-zinc-500">O sistema valida CPF, e-mail, senha, perfil, CNH e duplicidades antes de gravar.</p>
             </div>
           ) : (
             <>
@@ -544,7 +545,6 @@ function UserImportModal({
                 <div className="flex items-center justify-between border-b border-zinc-200 bg-zinc-50 px-4 py-3">
                   <div>
                     <p className="text-sm font-semibold text-zinc-900">{analysis.fileName}</p>
-                    <p className="text-xs text-zinc-500">Somente as linhas sem pendencias serao cadastradas.</p>
                   </div>
                   <span className="text-sm font-semibold text-zinc-700">{validRows.length} usuario(s)</span>
                 </div>

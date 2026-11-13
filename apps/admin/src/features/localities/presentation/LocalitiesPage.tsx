@@ -311,7 +311,6 @@ function LocalityEditor({ form: initialForm, onClose, onSaved, readOnly = false 
             <div>
               <div className="mb-2 flex items-center justify-between"><span className="text-sm font-medium text-zinc-700">Selecionar ponto no mapa</span><span className="text-xs text-zinc-500">Clique ou arraste o marcador</span></div>
               <LocalityMap latitude={latitude} longitude={longitude} onPositionChange={(nextLatitude, nextLongitude) => setForm((current) => ({ ...current, latitude: nextLatitude.toFixed(7), longitude: nextLongitude.toFixed(7) }))} />
-              <p className="mt-2 text-xs text-zinc-500">A busca apenas sugere a posicao. Confirme visualmente antes de salvar.</p>
             </div>
           </div>
           <footer className="sticky bottom-0 border-t border-zinc-200 bg-white px-5 py-4">
@@ -364,7 +363,7 @@ function LocalityImportModal({ localities, onClose, onImported }: { localities: 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-3 backdrop-blur-[2px]">
       <section aria-modal="true" className="flex max-h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl" role="dialog">
-        <header className="flex items-center justify-between border-b border-zinc-200 px-5 py-4"><div><h2 className="text-lg font-semibold">Importar Localidades</h2><p className="text-sm text-zinc-500">Revise duplicidades e inconsistencias antes da gravacao.</p></div><button aria-label="Fechar" className="ui-icon-button h-9 w-9" onClick={onClose} type="button"><X size={18} /></button></header>
+        <header className="flex items-center justify-between border-b border-zinc-200 px-5 py-4"><div><h2 className="text-lg font-semibold">Importar Localidades</h2></div><button aria-label="Fechar" className="ui-icon-button h-9 w-9" onClick={onClose} type="button"><X size={18} /></button></header>
         <div className="min-h-0 flex-1 overflow-y-auto p-5">
           <input accept=".xlsx" className="hidden" onChange={(event) => void selectFile(event.target.files?.[0])} ref={inputRef} type="file" />
           <button className="ui-button h-11 gap-2 border border-zinc-300 bg-white px-4 text-sm font-medium hover:bg-zinc-50" disabled={analyzing} onClick={() => inputRef.current?.click()} type="button">{analyzing ? <LoaderCircle className="animate-spin" size={17} /> : <FileUp size={17} />}{analysis ? 'Escolher outro arquivo' : 'Selecionar planilha XLSX'}</button>

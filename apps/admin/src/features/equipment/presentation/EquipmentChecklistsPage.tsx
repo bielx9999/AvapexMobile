@@ -22,7 +22,7 @@ export function EquipmentChecklistsPage({ currentUser, users, vehicles }: Props)
     <ErrorBanner message={error} />
     <section className="ui-card">
       <div className="flex flex-col gap-4 px-4 py-5 sm:flex-row sm:items-center sm:justify-between">
-        <div><h2 className="font-semibold text-zinc-950">Nova conferencia de equipamentos</h2><p className="mt-1 text-sm text-zinc-500">Selecione um veiculo para conferir os equipamentos de amarracao vinculados.</p></div>
+        <div><h2 className="font-semibold text-zinc-950">Nova conferencia de equipamentos</h2></div>
         <button className="ui-button h-10 gap-2 bg-avapex-yellow px-4 text-sm font-semibold text-avapex-black hover:bg-yellow-300" onClick={() => setOpen(true)} type="button"><Plus size={17} />Nova inspecao</button>
       </div>
     </section>

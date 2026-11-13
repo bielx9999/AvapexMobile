@@ -127,12 +127,19 @@ export function RoutePlannerPage({ localities, onChanged, routeTemplates }: Rout
 
   function applyDraggedRoute(viaPoints: Array<{ latitude: number; longitude: number }>) {
     if (!canEdit) return;
-    const routeViaPoints = viaPoints.map((point, index) => {
+    const existingViaPoints = new Map(points.filter((point) => point.type === 'via').map((point) => [`${point.latitude.toFixed(6)},${point.longitude.toFixed(6)}`, point]));
+    const uniqueViaPoints = [...new Map(viaPoints
+      .filter((point) => Number.isFinite(point.latitude) && Number.isFinite(point.longitude))
+      .map((point) => [`${point.latitude.toFixed(6)},${point.longitude.toFixed(6)}`, point] as const))
+      .values()]
+      .slice(0, 25);
+    const routeViaPoints = uniqueViaPoints.map((point, index) => {
       const coordinates = `${point.latitude.toFixed(6)}, ${point.longitude.toFixed(6)}`;
+      const existing = existingViaPoints.get(`${point.latitude.toFixed(6)},${point.longitude.toFixed(6)}`);
       return {
         address: coordinates,
         city: '',
-        id: crypto.randomUUID(),
+        id: existing?.id ?? crypto.randomUUID(),
         latitude: point.latitude,
         locationId: '',
         longitude: point.longitude,
@@ -312,7 +319,6 @@ export function RoutePlannerPage({ localities, onChanged, routeTemplates }: Rout
                 <div className="mb-4 flex items-center justify-between gap-3">
                   <div>
                     <h3 className="text-sm font-semibold text-zinc-950">Cadastro da rota</h3>
-                    <p className="mt-0.5 text-xs text-zinc-500">Selecione as localidades cadastradas.</p>
                   </div>
                   <button
                     aria-label="Limpar origem e destino"
@@ -486,8 +492,9 @@ function EndpointSelector({ disabled, label, localities, onChange, value }: { di
   const selected = localities.find((locality) => locality.id === value);
   const [draftCityKey, setDraftCityKey] = useState('');
   const cityKey = selected ? cityValue(selected) : draftCityKey;
-  const cities = uniqueCities(localities);
-  const available = cityKey ? localities.filter((locality) => cityValue(locality) === cityKey) : [];
+  const cities = useMemo(() => uniqueCities(localities), [localities]);
+  const available = useMemo(() => cityKey ? localities.filter((locality) => cityValue(locality) === cityKey) : [], [cityKey, localities]);
+  const options = useMemo(() => localityOptions(available), [available]);
   return (
     <fieldset disabled={disabled}>
       <legend className="mb-2 text-sm font-semibold text-zinc-950">{label}</legend>
@@ -507,7 +514,7 @@ function EndpointSelector({ disabled, label, localities, onChange, value }: { di
           disabled={disabled || !cityKey}
           label="Localidade"
           onChange={onChange}
-          options={localityOptions(available)}
+          options={options}
           placeholder="Buscar referencia..."
           value={value}
         />
@@ -530,13 +537,14 @@ function IntermediateEditor({
 }) {
   const [cityKey, setCityKey] = useState('');
   const [localityId, setLocalityId] = useState('');
-  const available = cityKey ? localities.filter((locality) => cityValue(locality) === cityKey) : [];
+  const cities = useMemo(() => uniqueCities(localities), [localities]);
+  const available = useMemo(() => cityKey ? localities.filter((locality) => cityValue(locality) === cityKey) : [], [cityKey, localities]);
+  const options = useMemo(() => localityOptions(available), [available]);
   return (
     <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
           <h3 className="text-sm font-semibold text-zinc-950">Inserir ponto</h3>
-          <p className="mt-0.5 text-xs text-zinc-500">Adicione uma entrega intermediaria.</p>
         </div>
         <span className="text-xs font-medium text-zinc-500">{intermediates.length}/25</span>
       </div>
@@ -548,7 +556,7 @@ function IntermediateEditor({
               setCityKey(nextValue);
               setLocalityId('');
             }}
-            options={uniqueCities(localities)}
+            options={cities}
             placeholder="Buscar cidade..."
             value={cityKey}
           />
@@ -558,7 +566,7 @@ function IntermediateEditor({
                 disabled={!cityKey}
                 label="Localidade do ponto"
                 onChange={setLocalityId}
-                options={localityOptions(available)}
+                options={options}
                 placeholder="Buscar referencia..."
                 value={localityId}
               />
@@ -605,7 +613,6 @@ function RoutePointList({
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
           <h3 className="text-sm font-semibold text-zinc-950">Sequencia da rota</h3>
-          <p className="mt-0.5 text-xs text-zinc-500">Reordene ou remova pontos antes de calcular.</p>
         </div>
         <span className="rounded-full bg-zinc-100 px-2 py-1 text-xs font-semibold text-zinc-600">{points.length}</span>
       </div>

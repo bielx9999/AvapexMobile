@@ -39,7 +39,7 @@ export function DocumentationReportsPage({ view }: { view: View }) {
       <section className="ui-card flex flex-col gap-4 p-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-start gap-3">
           <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-yellow-50 text-yellow-700"><ShieldCheck size={20} /></span>
-          <div><h2 className="font-semibold text-zinc-950">Central Microsoft</h2><p className="mt-1 text-sm text-zinc-500">Acesse os documentos e relatorios com as permissoes da sua conta corporativa.</p></div>
+          <div><h2 className="font-semibold text-zinc-950">Central Microsoft</h2></div>
         </div>
         {account ? <div className="flex items-center gap-2"><span className="max-w-[240px] truncate text-sm text-zinc-600" title={account.username}>{microsoftUserLabel(account)}</span><button className="ui-button h-10 gap-2 border border-zinc-200 bg-white px-3 text-sm text-zinc-700 hover:bg-zinc-50" onClick={() => void disconnect()} type="button"><LogOut size={16} />Sair</button></div> : <button className="ui-button h-10 gap-2 bg-avapex-yellow px-4 text-sm font-semibold text-avapex-black hover:bg-yellow-300" disabled={!configured} onClick={() => void connect()} type="button"><LogIn size={16} />Conectar Microsoft</button>}
       </section>
@@ -91,7 +91,7 @@ function PowerBiPanel({ account, onConnect, onError }: { account?: AccountInfo; 
 
   if (!microsoftConfig.powerBiReportId || !powerBiEmbedUrl()) return <section className="ui-card"><EmptyState title="Power BI ainda nao configurado" description="Informe o ID do relatorio e, opcionalmente, o workspace no arquivo `.env` do painel." /></section>;
   if (!account) return <section className="ui-card"><EmptyState title="Conecte sua conta Microsoft" description="O relatorio sera aberto com o acesso que sua conta possui no Power BI." action={<button className="ui-button h-10 gap-2 bg-zinc-900 px-4 text-sm font-semibold text-white hover:bg-zinc-800" onClick={onConnect} type="button"><LogIn size={16} />Entrar para acessar</button>} /></section>;
-  return <section className="ui-card overflow-hidden"><div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3"><div><h2 className="font-semibold text-zinc-950">Painel Power BI</h2><p className="mt-1 text-sm text-zinc-500">Relatorio corporativo com navegacao e filtros controlados.</p></div>{loading ? <span className="text-sm text-zinc-500">Carregando...</span> : null}</div><div className="h-[min(72vh,820px)] min-h-[520px] bg-zinc-50" ref={hostRef} /></section>;
+  return <section className="ui-card overflow-hidden"><div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3"><div><h2 className="font-semibold text-zinc-950">Painel Power BI</h2></div>{loading ? <span className="text-sm text-zinc-500">Carregando...</span> : null}</div><div className="h-[min(72vh,820px)] min-h-[520px] bg-zinc-50" ref={hostRef} /></section>;
 }
 
 function formatBytes(value?: number) { if (value === undefined) return 'Tamanho nao informado'; if (value < 1024) return `${value} B`; if (value < 1024 ** 2) return `${Math.round(value / 1024)} KB`; return `${(value / 1024 ** 2).toFixed(1)} MB`; }

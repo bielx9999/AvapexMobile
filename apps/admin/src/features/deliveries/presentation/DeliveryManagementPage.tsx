@@ -113,7 +113,6 @@ export function DeliveryManagementPage({ deliveries, loading }: DeliveryManageme
         <div className="ui-panel-header">
           <div>
             <h2 className="font-semibold text-zinc-950">Gestao de entregas</h2>
-            <p className="mt-1 text-sm text-zinc-500">Acompanhe pedidos, motoristas, status, comprovantes e janelas de atendimento.</p>
           </div>
           <div className="grid w-full gap-2 sm:grid-cols-2 lg:w-auto lg:grid-cols-[140px_140px_170px_320px]">
             <input aria-label="Data inicial" className="ui-input h-10 px-3 text-sm" onChange={(event) => setStartDate(event.target.value)} type="date" value={startDate} />

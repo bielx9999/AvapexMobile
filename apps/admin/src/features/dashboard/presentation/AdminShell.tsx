@@ -1,4 +1,6 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
+import { firestore } from '../../../core/firebase/firebaseConfig';
 import {
   Bell,
   ChevronDown,
@@ -19,8 +21,8 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   PackageCheck,
-  Box,
   Route,
+  Settings2,
   Truck,
   Users,
   Wrench,
@@ -48,8 +50,7 @@ export type AdminPage =
   | 'light-vehicle-maintenance'
   | 'localities'
   | 'onedrive'
-  | 'powerbi'
-  | 'load-planning';
+  | 'powerbi';
 
 type NavSection = {
   icon: LucideIcon;
@@ -68,7 +69,6 @@ const navSections: NavSection[] = [
       { icon: FileCheck2, key: 'receipts', label: 'Comprovantes' },
       { icon: Fuel, key: 'fueling', label: 'Abastecimento' },
       { icon: Boxes, key: 'equipment', label: 'Equipamentos' },
-      { icon: Box, key: 'load-planning', label: 'Planejamento de Carga 3D' },
     ],
   },
   {
@@ -111,7 +111,6 @@ type AdminShellProps = {
   activePage: AdminPage;
   category: string;
   children: ReactNode;
-  description: string;
   headerActions?: ReactNode;
   onNavigate: (page: AdminPage) => void;
   session: AdminSession;
@@ -122,7 +121,6 @@ export function AdminShell({
   activePage,
   category,
   children,
-  description,
   headerActions,
   onNavigate,
   session,
@@ -131,6 +129,28 @@ export function AdminShell({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
+  const [hiddenPages, setHiddenPages] = useState<string[]>([]);
+  const [menuSettingsOpen, setMenuSettingsOpen] = useState(false);
+  const [menuError, setMenuError] = useState('');
+  const [savingMenu, setSavingMenu] = useState(false);
+
+  useEffect(() => onSnapshot(doc(firestore, 'users', session.firebaseUser.uid), (snapshot) => {
+    const value: unknown = snapshot.data()?.hiddenAdminPages;
+    setHiddenPages(Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []);
+  }, () => setMenuError('Nao foi possivel carregar as preferencias do menu.')), [session.firebaseUser.uid]);
+
+  async function togglePage(page: AdminPage) {
+    const next = hiddenPages.includes(page) ? hiddenPages.filter((item) => item !== page) : [...hiddenPages, page];
+    setSavingMenu(true);
+    setMenuError('');
+    try {
+      await updateDoc(doc(firestore, 'users', session.firebaseUser.uid), { hiddenAdminPages: next });
+    } catch {
+      setMenuError('Nao foi possivel salvar as preferencias do menu.');
+    } finally {
+      setSavingMenu(false);
+    }
+  }
 
   const initials = getInitials(session.profile.name || session.firebaseUser.email || 'A');
 
@@ -159,7 +179,9 @@ export function AdminShell({
 
       <nav aria-label="Navegacao principal" className={`ui-scrollbar-dark min-h-0 flex-1 overflow-y-auto py-4 ${sidebarCollapsed ? 'px-2' : 'px-3'}`}>
         <div className="space-y-5">
-          {navSections.map((section) => {
+          {navSections.map((originalSection) => {
+            const section = { ...originalSection, items: originalSection.items.filter((item) => !hiddenPages.includes(item.key)) };
+            if (!section.items.length) return null;
             const SectionIcon = section.icon;
             const isSectionCollapsed = collapsedSections[section.label] ?? false;
             const hasActiveItem = section.items.some((item) => item.key === activePage);
@@ -223,6 +245,7 @@ export function AdminShell({
       </nav>
 
       <div className={`shrink-0 border-t border-white/10 py-3 ${sidebarCollapsed ? 'px-2' : 'px-3'}`}>
+        <button aria-label="Personalizar menu" className={`ui-button h-10 text-sm text-zinc-300 hover:bg-white/[0.08] hover:text-white ${sidebarCollapsed ? 'w-full px-0' : 'w-full justify-start gap-3 px-3'}`} onClick={() => setMenuSettingsOpen(true)} title="Personalizar menu" type="button"><Settings2 size={17} />{!sidebarCollapsed ? 'Personalizar menu' : null}</button>
         <div className={`mb-2 flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3 px-2 py-2'}`} title={session.firebaseUser.email ?? undefined}>
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-avapex-yellow text-xs font-bold text-avapex-black">
             {initials}
@@ -250,6 +273,7 @@ export function AdminShell({
 
   return (
     <main className="min-h-screen bg-canvas text-avapex-ink">
+      {menuSettingsOpen ? <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4"><section aria-labelledby="menu-settings-title" aria-modal="true" className="flex max-h-[85vh] w-full max-w-xl flex-col overflow-hidden rounded-lg bg-white shadow-xl" role="dialog"><header className="flex items-center justify-between border-b border-zinc-200 px-5 py-4"><h2 className="text-base font-semibold" id="menu-settings-title">Personalizar menu</h2><button aria-label="Fechar" className="ui-icon-button h-9 w-9" onClick={() => setMenuSettingsOpen(false)} type="button"><X size={18} /></button></header><div className="overflow-y-auto p-5">{menuError ? <p className="mb-3 text-sm text-red-700" role="alert">{menuError}</p> : null}<div className="space-y-5">{navSections.map((section) => <fieldset key={section.label}><legend className="mb-2 text-xs font-semibold uppercase text-zinc-500">{section.label}</legend><div className="grid gap-2 sm:grid-cols-2">{section.items.map((item) => <label className="flex items-center gap-2 text-sm text-zinc-800" key={item.key}><input checked={!hiddenPages.includes(item.key)} disabled={savingMenu} onChange={() => void togglePage(item.key)} type="checkbox" />{item.label}</label>)}</div></fieldset>)}</div></div><footer className="flex justify-end border-t border-zinc-200 px-5 py-3"><button className="ui-button h-10 bg-zinc-900 px-4 text-sm font-medium text-white" onClick={() => setMenuSettingsOpen(false)} type="button">Concluir</button></footer></section></div> : null}
       <aside className={`fixed inset-y-0 left-0 z-40 hidden border-r border-white/10 bg-avapex-black text-white transition-[width] duration-200 lg:block ${sidebarCollapsed ? 'w-[76px]' : 'w-64'}`}>
         {sidebar}
         <button
@@ -285,7 +309,6 @@ export function AdminShell({
               <p className="hidden text-xs font-medium text-zinc-500 sm:block">{category} / {title}</p>
               <div className="flex items-baseline gap-3">
                 <h1 className="truncate text-xl font-semibold text-zinc-950">{title}</h1>
-                <p className="hidden truncate text-sm text-zinc-500 xl:block">{description}</p>
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-2">
