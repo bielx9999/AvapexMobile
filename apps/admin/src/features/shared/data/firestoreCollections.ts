@@ -617,6 +617,7 @@ export const adminWriteRepository = {
         operationType: trip.operationType ?? 'loading',
         expectedArrivalAt: trip.expectedArrivalAt ?? null,
         additionalInfo: trip.additionalInfo?.trim() ?? '',
+        cargoDescription: trip.cargoDescription?.trim() ?? '',
         driverResponse: trip.driverResponse ?? 'pending',
         driverRespondedAt: trip.driverRespondedAt ?? null,
         driverResponseDriverId: trip.driverResponseDriverId ?? '',
@@ -735,6 +736,7 @@ export const adminWriteRepository = {
         operationType: 'unloading',
         expectedArrivalAt: null,
         additionalInfo: sourceTrip.additionalInfo ?? '',
+        cargoDescription: sourceTrip.cargoDescription ?? '',
         driverResponse: 'pending',
         driverRespondedAt: null,
         driverResponseDriverId: '',
@@ -803,6 +805,16 @@ export const adminWriteRepository = {
       await updateDoc(doc(firestore, 'trips', tripId), data);
     } catch (error) {
       throw mapFirebaseError(error, 'Erro ao atualizar status da programacao.');
+    }
+  },
+
+  async updateTripCargoDescription(tripId: string, description: string) {
+    try {
+      await updateDoc(doc(firestore, 'trips', tripId), {
+        cargoDescription: description.trim(),
+      });
+    } catch (error) {
+      throw mapFirebaseError(error, 'Erro ao salvar a observacao da carga.');
     }
   },
 

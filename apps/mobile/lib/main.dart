@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/app/logistica_avapex_app.dart';
 import 'core/config/firebase_initializer.dart';
 import 'core/errors/firebase_failure.dart';
+import 'features/trips/data/services/trip_background_tracking.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -23,6 +24,7 @@ final class _FirebaseBootstrapAppState extends State<FirebaseBootstrapApp> {
   Future<void> _initializeFirebase() async {
     try {
       await FirebaseInitializer.initialize();
+      await TripBackgroundTracking.configure();
     } on FirebaseFailure catch (failure) {
       FlutterError.reportError(
         FlutterErrorDetails(

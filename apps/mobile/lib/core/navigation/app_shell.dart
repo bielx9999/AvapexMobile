@@ -51,6 +51,7 @@ final class _AppShellState extends ConsumerState<AppShell>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       unawaited(_syncPendingMedia());
+      ref.invalidate(currentDriverTripsProvider);
     }
   }
 

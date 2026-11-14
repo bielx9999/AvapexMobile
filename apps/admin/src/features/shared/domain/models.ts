@@ -257,6 +257,7 @@ export type Trip = {
   operationType?: ProgrammingOperationType;
   expectedArrivalAt?: Date | null;
   additionalInfo?: string;
+  cargoDescription?: string;
   returnGeneratedTripId?: string;
   returnSourceTripId?: string;
   unloadingGeneratedTripId?: string;

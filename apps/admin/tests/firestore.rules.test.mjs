@@ -6,7 +6,7 @@ import {
   assertSucceeds,
   initializeTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { collection, doc, getDoc, getDocs, setDoc, Timestamp, updateDoc } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, serverTimestamp, setDoc, Timestamp, updateDoc } from 'firebase/firestore';
 
 let environment;
 
@@ -366,6 +366,51 @@ describe('locality and route catalog permissions', { concurrency: false }, () =>
     if (snapshot.data()?.routeSnapshot?.routeVersionId !== 'version-1') {
       throw new Error('Trip route snapshot was not preserved.');
     }
+  });
+});
+
+describe('trip communication and GPS history permissions', { concurrency: false }, () => {
+  test('assigned driver and admin exchange messages; another driver cannot read them', async () => {
+    const admin = environment.authenticatedContext('admin-1').firestore();
+    const assigned = environment.authenticatedContext('driver-1').firestore();
+    const other = environment.authenticatedContext('driver-2').firestore();
+    const path = ['trips', 'trip-1', 'messages'];
+
+    await assertSucceeds(setDoc(doc(admin, ...path, 'admin-message'), {
+      senderId: 'admin-1', senderRole: 'admin', text: 'Carga fragil', createdAt: serverTimestamp(),
+    }));
+    await assertSucceeds(setDoc(doc(assigned, ...path, 'driver-message'), {
+      senderId: 'driver-1', senderRole: 'driver', text: 'Recebido', createdAt: serverTimestamp(),
+    }));
+    await assertSucceeds(getDocs(collection(assigned, ...path)));
+    await assertFails(getDocs(collection(other, ...path)));
+    await assertFails(setDoc(doc(other, ...path, 'other-message'), {
+      senderId: 'driver-2', senderRole: 'driver', text: 'Nao autorizado', createdAt: serverTimestamp(),
+    }));
+    await assertFails(updateDoc(doc(assigned, ...path, 'admin-message'), { text: 'Alterado' }));
+  });
+
+  test('only the assigned driver can append valid GPS points', async () => {
+    const assigned = environment.authenticatedContext('driver-1').firestore();
+    const other = environment.authenticatedContext('driver-2').firestore();
+    const admin = environment.authenticatedContext('admin-1').firestore();
+    const path = ['trips', 'trip-1', 'gpsPoints'];
+    const point = {
+      driverId: 'driver-1', latitude: -23.5, longitude: -46.6,
+      accuracy: 10, recordedAt: serverTimestamp(),
+    };
+    await assertFails(setDoc(doc(assigned, ...path, 'before-acceptance'), point));
+    await environment.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(), 'trips', 'trip-1'), {
+        driverResponse: 'accepted', status: 'in_progress',
+      });
+    });
+    await assertSucceeds(setDoc(doc(assigned, ...path, 'point-1'), point));
+    await assertSucceeds(getDocs(collection(admin, ...path)));
+    await assertFails(getDocs(collection(other, ...path)));
+    await assertFails(setDoc(doc(other, ...path, 'point-2'), { ...point, driverId: 'driver-2' }));
+    await assertFails(setDoc(doc(assigned, ...path, 'point-3'), { ...point, latitude: 999 }));
+    await assertFails(updateDoc(doc(assigned, ...path, 'point-1'), { latitude: -23.4 }));
   });
 });
 

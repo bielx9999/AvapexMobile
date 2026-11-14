@@ -32,6 +32,8 @@ import {
 import avapexLogo from '../../../assets/images/avapex_transportes_logo.png';
 import avapexMinimalLogo from '../../../assets/images/avapex_minimal_logo.png';
 import { logoutAdmin, type AdminSession } from '../../auth/data/authRepository';
+import { AppSettingsPage } from '../../settings/presentation/AppSettingsPage';
+import { fontFamilies, fontScales, type AppFontFamily, type AppFontScale } from '../../settings/appAppearance';
 
 export type AdminPage =
   | 'scheduling'
@@ -50,7 +52,8 @@ export type AdminPage =
   | 'light-vehicle-maintenance'
   | 'localities'
   | 'onedrive'
-  | 'powerbi';
+  | 'powerbi'
+  | 'app-settings';
 
 type NavSection = {
   icon: LucideIcon;
@@ -130,25 +133,58 @@ export function AdminShell({
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
   const [hiddenPages, setHiddenPages] = useState<string[]>([]);
-  const [menuSettingsOpen, setMenuSettingsOpen] = useState(false);
-  const [menuError, setMenuError] = useState('');
+  const [photoUrl, setPhotoUrl] = useState(session.profile.photoUrl || session.firebaseUser.photoURL || '');
+  const [fontFamily, setFontFamily] = useState<AppFontFamily>('inter');
+  const [fontScale, setFontScale] = useState<AppFontScale>(100);
+  const [settingsError, setSettingsError] = useState('');
   const [savingMenu, setSavingMenu] = useState(false);
+  const [savingAppearance, setSavingAppearance] = useState(false);
 
   useEffect(() => onSnapshot(doc(firestore, 'users', session.firebaseUser.uid), (snapshot) => {
-    const value: unknown = snapshot.data()?.hiddenAdminPages;
+    const data = snapshot.data();
+    const value: unknown = data?.hiddenAdminPages;
     setHiddenPages(Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []);
-  }, () => setMenuError('Nao foi possivel carregar as preferencias do menu.')), [session.firebaseUser.uid]);
+    setPhotoUrl(typeof data?.photoUrl === 'string' ? data.photoUrl : session.profile.photoUrl || session.firebaseUser.photoURL || '');
+    setFontFamily(fontFamilies.some((item) => item.value === data?.adminFontFamily) ? data?.adminFontFamily as AppFontFamily : 'inter');
+    setFontScale(fontScales.includes(data?.adminFontScale as AppFontScale) ? data?.adminFontScale as AppFontScale : 100);
+  }, () => setSettingsError('Nao foi possivel carregar as configuracoes do aplicativo.')), [session.firebaseUser.uid, session.profile.photoUrl, session.firebaseUser.photoURL]);
+
+  useEffect(() => {
+    document.documentElement.dataset.adminFont = fontFamily;
+    document.documentElement.style.fontSize = `${fontScale}%`;
+    return () => {
+      delete document.documentElement.dataset.adminFont;
+      document.documentElement.style.removeProperty('font-size');
+    };
+  }, [fontFamily, fontScale]);
 
   async function togglePage(page: AdminPage) {
     const next = hiddenPages.includes(page) ? hiddenPages.filter((item) => item !== page) : [...hiddenPages, page];
     setSavingMenu(true);
-    setMenuError('');
+    setSettingsError('');
     try {
       await updateDoc(doc(firestore, 'users', session.firebaseUser.uid), { hiddenAdminPages: next });
     } catch {
-      setMenuError('Nao foi possivel salvar as preferencias do menu.');
+      setSettingsError('Nao foi possivel salvar as preferencias do menu.');
     } finally {
       setSavingMenu(false);
+    }
+  }
+
+  async function saveAppearance(nextFont: AppFontFamily, nextScale: AppFontScale) {
+    setSavingAppearance(true);
+    setSettingsError('');
+    try {
+      await updateDoc(doc(firestore, 'users', session.firebaseUser.uid), {
+        adminFontFamily: nextFont,
+        adminFontScale: nextScale,
+      });
+      setFontFamily(nextFont);
+      setFontScale(nextScale);
+    } catch {
+      setSettingsError('Nao foi possivel salvar a fonte.');
+    } finally {
+      setSavingAppearance(false);
     }
   }
 
@@ -245,10 +281,9 @@ export function AdminShell({
       </nav>
 
       <div className={`shrink-0 border-t border-white/10 py-3 ${sidebarCollapsed ? 'px-2' : 'px-3'}`}>
-        <button aria-label="Personalizar menu" className={`ui-button h-10 text-sm text-zinc-300 hover:bg-white/[0.08] hover:text-white ${sidebarCollapsed ? 'w-full px-0' : 'w-full justify-start gap-3 px-3'}`} onClick={() => setMenuSettingsOpen(true)} title="Personalizar menu" type="button"><Settings2 size={17} />{!sidebarCollapsed ? 'Personalizar menu' : null}</button>
         <div className={`mb-2 flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3 px-2 py-2'}`} title={session.firebaseUser.email ?? undefined}>
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-avapex-yellow text-xs font-bold text-avapex-black">
-            {initials}
+            {photoUrl ? <img alt="" className="h-full w-full rounded-lg object-cover" src={photoUrl} /> : initials}
           </span>
           {!sidebarCollapsed ? (
             <div className="min-w-0">
@@ -257,6 +292,13 @@ export function AdminShell({
             </div>
           ) : null}
         </div>
+        <NavItem
+          active={activePage === 'app-settings'}
+          collapsed={sidebarCollapsed}
+          icon={Settings2}
+          label="Configurações"
+          onClick={() => handleNavigate('app-settings')}
+        />
         <button
           aria-label="Sair"
           className={`ui-button h-10 text-sm text-zinc-300 hover:bg-white/[0.08] hover:text-white ${sidebarCollapsed ? 'w-full px-0' : 'w-full justify-start gap-3 px-3'}`}
@@ -273,7 +315,6 @@ export function AdminShell({
 
   return (
     <main className="min-h-screen bg-canvas text-avapex-ink">
-      {menuSettingsOpen ? <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4"><section aria-labelledby="menu-settings-title" aria-modal="true" className="flex max-h-[85vh] w-full max-w-xl flex-col overflow-hidden rounded-lg bg-white shadow-xl" role="dialog"><header className="flex items-center justify-between border-b border-zinc-200 px-5 py-4"><h2 className="text-base font-semibold" id="menu-settings-title">Personalizar menu</h2><button aria-label="Fechar" className="ui-icon-button h-9 w-9" onClick={() => setMenuSettingsOpen(false)} type="button"><X size={18} /></button></header><div className="overflow-y-auto p-5">{menuError ? <p className="mb-3 text-sm text-red-700" role="alert">{menuError}</p> : null}<div className="space-y-5">{navSections.map((section) => <fieldset key={section.label}><legend className="mb-2 text-xs font-semibold uppercase text-zinc-500">{section.label}</legend><div className="grid gap-2 sm:grid-cols-2">{section.items.map((item) => <label className="flex items-center gap-2 text-sm text-zinc-800" key={item.key}><input checked={!hiddenPages.includes(item.key)} disabled={savingMenu} onChange={() => void togglePage(item.key)} type="checkbox" />{item.label}</label>)}</div></fieldset>)}</div></div><footer className="flex justify-end border-t border-zinc-200 px-5 py-3"><button className="ui-button h-10 bg-zinc-900 px-4 text-sm font-medium text-white" onClick={() => setMenuSettingsOpen(false)} type="button">Concluir</button></footer></section></div> : null}
       <aside className={`fixed inset-y-0 left-0 z-40 hidden border-r border-white/10 bg-avapex-black text-white transition-[width] duration-200 lg:block ${sidebarCollapsed ? 'w-[76px]' : 'w-64'}`}>
         {sidebar}
         <button
@@ -321,7 +362,25 @@ export function AdminShell({
         </header>
 
         <div className="mx-auto w-full max-w-[1920px] px-4 py-5 sm:px-6 sm:py-6">
-          {children}
+          {activePage === 'app-settings' ? (
+            <AppSettingsPage
+              email={session.firebaseUser.email || ''}
+              error={settingsError}
+              fontFamily={fontFamily}
+              fontScale={fontScale}
+              hiddenPages={hiddenPages}
+              menuSections={navSections}
+              name={session.profile.name}
+              onAppearanceChange={(family, scale) => void saveAppearance(family, scale)}
+              onPhotoChange={setPhotoUrl}
+              onSettingsError={setSettingsError}
+              onTogglePage={(page) => void togglePage(page)}
+              photoUrl={photoUrl}
+              savingAppearance={savingAppearance}
+              savingMenu={savingMenu}
+              uid={session.firebaseUser.uid}
+            />
+          ) : children}
         </div>
       </section>
     </main>

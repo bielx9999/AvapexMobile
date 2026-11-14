@@ -1,15 +1,47 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers/firebase_providers.dart';
 import '../data/models/trip_model.dart';
+import '../data/repositories/trip_message_repository.dart';
+import '../data/services/trip_background_tracking.dart';
+
+final tripMessageRepositoryProvider = Provider<TripMessageRepository>((ref) {
+  return TripMessageRepository(
+    firestore: ref.watch(firebaseFirestoreProvider),
+    auth: ref.watch(firebaseAuthProvider),
+  );
+});
+
+final tripMessagesProvider = StreamProvider.family<List<TripMessage>, String>((
+  ref,
+  tripId,
+) {
+  return ref.watch(tripMessageRepositoryProvider).watchForTrip(tripId);
+});
 
 final currentDriverTripsProvider = StreamProvider<List<Trip>>((ref) {
   return ref.watch(tripRepositoryProvider).watchCurrentDriverTrips();
 });
 
 final tripGpsHeartbeatControllerProvider = Provider<void>((ref) {
+  if (Platform.isAndroid) {
+    final trips = ref.watch(currentDriverTripsProvider).asData?.value;
+    if (trips != null) {
+      unawaited(
+        TripBackgroundTracking.sync(
+          hasActiveTrip: trips.any(
+            (trip) =>
+                trip.status == TripStatus.inProgress &&
+                trip.driverResponse == DriverTripResponse.accepted,
+          ),
+        ),
+      );
+    }
+    return;
+  }
   var heartbeatInFlight = false;
 
   Future<void> sendHeartbeat() async {

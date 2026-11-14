@@ -8,6 +8,7 @@ import {
   FileCheck2,
   FileText,
   MapPin,
+  MessageSquare,
   Pencil,
   Plus,
   Route,
@@ -32,6 +33,7 @@ import type {
 } from '../../shared/domain/models';
 import { ProgramacaoForm } from './components/ProgramacaoForm';
 import { ProgramacaoImportDialog } from './components/ProgramacaoImportDialog';
+import { TripMonitoringDialog } from './components/TripMonitoringDialog';
 import {
   dailyStatusOptions,
   findDailyStatusOption,
@@ -68,6 +70,10 @@ export function ProgramacaoPage({ loading, localities, onChanged, routeTemplates
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [importing, setImporting] = useState(false);
   const [editingTrip, setEditingTrip] = useState<Trip | null>(null);
+  const [cargoTrip, setCargoTrip] = useState<Trip | null>(null);
+  const [cargoDraft, setCargoDraft] = useState('');
+  const [cargoError, setCargoError] = useState('');
+  const [monitoringTripId, setMonitoringTripId] = useState('');
   const [busyTripId, setBusyTripId] = useState('');
   const [error, setError] = useState('');
   const [toastMessage, setToastMessage] = useState('');
@@ -203,6 +209,28 @@ export function ProgramacaoPage({ loading, localities, onChanged, routeTemplates
     setShowForm(false);
   }
 
+  function openCargoEditor(trip: Trip) {
+    setCargoTrip(trip);
+    setCargoDraft(trip.cargoDescription ?? '');
+    setCargoError('');
+  }
+
+  async function saveCargoDescription() {
+    if (!cargoTrip) return;
+    setBusyTripId(cargoTrip.id);
+    setError('');
+    try {
+      await adminWriteRepository.updateTripCargoDescription(cargoTrip.id, cargoDraft);
+      await onChanged();
+      setCargoTrip(null);
+      setToastMessage('Observacao da carga salva e disponivel ao motorista.');
+    } catch (saveError) {
+      setCargoError(saveError instanceof Error ? saveError.message : 'Erro ao salvar a observacao da carga.');
+    } finally {
+      setBusyTripId('');
+    }
+  }
+
   async function handleFormSaved(result: { created: boolean; operationType: ProgrammingOperationType; returnTrip: boolean; scheduledAt: Date }) {
     void result;
     setShowForm(false);
@@ -221,6 +249,7 @@ export function ProgramacaoPage({ loading, localities, onChanged, routeTemplates
       const vehicleType = vehicle ? inferImportedVehicleType(vehicle) : undefined;
       return adminWriteRepository.saveTrip({
         additionalInfo: row.additionalInfo,
+        cargoDescription: '',
         assignedAt: null,
         clientId: '',
         clientName: '',
@@ -333,6 +362,7 @@ export function ProgramacaoPage({ loading, localities, onChanged, routeTemplates
   }
 
   const totalProgrammingCount = stats.reduce((total, item) => total + item.total, 0);
+  const monitoringTrip = trips.find((trip) => trip.id === monitoringTripId);
 
   return (
     <div className="space-y-4">
@@ -403,7 +433,9 @@ export function ProgramacaoPage({ loading, localities, onChanged, routeTemplates
                   key={trip.id}
                   onDelete={() => void deleteTrip(trip)}
                   onEdit={() => openEditForm(trip)}
+                  onEditCargo={() => openCargoEditor(trip)}
                   onGenerateUnloading={() => void createUnloadingTrip(trip)}
+                  onMonitor={() => setMonitoringTripId(trip.id)}
                   onStatusChange={(value) => void updateDailyStatus(trip, value)}
                   trip={trip}
                   vehicleLabel={trip.vehiclePlate || vehicleNames.get(trip.vehicleId) || trip.vehicleId}
@@ -433,6 +465,22 @@ export function ProgramacaoPage({ loading, localities, onChanged, routeTemplates
           vehicles={activeVehicles}
         />
       ) : null}
+      {cargoTrip ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 px-3 py-4">
+          <section aria-labelledby="cargo-editor-title" aria-modal="true" className="w-full max-w-xl rounded-xl bg-white p-5 shadow-2xl" role="dialog">
+            <h2 className="text-lg font-semibold text-zinc-950" id="cargo-editor-title">Observacao da carga</h2>
+            <p className="mt-1 text-sm text-zinc-600">Descreva a carga e as orientacoes que o motorista deve ver nesta viagem.</p>
+            <label className="mt-4 block text-sm font-medium text-zinc-700" htmlFor="cargo-description">Descricao e orientacoes</label>
+            <textarea autoFocus className="ui-input mt-2 min-h-32 w-full resize-y px-3 py-2" id="cargo-description" maxLength={1000} onChange={(event) => setCargoDraft(event.target.value)} value={cargoDraft} />
+            {cargoError ? <p className="mt-2 text-sm text-red-700" role="alert">{cargoError}</p> : null}
+            <div className="mt-4 flex justify-end gap-2">
+              <button className="ui-button h-10 border border-zinc-300 bg-white px-4 text-sm" disabled={busyTripId === cargoTrip.id} onClick={() => setCargoTrip(null)} type="button">Cancelar</button>
+              <button className="ui-button h-10 bg-zinc-900 px-4 text-sm font-semibold text-white" disabled={busyTripId === cargoTrip.id} onClick={() => void saveCargoDescription()} type="button">Salvar observacao</button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+      {monitoringTrip ? <TripMonitoringDialog onClose={() => setMonitoringTripId('')} trip={monitoringTrip} /> : null}
       {showImportDialog ? <ProgramacaoImportDialog drivers={drivers} existingTrips={trips} importing={importing} onClose={() => { if (!importing) setShowImportDialog(false); }} onImport={importProgramacao} vehicles={activeVehicles} /> : null}
       {toastMessage ? (
         <div className="fixed right-4 top-4 z-[70] rounded-lg bg-zinc-950 px-4 py-3 text-sm font-medium text-white shadow-xl" role="status">
@@ -449,7 +497,9 @@ type ProgrammingCardProps = {
   driverName: string;
   onDelete: () => void;
   onEdit: () => void;
+  onEditCargo: () => void;
   onGenerateUnloading: () => void;
+  onMonitor: () => void;
   onStatusChange: (value: DailyStatusValue) => void;
   trip: Trip;
   vehicleLabel: string;
@@ -461,7 +511,9 @@ function ProgrammingCard({
   driverName,
   onDelete,
   onEdit,
+  onEditCargo,
   onGenerateUnloading,
+  onMonitor,
   onStatusChange,
   trip,
   vehicleLabel,
@@ -504,6 +556,9 @@ function ProgrammingCard({
           ) : null}
           <p className="mt-1 truncate text-[11px] text-zinc-500">
             {trip.clientName || 'Cliente nao informado'} | CT-e {(trip.cteDocuments ?? []).map((document) => document.number).join(', ') || 'nao informado'}
+          </p>
+          <p className="mt-1 truncate text-[11px] font-medium text-zinc-700" title={trip.cargoDescription || ''}>
+            Carga: {trip.cargoDescription || 'Aguardando descricao'}
           </p>
           <p className="mt-1 truncate text-[11px] text-zinc-500" title={trip.additionalInfo || ''}>
             {trip.additionalInfo || (trip.returnTrip ? 'Programacao com retorno' : 'Sem informacoes adicionais')}
@@ -554,6 +609,8 @@ function ProgrammingCard({
               </button>
             ) : null}
             <button aria-label="Editar programacao" className="ui-icon-button h-8 w-8 shrink-0 border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-100" disabled={busy} onClick={onEdit} title="Editar programacao" type="button"><Pencil size={14} /></button>
+            <button aria-label="Editar observacao da carga" className="ui-icon-button h-8 w-8 shrink-0 border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-100" disabled={busy} onClick={onEditCargo} title="Editar observacao da carga" type="button"><FileText size={14} /></button>
+            <button className="ui-button h-8 gap-1 border border-zinc-200 bg-white px-2 text-[10px] font-semibold text-zinc-700 hover:bg-zinc-100" onClick={onMonitor} type="button"><MessageSquare size={13} />Acompanhar</button>
             <button aria-label="Excluir programacao" className="ui-icon-button h-8 w-8 shrink-0 border-red-200 bg-white text-red-600 hover:bg-red-50" disabled={busy} onClick={onDelete} title="Excluir programacao" type="button"><Trash2 size={14} /></button>
           </div>
         </section>

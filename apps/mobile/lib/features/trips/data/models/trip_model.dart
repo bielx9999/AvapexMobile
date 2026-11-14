@@ -505,6 +505,7 @@ final class Trip {
     this.startedAt,
     this.completedAt,
     this.customerRequestNumber = '',
+    this.cargoDescription = '',
     this.driverName = '',
     this.vehiclePlate = '',
     this.vehicleModel = '',
@@ -548,6 +549,7 @@ final class Trip {
   final TripProgrammingStatus programmingStatus;
   final TripProgress progress;
   final String customerRequestNumber;
+  final String cargoDescription;
   final String driverName;
   final String vehiclePlate;
   final String vehicleModel;
@@ -630,6 +632,7 @@ final class Trip {
       programmingStatus: programmingStatus,
       progress: TripProgress.fromFirestore(json),
       customerRequestNumber: (json['customerRequestNumber'] as String?) ?? '',
+      cargoDescription: (json['cargoDescription'] as String?) ?? '',
       driverName: (json['driverName'] as String?) ?? '',
       vehiclePlate: (json['vehiclePlate'] as String?) ?? '',
       vehicleModel: (json['vehicleModel'] as String?) ?? '',
@@ -689,6 +692,7 @@ final class Trip {
       'programmingStatus': programmingStatus.value,
       'operationalStatus': progress.operationalStatusValue,
       'customerRequestNumber': customerRequestNumber,
+      'cargoDescription': cargoDescription,
       'driverName': driverName,
       'vehiclePlate': vehiclePlate,
       'vehicleModel': vehicleModel,

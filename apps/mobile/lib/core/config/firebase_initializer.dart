@@ -11,6 +11,7 @@ abstract final class FirebaseInitializer {
   static Future<FirebaseApp> initialize({
     String envFileName = '.env',
     Duration timeout = const Duration(seconds: 15),
+    bool configurePersistence = true,
   }) async {
     try {
       await dotenv.load(fileName: envFileName, isOptional: true);
@@ -19,10 +20,12 @@ abstract final class FirebaseInitializer {
         options: DefaultFirebaseOptions.currentPlatform,
       ).timeout(timeout);
 
-      FirebaseFirestore.instance.settings = const Settings(
-        persistenceEnabled: true,
-        cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
-      );
+      if (configurePersistence) {
+        FirebaseFirestore.instance.settings = const Settings(
+          persistenceEnabled: true,
+          cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+        );
+      }
 
       return app;
     } on Object catch (error, stackTrace) {

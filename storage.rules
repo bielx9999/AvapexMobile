@@ -23,6 +23,15 @@ service firebase.storage {
       );
     }
 
+    match /profilePhotos/{uid}/avatar {
+      allow read: if isAdmin() || (signedIn() && uid == request.auth.uid);
+      allow create, update: if isAdmin()
+        && uid == request.auth.uid
+        && request.resource.size <= 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|png|webp)');
+      allow delete: if isAdmin() && uid == request.auth.uid;
+    }
+
     match /trips/{tripId}/cte/{fileName} {
       allow read: if isAdmin() || (
         signedIn()

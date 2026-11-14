@@ -20,6 +20,7 @@ void main() {
       'startedAt': null,
       'completedAt': null,
       'deliveryDocs': ['storage-url'],
+      'cargoDescription': 'Pecas automotivas em caixas. Manter seco.',
     });
 
     expect(trip.status, TripStatus.pending);
@@ -29,6 +30,8 @@ void main() {
     );
     expect(trip.startedAt, isNull);
     expect(trip.deliveryDocs, ['storage-url']);
+    expect(trip.cargoDescription, 'Pecas automotivas em caixas. Manter seco.');
+    expect(trip.toFirestore()['cargoDescription'], trip.cargoDescription);
   });
 
   test('Trip converts delivery progress and GPS heartbeat', () {

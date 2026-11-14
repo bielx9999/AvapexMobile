@@ -33,6 +33,14 @@
   text-rendering: optimizeLegibility;
 }
 
+:root[data-admin-font='arial'] {
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+:root[data-admin-font='georgia'] {
+  font-family: Georgia, 'Times New Roman', serif;
+}
+
 .dark {
   color-scheme: dark;
   --background: 18 18 20;

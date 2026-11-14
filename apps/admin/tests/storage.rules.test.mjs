@@ -90,3 +90,21 @@ describe('CT-e PDF permissions', { concurrency: false }, () => {
     ));
   });
 });
+
+describe('profile photo permissions', { concurrency: false }, () => {
+  const photoPath = 'profilePhotos/admin-1/avatar';
+
+  test('admin can replace and read their own profile photo', async () => {
+    const adminStorage = environment.authenticatedContext('admin-1').storage();
+    await assertSucceeds(uploadBytes(ref(adminStorage, photoPath), new Uint8Array([1, 2, 3]), { contentType: 'image/png' }));
+    await assertSucceeds(uploadBytes(ref(adminStorage, photoPath), new Uint8Array([4, 5, 6]), { contentType: 'image/jpeg' }));
+    await assertSucceeds(getBytes(ref(adminStorage, photoPath), 1024));
+  });
+
+  test('another user cannot change the admin photo or upload a non-image', async () => {
+    const adminStorage = environment.authenticatedContext('admin-1').storage();
+    const driverStorage = environment.authenticatedContext('driver-1').storage();
+    await assertFails(uploadBytes(ref(driverStorage, photoPath), new Uint8Array([1]), { contentType: 'image/png' }));
+    await assertFails(uploadBytes(ref(adminStorage, photoPath), new Uint8Array([1]), { contentType: 'application/pdf' }));
+  });
+});

@@ -670,6 +670,57 @@ service cloud.firestore {
       );
     }
 
+    match /trips/{tripId}/messages/{messageId} {
+      allow read: if isAdmin() || (
+        isActiveUser()
+        && exists(/databases/$(database)/documents/trips/$(tripId))
+        && get(/databases/$(database)/documents/trips/$(tripId)).data.driverId == request.auth.uid
+      );
+      allow create: if request.resource.data.keys().hasOnly(['senderId', 'senderRole', 'text', 'createdAt'])
+        && request.resource.data.keys().hasAll(['senderId', 'senderRole', 'text', 'createdAt'])
+        && request.resource.data.senderId == request.auth.uid
+        && request.resource.data.text is string
+        && request.resource.data.text.size() > 0
+        && request.resource.data.text.size() <= 1000
+        && request.resource.data.createdAt == request.time
+        && (
+          (isAdmin() && request.resource.data.senderRole == 'admin')
+          || (
+            isActiveUser()
+            && request.resource.data.senderRole == 'driver'
+            && exists(/databases/$(database)/documents/trips/$(tripId))
+            && get(/databases/$(database)/documents/trips/$(tripId)).data.driverId == request.auth.uid
+          )
+        );
+      allow update, delete: if false;
+    }
+
+    match /trips/{tripId}/gpsPoints/{pointId} {
+      allow read: if isAdmin() || (
+        isActiveUser()
+        && exists(/databases/$(database)/documents/trips/$(tripId))
+        && get(/databases/$(database)/documents/trips/$(tripId)).data.driverId == request.auth.uid
+      );
+      allow create: if isActiveUser()
+        && exists(/databases/$(database)/documents/trips/$(tripId))
+        && get(/databases/$(database)/documents/trips/$(tripId)).data.driverId == request.auth.uid
+        && get(/databases/$(database)/documents/trips/$(tripId)).data.driverResponse == 'accepted'
+        && get(/databases/$(database)/documents/trips/$(tripId)).data.status in ['in_progress', 'completed']
+        && request.resource.data.keys().hasOnly(['driverId', 'latitude', 'longitude', 'accuracy', 'recordedAt'])
+        && request.resource.data.keys().hasAll(['driverId', 'latitude', 'longitude', 'accuracy', 'recordedAt'])
+        && request.resource.data.driverId == request.auth.uid
+        && request.resource.data.latitude is number
+        && request.resource.data.latitude >= -90
+        && request.resource.data.latitude <= 90
+        && request.resource.data.longitude is number
+        && request.resource.data.longitude >= -180
+        && request.resource.data.longitude <= 180
+        && request.resource.data.accuracy is number
+        && request.resource.data.accuracy >= 0
+        && request.resource.data.recordedAt == request.time;
+      allow update, delete: if false;
+    }
+
     match /routes/{routeId} {
       allow read: if isAdmin() || ownedExistingDriverData();
       allow create: if isAdmin() && validRouteData(request.resource.data, routeId);

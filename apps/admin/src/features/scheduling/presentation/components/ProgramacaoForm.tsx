@@ -49,6 +49,7 @@ type ProgramacaoFormProps = {
 
 type ProgramacaoFormState = {
   additionalInfo: string;
+  cargoDescription: string;
   clientName: string;
   cteDocuments: CteDocumentDraft[];
   customerRequestNumber: string;
@@ -265,6 +266,7 @@ export function ProgramacaoForm({
       const assignmentChanged = !editingTrip || editingTrip.driverId !== form.driverId;
       await adminWriteRepository.saveTrip({
         additionalInfo: form.additionalInfo,
+        cargoDescription: form.cargoDescription,
         assignedAt: assignmentChanged ? null : editingTrip?.assignedAt,
         clientId: editingTrip?.clientId ?? '',
         clientName: form.clientName,
@@ -377,9 +379,13 @@ export function ProgramacaoForm({
 
             <CteDocumentSection documents={form.cteDocuments} errors={errors} onChange={(documents) => updateField('cteDocuments', documents)} />
 
-            <FormSection icon={<Info size={18} />} title="Informacoes adicionais">
+            <FormSection icon={<Info size={18} />} title="Carga e observacoes">
+              <label className="mb-4 block">
+                <span className="mb-2 block text-sm font-medium text-zinc-700">O que e a carga? (visivel ao motorista)</span>
+                <textarea className="ui-input min-h-24 w-full resize-y px-3 py-2" maxLength={1000} onChange={(event) => updateField('cargoDescription', event.target.value)} placeholder="Descreva o material transportado e orientacoes para a entrega" value={form.cargoDescription} />
+              </label>
               <label className="block">
-                <span className="mb-2 block text-sm font-medium text-zinc-700">Observacoes da programacao</span>
+                <span className="mb-2 block text-sm font-medium text-zinc-700">Informacoes adicionais da planilha</span>
                 <textarea className="ui-input min-h-24 w-full resize-y px-3 py-2" onChange={(event) => updateField('additionalInfo', event.target.value)} value={form.additionalInfo} />
               </label>
             </FormSection>
@@ -407,6 +413,7 @@ function initialForm(trip: Trip | null): ProgramacaoFormState {
   const currentStatus = trip ? findDailyStatusOption(trip) : dailyStatusOptions[2];
   return {
     additionalInfo: trip?.additionalInfo ?? '',
+    cargoDescription: trip?.cargoDescription ?? '',
     clientName: trip?.clientName ?? '',
     cteDocuments: trip?.cteDocuments?.length ? trip.cteDocuments.map(emptyCteDraft) : [emptyCteDraft()],
     customerRequestNumber: trip?.customerRequestNumber ?? '',

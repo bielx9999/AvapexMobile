@@ -297,6 +297,7 @@ export function mapTrip(id: string, data: Record<string, unknown>): Trip {
     operationType,
     expectedArrivalAt: readDate(data.expectedArrivalAt),
     additionalInfo: typeof data.additionalInfo === 'string' ? data.additionalInfo : undefined,
+    cargoDescription: typeof data.cargoDescription === 'string' ? data.cargoDescription : undefined,
     returnGeneratedTripId:
       typeof data.returnGeneratedTripId === 'string' ? data.returnGeneratedTripId : undefined,
     returnSourceTripId: typeof data.returnSourceTripId === 'string' ? data.returnSourceTripId : undefined,

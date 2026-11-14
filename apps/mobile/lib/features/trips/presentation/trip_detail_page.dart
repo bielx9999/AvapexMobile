@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:lucide_flutter/lucide_flutter.dart';
 
@@ -275,6 +276,12 @@ final class _TripDetailPageState extends ConsumerState<TripDetailPage> {
           _MapSection(trip: trip, onOpenMaps: () => _openMaps(trip)),
           const SizedBox(height: 12),
           _OperationSection(trip: trip),
+          const SizedBox(height: 12),
+          if (Platform.isAndroid && trip.status == TripStatus.inProgress) ...[
+            const _BackgroundLocationNotice(),
+            const SizedBox(height: 12),
+          ],
+          _TripMessagesSection(trip: trip),
           const SizedBox(height: 12),
           _DocumentsSection(documents: trip.cteDocuments),
           const SizedBox(height: 12),
@@ -725,6 +732,12 @@ final class _OperationSection extends StatelessWidget {
         children: [
           _InfoRow(label: 'Cliente', value: _orDash(trip.clientName)),
           _InfoRow(
+            label: 'Carga e orientacoes da logistica',
+            value: trip.cargoDescription.isEmpty
+                ? 'Aguardando observacao da logistica.'
+                : trip.cargoDescription,
+          ),
+          _InfoRow(
             label: 'Operacao',
             value: trip.operationType == TripOperationType.loading
                 ? 'Carga'
@@ -746,6 +759,179 @@ final class _OperationSection extends StatelessWidget {
           _InfoRow(
             label: 'Solicitacao',
             value: _orDash(trip.customerRequestNumber),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+final class _BackgroundLocationNotice extends StatelessWidget {
+  const _BackgroundLocationNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    return _SectionCard(
+      title: 'Rastreamento da viagem',
+      icon: LucideIcons.mapPin,
+      child: FutureBuilder<LocationPermission>(
+        future: Geolocator.checkPermission(),
+        builder: (context, snapshot) {
+          final alwaysAllowed = snapshot.data == LocationPermission.always;
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                alwaysAllowed
+                    ? 'O GPS pode registrar pontos com a tela bloqueada. O Android mostra uma notificacao enquanto a viagem estiver em andamento.'
+                    : 'Para registrar pontos com a tela bloqueada ou o app fechado, permita "Localizacao o tempo todo" nas configuracoes deste aplicativo.',
+              ),
+              if (!alwaysAllowed) ...[
+                const SizedBox(height: 8),
+                OutlinedButton(
+                  onPressed: () => Geolocator.openAppSettings(),
+                  child: const Text('Abrir permissoes de localizacao'),
+                ),
+              ],
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+final class _TripMessagesSection extends ConsumerStatefulWidget {
+  const _TripMessagesSection({required this.trip});
+
+  final Trip trip;
+
+  @override
+  ConsumerState<_TripMessagesSection> createState() =>
+      _TripMessagesSectionState();
+}
+
+final class _TripMessagesSectionState
+    extends ConsumerState<_TripMessagesSection> {
+  final _messageController = TextEditingController();
+  var _sending = false;
+
+  @override
+  void dispose() {
+    _messageController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _send() async {
+    final message = _messageController.text.trim();
+    if (message.isEmpty || _sending) return;
+    setState(() => _sending = true);
+    var queued = false;
+    try {
+      await ref
+          .read(tripMessageRepositoryProvider)
+          .send(widget.trip.id, message)
+          .timeout(
+            const Duration(seconds: 4),
+            onTimeout: () {
+              queued = true;
+            },
+          );
+      _messageController.clear();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              queued
+                  ? 'Mensagem salva no dispositivo; sera enviada quando houver conexao.'
+                  : 'Mensagem enviada para a logistica.',
+            ),
+          ),
+        );
+      }
+    } on Object catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Nao foi possivel enviar a mensagem: $error')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final messages = ref.watch(tripMessagesProvider(widget.trip.id));
+    return _SectionCard(
+      title: 'Mensagens com a logistica',
+      icon: LucideIcons.messageSquare,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          messages.when(
+            data: (items) => items.isEmpty
+                ? const Text('Nenhuma mensagem nesta viagem.')
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (final item in items) ...[
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: item.senderRole == 'admin'
+                                ? const Color(0xFFFFF3C4)
+                                : const Color(0xFFF1F1F1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                item.senderRole == 'admin'
+                                    ? 'Logistica'
+                                    : 'Voce',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              Text(item.text),
+                              Text(
+                                item.createdAt == null
+                                    ? 'Sincronizando...'
+                                    : _formatDateTime(item.createdAt!),
+                                style: const TextStyle(
+                                  color: Color(0xFF666666),
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+            error: (_, _) => const Text('Mensagens indisponiveis no momento.'),
+            loading: () => const Center(child: CircularProgressIndicator()),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _messageController,
+            maxLength: 1000,
+            maxLines: 3,
+            minLines: 2,
+            decoration: const InputDecoration(
+              labelText: 'Mensagem para a logistica',
+              hintText: 'Escreva uma atualizacao ou duvida',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 8),
+          FilledButton.icon(
+            onPressed: _sending ? null : _send,
+            icon: const Icon(LucideIcons.send),
+            label: const Text('Enviar mensagem'),
           ),
         ],
       ),

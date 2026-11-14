@@ -95,6 +95,7 @@ const pageConfig: Record<AdminPage, { category: string; title: string }> = {
   localities: { category: 'Cadastros', title: 'Localidades' },
   onedrive: { category: 'Documentacao', title: 'OneDrive' },
   powerbi: { category: 'Documentacao', title: 'Power BI' },
+  'app-settings': { category: 'Conta', title: 'Configurações do aplicativo' },
 };
 
 export function AdminDashboard({ session }: AdminDashboardProps) {
@@ -213,7 +214,7 @@ export function AdminDashboard({ session }: AdminDashboardProps) {
       <div className="ui-page-stack">
           <ErrorBanner message={error} />
         <Suspense fallback={<PageSkeleton />}>
-          {activePage === 'scheduling' ? (
+          {activePage === 'app-settings' ? null : activePage === 'scheduling' ? (
             <ProgramacaoPage
               localities={data.localities}
               loading={loading}
